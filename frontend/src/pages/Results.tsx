@@ -38,6 +38,7 @@ import PackageSnapshot from '../components/results/PackageSnapshot';
 import Rule12Section from '../components/results/Rule12Section';
 import ExternalVerification from '../components/results/ExternalVerification';
 import ConfidencePanel from '../components/results/ConfidencePanel';
+import { VisionAnalysisPanel } from '../components/results/VisionAnalysisPanel';
 
 export default function Results() {
   const { id } = useParams<{ id: string }>();
@@ -300,6 +301,7 @@ export default function Results() {
     { id: 'section-requirements', label: 'Requirements' },
     { id: 'section-package-data', label: 'Package Data' },
     ...(data.font_size_analysis ? [{ id: 'section-rule12', label: 'Rule 12' }] : []),
+    ...((data.vision_analysis || imageList.some(img => img.vision_analysis)) ? [{ id: 'section-vision', label: 'Computer Vision' }] : []),
     ...((data.fssai_verification || data.gs1_verification) ? [{ id: 'section-verification', label: 'Verification' }] : []),
     { id: 'section-evidence', label: 'Evidence' },
   ];
@@ -317,6 +319,7 @@ export default function Results() {
         frontImageUrl={imageList[0]?.image_url}
         canDelete={!isDemo && (canDeleteAnalyses || Boolean(data.owner_user_id && user?.username && data.owner_user_id.toLowerCase() === user.username.toLowerCase()))}
         canUseEnforcement={canUseEnforcementFeatures}
+        multilingual={data.multilingual}
         onNavigateBack={() => navigate(isDemo ? '/demo' : '/history')}
         onNavigateAnalyze={() => navigate('/analyze')}
         onShowNotice={() => setShowNoticeModal(true)}
@@ -446,6 +449,15 @@ export default function Results() {
           <Rule12Section
             fontSizeAnalysis={data.font_size_analysis}
             calibrationResult={data.calibration_result}
+          />
+        </div>
+      )}
+
+      {/* ── SECTION: Computer Vision Intelligence Layer ─────────────── */}
+      {(data.vision_analysis || imageList.some(img => img.vision_analysis)) && (
+        <div id="section-vision" className="scroll-mt-16">
+          <VisionAnalysisPanel
+            visionAnalysis={data.vision_analysis || imageList.find(img => img.vision_analysis)?.vision_analysis}
           />
         </div>
       )}

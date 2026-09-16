@@ -68,6 +68,8 @@ interface InternalEvidenceItem {
   evidence_type?: string;
   explanation?: string | null;
   quality_score?: number | null;
+  language?: string | null;
+  script?: string | null;
   evidence_list: SchemaEvidenceItem[];
 }
 
@@ -136,6 +138,8 @@ export default function EvidenceViewer({
         evidence_type: primaryEv?.evidence_type || (primaryEv?.bbox ? 'DIRECT_OCR' : (check.rule_id === 'LM-009' ? 'DERIVED_FIELD' : (check.status === 'NOT_APPLICABLE' ? 'PROVISO_DELEGATION' : 'NONE'))),
         explanation: primaryEv?.explanation || check.explanation || null,
         quality_score: primaryEv?.quality_score ?? (primaryEv?.bbox ? 90.0 : 0.0),
+        language: primaryEv?.language || (check as any).language || null,
+        script: primaryEv?.script || (check as any).script || null,
         evidence_list: evList,
       };
     });
@@ -891,6 +895,12 @@ export default function EvidenceViewer({
                   {activeQualityScore > 0 && (
                     <span className="text-[10px] font-bold px-2 py-0.5 rounded-full uppercase bg-slate-100 dark:bg-slate-800 text-slate-700 dark:text-slate-300 font-mono">
                       Q-Score: {Math.round(activeQualityScore)}%
+                    </span>
+                  )}
+                  {(currentEvidence?.language || activeFinding.language) && (
+                    <span className="text-[10px] font-bold px-2 py-0.5 rounded-full uppercase bg-teal-50 dark:bg-teal-950/60 text-teal-700 dark:text-teal-300 border border-teal-200 dark:border-teal-800/60 font-mono">
+                      🌐 {(currentEvidence?.language || activeFinding.language)?.toUpperCase()}
+                      {(currentEvidence?.script || activeFinding.script) ? ` · ${currentEvidence?.script || activeFinding.script}` : ''}
                     </span>
                   )}
                 </div>

@@ -1,17 +1,19 @@
 """
-MetrCheck AI — Professional PDF Report Generator (Phase 5C)
+MetrCheck AI — Professional Multilingual PDF Report Generator
 
 This module consumes the existing AnalysisResponse and generates a professional,
-multi-page PDF report. It does NOT recalculate compliance, scoring, or recommendations.
+multi-page PDF report localized in any of the 10 supported languages:
+English, Hindi, Bengali, Marathi, Gujarati, Punjabi, Tamil, Telugu, Kannada, Malayalam.
 
-Uses: reportlab
+It does NOT recalculate compliance, scoring, or recommendations.
+Uses: reportlab with Unicode Indic font support.
 """
 
 import os
 import io
 import logging
 from datetime import datetime
-from typing import Optional
+from typing import Optional, Dict, Any, List
 from utils.datetime_utils import format_ist_datetime, get_current_ist_datetime
 
 from reportlab.lib import colors
@@ -26,11 +28,49 @@ from reportlab.platypus import (
 from reportlab.platypus.flowables import Flowable
 from reportlab.graphics.shapes import Drawing, Rect, String, Circle
 from reportlab.graphics import renderPDF
+from reportlab.pdfbase import pdfmetrics
+from reportlab.pdfbase.ttfonts import TTFont
 
 from models.schemas import AnalysisResponse
 from config import settings
+from multilingual.registry import normalize_language_code, SUPPORTED_LANGUAGES
+from multilingual.localization import (
+    localize_rule_label,
+    localize_status,
+    localize_explanation,
+    get_report_ui_labels
+)
 
 logger = logging.getLogger(__name__)
+
+# ── Dynamic Unicode & Indic Font Registration ──────────────────
+_FONT_REGULAR = 'Helvetica'
+_FONT_BOLD = 'Helvetica-Bold'
+_FONT_OBLIQUE = 'Helvetica-Oblique'
+
+def _init_report_fonts():
+    global _FONT_REGULAR, _FONT_BOLD, _FONT_OBLIQUE
+    font_candidates = [
+        (r'C:\Windows\Fonts\Nirmala.ttc', 0, 1),
+        (r'/usr/share/fonts/truetype/noto/NotoSans-Regular.ttf', None, None),
+    ]
+    for p, idx0, idx1 in font_candidates:
+        if os.path.exists(p):
+            try:
+                if idx0 is not None:
+                    pdfmetrics.registerFont(TTFont('MetrCheckIndic', p, subfontIndex=idx0))
+                    pdfmetrics.registerFont(TTFont('MetrCheckIndic-Bold', p, subfontIndex=idx1))
+                else:
+                    pdfmetrics.registerFont(TTFont('MetrCheckIndic', p))
+                    pdfmetrics.registerFont(TTFont('MetrCheckIndic-Bold', p))
+                _FONT_REGULAR = 'MetrCheckIndic'
+                _FONT_BOLD = 'MetrCheckIndic-Bold'
+                logger.info(f"Registered Unicode Indic font for reports from {p}")
+                return
+            except Exception as e:
+                logger.warning(f"Could not register font from {p}: {e}")
+
+_init_report_fonts()
 
 # ── Color Palette ──────────────────────────────────────────────
 INDIGO = colors.HexColor('#4338ca')
@@ -76,76 +116,76 @@ def _build_styles():
 
     styles.add(ParagraphStyle(
         'ReportTitle', parent=styles['Title'],
-        fontName='Helvetica-Bold', fontSize=20, leading=24,
+        fontName=_FONT_BOLD, fontSize=18, leading=22,
         textColor=INDIGO_DARK, spaceAfter=1*mm, alignment=TA_LEFT,
     ))
     styles.add(ParagraphStyle(
         'ReportSubtitle', parent=styles['Normal'],
-        fontName='Helvetica', fontSize=9, leading=12,
+        fontName=_FONT_REGULAR, fontSize=9, leading=12,
         textColor=SLATE_500, spaceAfter=3*mm, alignment=TA_LEFT,
     ))
     styles.add(ParagraphStyle(
         'SectionHeading', parent=styles['Heading2'],
-        fontName='Helvetica-Bold', fontSize=11, leading=14,
+        fontName=_FONT_BOLD, fontSize=11, leading=14,
         textColor=INDIGO_DARK, spaceBefore=4*mm, spaceAfter=2*mm,
         borderWidth=0, borderPadding=0,
     ))
     styles.add(ParagraphStyle(
         'SubHeading', parent=styles['Heading3'],
-        fontName='Helvetica-Bold', fontSize=9.5, leading=12,
+        fontName=_FONT_BOLD, fontSize=9.5, leading=12,
         textColor=SLATE_800, spaceBefore=2.5*mm, spaceAfter=1.5*mm,
     ))
     styles.add(ParagraphStyle(
         'BodyText2', parent=styles['Normal'],
-        fontName='Helvetica', fontSize=8.5, leading=11.5,
+        fontName=_FONT_REGULAR, fontSize=8.5, leading=11.5,
         textColor=SLATE_700, spaceAfter=2*mm,
         alignment=TA_JUSTIFY,
     ))
     styles.add(ParagraphStyle(
         'SmallText', parent=styles['Normal'],
-        fontName='Helvetica', fontSize=7.5, leading=9.5,
+        fontName=_FONT_REGULAR, fontSize=7.5, leading=9.5,
         textColor=SLATE_500, spaceAfter=1*mm,
     ))
     styles.add(ParagraphStyle(
         'TableCell', parent=styles['Normal'],
-        fontName='Helvetica', fontSize=7.5, leading=10,
+        fontName=_FONT_REGULAR, fontSize=7.5, leading=10,
         textColor=SLATE_700,
     ))
     styles.add(ParagraphStyle(
         'TableCellBold', parent=styles['Normal'],
-        fontName='Helvetica-Bold', fontSize=7.5, leading=10,
+        fontName=_FONT_BOLD, fontSize=7.5, leading=10,
         textColor=SLATE_800,
     ))
     styles.add(ParagraphStyle(
         'TableCellCenter', parent=styles['Normal'],
-        fontName='Helvetica', fontSize=7.5, leading=10,
+        fontName=_FONT_REGULAR, fontSize=7.5, leading=10,
         textColor=SLATE_700, alignment=TA_CENTER,
     ))
     styles.add(ParagraphStyle(
         'TableCellBoldCenter', parent=styles['Normal'],
-        fontName='Helvetica-Bold', fontSize=7.5, leading=10,
+        fontName=_FONT_BOLD, fontSize=7.5, leading=10,
         textColor=SLATE_800, alignment=TA_CENTER,
     ))
     styles.add(ParagraphStyle(
         'Disclaimer', parent=styles['Normal'],
-        fontName='Helvetica-Oblique', fontSize=7, leading=9,
+        fontName=_FONT_REGULAR, fontSize=7, leading=9,
         textColor=SLATE_600, spaceAfter=2*mm,
         alignment=TA_JUSTIFY, borderWidth=0.5, borderColor=SLATE_200,
         borderPadding=5,
     ))
     styles.add(ParagraphStyle(
         'ScoreText', parent=styles['Normal'],
-        fontName='Helvetica-Bold', fontSize=26, leading=30,
+        fontName=_FONT_BOLD, fontSize=26, leading=30,
         textColor=INDIGO_DARK, alignment=TA_CENTER,
     ))
     styles.add(ParagraphStyle(
         'StatusText', parent=styles['Normal'],
-        fontName='Helvetica-Bold', fontSize=12, leading=15,
+        fontName=_FONT_BOLD, fontSize=12, leading=15,
         alignment=TA_CENTER,
     ))
     styles.add(ParagraphStyle(
         'FooterText', parent=styles['Normal'],
-        fontName='Helvetica', fontSize=7, leading=9,
+        fontName=_FONT_REGULAR, fontSize=7, leading=9,
         textColor=SLATE_400, alignment=TA_CENTER,
     ))
 
@@ -164,11 +204,11 @@ def _header_footer(canvas, doc):
     canvas.line(15*mm, h - 12*mm, w - 15*mm, h - 12*mm)
 
     # Header text
-    canvas.setFont('Helvetica-Bold', 7)
+    canvas.setFont(_FONT_BOLD, 7)
     canvas.setFillColor(INDIGO)
     canvas.drawString(15*mm, h - 10.5*mm, 'METRCHECK AI')
 
-    canvas.setFont('Helvetica', 7)
+    canvas.setFont(_FONT_REGULAR, 7)
     canvas.setFillColor(SLATE_400)
     canvas.drawRightString(w - 15*mm, h - 10.5*mm, 'AI-Assisted Compliance Screening Report')
 
@@ -177,9 +217,9 @@ def _header_footer(canvas, doc):
     canvas.setLineWidth(0.5)
     canvas.line(15*mm, 12*mm, w - 15*mm, 12*mm)
 
-    canvas.setFont('Helvetica', 7)
+    canvas.setFont(_FONT_REGULAR, 7)
     canvas.setFillColor(SLATE_400)
-    canvas.drawString(15*mm, 7*mm, 'MetrCheck AI — AI-Assisted Compliance Screening')
+    canvas.drawString(15*mm, 7*mm, 'MetrCheck AI — Multilingual Statutory Compliance Screening')
     canvas.drawRightString(w - 15*mm, 7*mm, f'Page {doc.page}')
 
     canvas.restoreState()
@@ -192,7 +232,6 @@ def _load_image(image_url: str, max_width: float, max_height: float) -> Optional
         if not image_url:
             return None
 
-        # Extract filename from URL like /uploads/filename.png
         filename = image_url.split('/')[-1] if '/' in image_url else image_url
         filepath = os.path.join(settings.UPLOAD_DIR, filename)
 
@@ -201,7 +240,6 @@ def _load_image(image_url: str, max_width: float, max_height: float) -> Optional
             return None
 
         img = RLImage(filepath)
-        # Scale proportionally
         iw, ih = img.imageWidth, img.imageHeight
         if iw <= 0 or ih <= 0:
             return None
@@ -232,14 +270,20 @@ def _truncate(text: str, max_len: int = 120) -> str:
 
 
 # ── Main PDF Generator ────────────────────────────────────────
-def generate_pdf_report(analysis: AnalysisResponse) -> bytes:
+def generate_pdf_report(
+    analysis: AnalysisResponse,
+    lang: str = "en",
+    language: Optional[str] = None,
+    target_language: Optional[str] = None
+) -> bytes:
     """
-    Generate a professional multi-page PDF report from an existing AnalysisResponse.
+    Generate a professional multi-page PDF report from an existing AnalysisResponse in any of 10 languages.
     Returns the PDF as bytes.
-
-    This function does NOT recalculate compliance, scoring, or recommendations.
-    It is a faithful visual representation of the existing analysis result.
     """
+    effective_lang = target_language or language or lang or "en"
+    canon_lang = normalize_language_code(effective_lang)
+    ui_labels = get_report_ui_labels(canon_lang)
+
     buf = io.BytesIO()
     styles = _build_styles()
 
@@ -268,7 +312,7 @@ def generate_pdf_report(analysis: AnalysisResponse) -> bytes:
     story.append(Spacer(1, 2*mm))
     story.append(Paragraph('METRCHECK AI', styles['ReportTitle']))
     story.append(Paragraph(
-        'AI-Assisted Packaged Commodity Compliance Screening Report',
+        ui_labels.get("report_title", 'Legal Metrology Compliance Screening Report'),
         styles['ReportSubtitle']
     ))
 
@@ -276,21 +320,29 @@ def generate_pdf_report(analysis: AnalysisResponse) -> bytes:
         width='100%', thickness=1, color=INDIGO, spaceAfter=3*mm
     ))
 
-    story.append(Paragraph('EXECUTIVE SUMMARY & ANALYSIS OVERVIEW', styles['SectionHeading']))
+    story.append(Paragraph(ui_labels.get("statutory_declarations", 'EXECUTIVE SUMMARY & ANALYSIS OVERVIEW'), styles['SectionHeading']))
 
     # Metadata table
     date_str = format_ist_datetime(analysis.created_at, '%d %B %Y, %H:%M')
 
+    # Detect packaging languages from analysis
+    detected_lang_str = "English (Latin)"
+    multi_meta = getattr(analysis, 'multilingual', None) or getattr(product_info, 'multilingual', None)
+    if multi_meta and hasattr(multi_meta, 'detected_languages') and multi_meta.detected_languages:
+        parts = [f"{l.name} ({round(l.confidence*100)}%)" for l in multi_meta.detected_languages]
+        detected_lang_str = ", ".join(parts)
+
     meta_data = [
         ['Analysis ID:', analysis.id],
-        ['Date / Time:', date_str],
-        ['Product:', _safe_str(analysis.product_name, 'Unknown Product')],
+        [f'{ui_labels.get("generated_at", "Date / Time")}:', date_str],
+        [f'{ui_labels.get("product_name", "Product")}:', _safe_str(analysis.product_name, 'Unknown Product')],
         ['Images Analyzed:', str(len(images_list))],
+        [f'{ui_labels.get("detected_languages", "Packaging Languages")}:', detected_lang_str]
     ]
-    meta_table = Table(meta_data, colWidths=[32*mm, w_avail - 32*mm])
+    meta_table = Table(meta_data, colWidths=[42*mm, w_avail - 42*mm])
     meta_table.setStyle(TableStyle([
-        ('FONTNAME', (0, 0), (0, -1), 'Helvetica-Bold'),
-        ('FONTNAME', (1, 0), (1, -1), 'Helvetica'),
+        ('FONTNAME', (0, 0), (0, -1), _FONT_BOLD),
+        ('FONTNAME', (1, 0), (1, -1), _FONT_REGULAR),
         ('FONTSIZE', (0, 0), (-1, -1), 8),
         ('TEXTCOLOR', (0, 0), (0, -1), SLATE_600),
         ('TEXTCOLOR', (1, 0), (1, -1), SLATE_800),
@@ -303,15 +355,16 @@ def generate_pdf_report(analysis: AnalysisResponse) -> bytes:
     story.append(meta_table)
     story.append(Spacer(1, 3*mm))
 
-    # ── Dedicated Screening Result Table (BUG 1 FIX) ─────────────
+    # ── Screening Result Table ─────────────────────────────────────
     fg, _ = _status_color(cr.status)
+    loc_status = localize_status(cr.status, canon_lang)
 
     breakdown_cells = [
-        Paragraph(f'<b>{cr.passed_rules}</b> Passed', styles['TableCellCenter']),
-        Paragraph(f'<b>{cr.needs_review_rules}</b> Needs Review', styles['TableCellCenter']),
-        Paragraph(f'<b>{cr.warning_rules}</b> Warnings', styles['TableCellCenter']),
-        Paragraph(f'<b>{cr.failed_rules}</b> Failed', styles['TableCellCenter']),
-        Paragraph(f'<b>{cr.not_applicable_rules}</b> N/A', styles['TableCellCenter']),
+        Paragraph(f'<b>{cr.passed_rules}</b> {localize_status("PASS", canon_lang)}', styles['TableCellCenter']),
+        Paragraph(f'<b>{cr.needs_review_rules}</b> {localize_status("NEEDS_REVIEW", canon_lang)}', styles['TableCellCenter']),
+        Paragraph(f'<b>{cr.warning_rules}</b> {localize_status("WARNING", canon_lang)}', styles['TableCellCenter']),
+        Paragraph(f'<b>{cr.failed_rules}</b> {localize_status("FAIL", canon_lang)}', styles['TableCellCenter']),
+        Paragraph(f'<b>{cr.not_applicable_rules}</b> {localize_status("NOT_APPLICABLE", canon_lang)}', styles['TableCellCenter']),
     ]
     bd_w = (w_avail - 12*mm) / 5
     inner_breakdown = Table([breakdown_cells], colWidths=[bd_w]*5)
@@ -330,9 +383,9 @@ def generate_pdf_report(analysis: AnalysisResponse) -> bytes:
     ]))
 
     card_header = Paragraph(
-        '<b>STATUTORY COMPLIANCE SCREENING RESULT</b>',
+        f'<b>{ui_labels.get("overall_status", "STATUTORY COMPLIANCE SCREENING RESULT").upper()}</b>',
         ParagraphStyle(
-            'CardHead', parent=styles['Normal'], fontName='Helvetica-Bold',
+            'CardHead', parent=styles['Normal'], fontName=_FONT_BOLD,
             fontSize=9, leading=11, textColor=INDIGO_DARK, alignment=TA_CENTER
         )
     )
@@ -341,7 +394,7 @@ def generate_pdf_report(analysis: AnalysisResponse) -> bytes:
         styles['ScoreText']
     )
     status_para = Paragraph(
-        f'<b>{cr.status}</b>',
+        f'<b>{loc_status}</b>',
         ParagraphStyle('CardStat', parent=styles['StatusText'], textColor=fg)
     )
 
@@ -370,19 +423,10 @@ def generate_pdf_report(analysis: AnalysisResponse) -> bytes:
     story.append(card_table)
     story.append(Spacer(1, 2.5*mm))
 
-    # Score explanation
-    story.append(Paragraph(
-        'Screening score reflects the weighted outcome of applicable statutory checks. '
-        'NEEDS_REVIEW findings reduce certainty but are not treated as confirmed violations. '
-        'NOT_APPLICABLE rules are excluded from the score calculation.',
-        styles['SmallText']
-    ))
-    story.append(Spacer(1, 2.5*mm))
-
     # ══════════════════════════════════════════════════════════════
     # PACKAGE INFORMATION
     # ══════════════════════════════════════════════════════════════
-    story.append(Paragraph('PACKAGE INFORMATION', styles['SectionHeading']))
+    story.append(Paragraph(ui_labels.get("statutory_declarations", 'PACKAGE INFORMATION'), styles['SectionHeading']))
 
     pi = product_info
     info_rows = [
@@ -409,7 +453,7 @@ def generate_pdf_report(analysis: AnalysisResponse) -> bytes:
             Paragraph(val, styles['TableCell']),
         ])
 
-    info_table = Table(info_table_data, colWidths=[40*mm, w_avail - 40*mm])
+    info_table = Table(info_table_data, colWidths=[42*mm, w_avail - 42*mm])
     info_table.setStyle(TableStyle([
         ('VALIGN', (0, 0), (-1, -1), 'TOP'),
         ('BACKGROUND', (0, 0), (0, -1), SLATE_50),
@@ -423,16 +467,11 @@ def generate_pdf_report(analysis: AnalysisResponse) -> bytes:
     story.append(Spacer(1, 2.5*mm))
 
     # ── Disclaimer ─────────────────────────────────────────────
-    disclaimer_text = (
-        '<b>Disclaimer:</b> AI-assisted screening only. This report is a decision-support output '
-        'based on submitted package images and extracted evidence. It is not a legal determination '
-        'and does not replace physical inspection or verification by an authorized authority under '
-        'the Legal Metrology Act, 2009 or the Food Safety and Standards Act, 2006.'
-    )
+    disclaimer_text = f"<b>Disclaimer:</b> {ui_labels.get('disclaimer', 'AI-assisted screening only. Physical verification required.')}"
     story.append(Paragraph(disclaimer_text, styles['Disclaimer']))
 
     # ══════════════════════════════════════════════════════════════
-    # PACKAGE IMAGES (BUG 3 FIX — PageBreak + KeepTogether)
+    # PACKAGE IMAGES & EVIDENCE
     # ══════════════════════════════════════════════════════════════
     if images_list:
         story.append(PageBreak())
@@ -461,14 +500,12 @@ def generate_pdf_report(analysis: AnalysisResponse) -> bytes:
             story.append(KeepTogether(img_items))
 
     # ══════════════════════════════════════════════════════════════
-    # COMPLIANCE SUMMARY TABLE (BUG 2 FIX — Confidence Column Width)
+    # COMPLIANCE SUMMARY TABLE
     # ══════════════════════════════════════════════════════════════
     story.append(PageBreak())
-    story.append(Paragraph('COMPLIANCE SUMMARY', styles['SectionHeading']))
+    story.append(Paragraph(ui_labels.get("rule_evaluations", 'COMPLIANCE SUMMARY'), styles['SectionHeading']))
 
     checks = cr.checks or []
-
-    # Separate by domain
     lm_checks = [c for c in checks if (c.domain or '').upper() != 'FSSAI']
     fssai_checks = [c for c in checks if (c.domain or '').upper() == 'FSSAI']
 
@@ -480,10 +517,10 @@ def generate_pdf_report(analysis: AnalysisResponse) -> bytes:
         elements.append(Paragraph(f'<b>{domain_label}</b>', styles['SubHeading']))
 
         header = [
-            Paragraph('<b>Rule ID</b>', styles['TableCellBold']),
-            Paragraph('<b>Requirement</b>', styles['TableCellBold']),
-            Paragraph('<b>Status</b>', styles['TableCellBoldCenter']),
-            Paragraph('<b>Detected Evidence</b>', styles['TableCellBold']),
+            Paragraph(f'<b>{ui_labels.get("field_header", "Rule / Field")}</b>', styles['TableCellBold']),
+            Paragraph(f'<b>Requirement</b>', styles['TableCellBold']),
+            Paragraph(f'<b>{ui_labels.get("status_header", "Status")}</b>', styles['TableCellBoldCenter']),
+            Paragraph(f'<b>{ui_labels.get("detected_value_header", "Detected Evidence")}</b>', styles['TableCellBold']),
             Paragraph('<b>Confidence</b>', styles['TableCellBoldCenter']),
         ]
         rows = [header]
@@ -491,23 +528,24 @@ def generate_pdf_report(analysis: AnalysisResponse) -> bytes:
         for c in check_list:
             status_str = c.status or 'UNKNOWN'
             fg, bg = _status_color(status_str)
+            loc_st = localize_status(status_str, canon_lang)
             status_para = Paragraph(
-                f'<font color="{fg.hexval()}"><b>{status_str}</b></font>',
+                f'<font color="{fg.hexval()}"><b>{loc_st}</b></font>',
                 styles['TableCellCenter']
             )
 
             det_val = _safe_str(c.detected_value, 'Not detected')
             conf = f'{round(c.confidence)}%' if c.confidence is not None else '—'
+            loc_lbl = localize_rule_label(c.rule_id, canon_lang)
 
             rows.append([
                 Paragraph(f'<b>{c.rule_id}</b>', styles['TableCell']),
-                Paragraph(_truncate(c.field_label or c.field, 60), styles['TableCell']),
+                Paragraph(_truncate(loc_lbl, 60), styles['TableCell']),
                 status_para,
                 Paragraph(_truncate(det_val, 80), styles['TableCell']),
                 Paragraph(conf, styles['TableCellCenter']),
             ])
 
-        # Width sum = 18 + 52 + 30 + 56 + 24 = 180mm (w_avail)
         tbl = Table(rows, colWidths=[18*mm, 52*mm, 30*mm, 56*mm, 24*mm])
         tbl.setStyle(TableStyle([
             ('VALIGN', (0, 0), (-1, -1), 'TOP'),
@@ -529,35 +567,31 @@ def generate_pdf_report(analysis: AnalysisResponse) -> bytes:
     # ══════════════════════════════════════════════════════════════
     # DETAILED STATUTORY FINDINGS
     # ══════════════════════════════════════════════════════════════
-    story.append(Paragraph('DETAILED STATUTORY FINDINGS', styles['SectionHeading']))
+    story.append(Paragraph(ui_labels.get("finding_header", 'DETAILED STATUTORY FINDINGS'), styles['SectionHeading']))
 
     for c in checks:
         status_str = c.status or 'UNKNOWN'
-        fg, _ = _status_color(status_str)
+        loc_st = localize_status(status_str, canon_lang)
+        loc_lbl = localize_rule_label(c.rule_id, canon_lang)
+        loc_expl = localize_explanation(c.rule_id, status_str, c.detected_value, canon_lang)
 
         finding_items = []
         finding_items.append(Paragraph(
-            f'<b>{c.rule_id}</b> — {c.field_label or c.field}',
+            f'<b>{c.rule_id}</b> — {loc_lbl}',
             styles['SubHeading']
         ))
 
         detail_rows = [
             ['Domain', (c.domain or 'LEGAL_METROLOGY').replace('_', ' ')],
-            ['Status', status_str],
-            ['Detected Value', _safe_str(c.detected_value, 'Not detected')],
+            [ui_labels.get("status_header", 'Status'), loc_st],
+            [ui_labels.get("detected_value_header", 'Detected Value'), _safe_str(c.detected_value, 'Not detected')],
+            [ui_labels.get("finding_header", 'Finding'), loc_expl],
         ]
         if c.confidence is not None:
             detail_rows.append(['Confidence', f'{round(c.confidence)}%'])
-        if c.reason:
-            detail_rows.append(['Finding', c.reason])
         if c.evidence_image_label or c.evidence_region:
             loc = f'{c.evidence_image_label or "Package"} → {c.evidence_region or "label"}'
             detail_rows.append(['Evidence Location', loc])
-        if c.source_name:
-            ref_str = c.source_name
-            if c.source_reference:
-                ref_str += f' — {c.source_reference}'
-            detail_rows.append(['Legal Reference', ref_str])
 
         detail_table_data = []
         for label, val in detail_rows:
@@ -566,7 +600,7 @@ def generate_pdf_report(analysis: AnalysisResponse) -> bytes:
                 Paragraph(str(val), styles['TableCell']),
             ])
 
-        dtbl = Table(detail_table_data, colWidths=[32*mm, w_avail - 32*mm])
+        dtbl = Table(detail_table_data, colWidths=[38*mm, w_avail - 38*mm])
         dtbl.setStyle(TableStyle([
             ('VALIGN', (0, 0), (-1, -1), 'TOP'),
             ('BACKGROUND', (0, 0), (0, -1), SLATE_50),
@@ -579,190 +613,8 @@ def generate_pdf_report(analysis: AnalysisResponse) -> bytes:
 
         finding_items.append(dtbl)
         finding_items.append(Spacer(1, 3*mm))
-
         story.append(KeepTogether(finding_items))
 
-    # ══════════════════════════════════════════════════════════════
-    # RECOMMENDED ACTIONS
-    # ══════════════════════════════════════════════════════════════
-    actionable_recs = [r for r in recommendations
-                       if (r.status if hasattr(r, 'status') else r.get('status', ''))
-                       in ('FAIL', 'WARNING', 'NEEDS_REVIEW')]
-
-    story.append(Paragraph('RECOMMENDED ACTIONS', styles['SectionHeading']))
-
-    if not actionable_recs:
-        story.append(Paragraph(
-            'No corrective actions required. All statutory declarations met automated screening criteria.',
-            styles['BodyText2']
-        ))
-    else:
-        story.append(Paragraph(
-            f'{len(actionable_recs)} item(s) require attention.',
-            styles['BodyText2']
-        ))
-
-        for rec in actionable_recs:
-            # Support both Pydantic model and dict
-            def _g(field, default=''):
-                if isinstance(rec, dict):
-                    return rec.get(field, default)
-                return getattr(rec, field, default)
-
-            rule_id = _g('rule_id', '')
-            title = _g('title', '')
-            priority = _g('priority', 'MEDIUM')
-            status = _g('status', '')
-            action_cat = _g('action_category', '')
-            issue = _g('issue', '')
-            recommended_action = _g('recommended_action', '')
-            corrective_action = _g('corrective_action', '')
-            verification_step = _g('verification_step', '')
-            ev_label = _g('evidence_image_label', '')
-            ev_region = _g('evidence_region', '')
-            conf = _g('confidence')
-            src_name = _g('source_name', '')
-            src_ref = _g('source_reference', '')
-
-            rec_items = []
-            rec_items.append(Paragraph(
-                f'<b>{rule_id}</b> — {title}',
-                styles['SubHeading']
-            ))
-
-            rec_rows = [
-                ['Priority', priority],
-                ['Status', status],
-                ['Action Category', action_cat],
-            ]
-            if ev_label or ev_region:
-                loc = f'{ev_label or "Package"} → {ev_region or "label"}'
-                if conf is not None:
-                    loc += f' ({round(conf)}% conf)'
-                rec_rows.append(['Evidence Location', loc])
-            if issue:
-                rec_rows.append(['Issue', issue])
-            if recommended_action:
-                rec_rows.append(['Recommended Action', recommended_action])
-            if corrective_action:
-                rec_rows.append(['Corrective Guidance', corrective_action])
-            if verification_step:
-                rec_rows.append(['Verification Step', verification_step])
-            if src_name or src_ref:
-                ref = src_name
-                if src_ref:
-                    ref += f' — {src_ref}' if ref else src_ref
-                rec_rows.append(['Legal Reference', ref])
-
-            rec_table_data = []
-            for label, val in rec_rows:
-                rec_table_data.append([
-                    Paragraph(f'<b>{label}</b>', styles['TableCell']),
-                    Paragraph(str(val or '—'), styles['TableCell']),
-                ])
-
-            fg, _ = _status_color(priority if priority == 'HIGH' else status)
-            rtbl = Table(rec_table_data, colWidths=[35*mm, w_avail - 35*mm])
-            rtbl.setStyle(TableStyle([
-                ('VALIGN', (0, 0), (-1, -1), 'TOP'),
-                ('BACKGROUND', (0, 0), (0, -1), SLATE_50),
-                ('GRID', (0, 0), (-1, -1), 0.4, SLATE_200),
-                ('TOPPADDING', (0, 0), (-1, -1), 2),
-                ('BOTTOMPADDING', (0, 0), (-1, -1), 2),
-                ('LEFTPADDING', (0, 0), (-1, -1), 3),
-                ('RIGHTPADDING', (0, 0), (-1, -1), 3),
-                # Left accent border
-                ('LINEAFTER', (-1, 0), (-1, -1), 0, WHITE),
-                ('LINEBEFORE', (0, 0), (0, -1), 2, fg),
-            ]))
-
-            rec_items.append(rtbl)
-            rec_items.append(Spacer(1, 3*mm))
-            story.append(KeepTogether(rec_items))
-
-    # ══════════════════════════════════════════════════════════════
-    # EVIDENCE SECTION
-    # ══════════════════════════════════════════════════════════════
-    story.append(Paragraph('EVIDENCE SUMMARY', styles['SectionHeading']))
-
-    has_evidence = False
-    for c in checks:
-        if not (c.evidence_image_label or c.evidence_region):
-            continue
-        has_evidence = True
-
-        status_str = c.status or 'UNKNOWN'
-        fg, _ = _status_color(status_str)
-        loc = f'{c.evidence_image_label or "Package"} → {c.evidence_region or "label"}'
-        conf_str = f'{round(c.confidence)}% confidence' if c.confidence is not None else 'Confidence unavailable'
-
-        has_bbox = (c.bbox is not None and len(c.bbox) >= 4) or (c.bbox_x is not None)
-
-        ev_text = (
-            f'<b>{c.rule_id}</b> ({status_str}) — '
-            f'<font color="{SLATE_500.hexval()}">{loc} • {conf_str}</font>'
-        )
-        story.append(Paragraph(ev_text, styles['TableCell']))
-
-        if has_bbox:
-            bbox_repr = c.bbox if c.bbox else [c.bbox_x, c.bbox_y, c.bbox_width, c.bbox_height]
-            story.append(Paragraph(
-                f'<font color="{SLATE_500.hexval()}">Bounding box coordinates: {bbox_repr}</font>',
-                styles['SmallText']
-            ))
-        else:
-            story.append(Paragraph(
-                f'<font color="{SLATE_500.hexval()}">Semantic evidence location: {loc}. '
-                f'Precise image coordinates are unavailable for this finding.</font>',
-                styles['SmallText']
-            ))
-
-        story.append(Spacer(1, 1.5*mm))
-
-    if not has_evidence:
-        story.append(Paragraph(
-            'No evidence location data available for this analysis.',
-            styles['SmallText']
-        ))
-
-    # ══════════════════════════════════════════════════════════════
-    # STATUS SUMMARY (Final)
-    # ══════════════════════════════════════════════════════════════
-    story.append(Spacer(1, 4*mm))
-    story.append(HRFlowable(width='100%', thickness=0.5, color=SLATE_200, spaceAfter=3*mm))
-
-    summary_data = [
-        [Paragraph('<b>Status</b>', styles['TableCellBold']),
-         Paragraph('<b>Count</b>', styles['TableCellBold'])],
-        ['PASS', str(cr.passed_rules)],
-        ['NEEDS REVIEW', str(cr.needs_review_rules)],
-        ['WARNING', str(cr.warning_rules)],
-        ['FAIL', str(cr.failed_rules)],
-        ['NOT APPLICABLE', str(cr.not_applicable_rules)],
-    ]
-    summary_tbl = Table(summary_data, colWidths=[40*mm, 25*mm])
-    summary_tbl.setStyle(TableStyle([
-        ('BACKGROUND', (0, 0), (-1, 0), INDIGO_LIGHT),
-        ('GRID', (0, 0), (-1, -1), 0.5, SLATE_200),
-        ('FONTNAME', (0, 0), (-1, -1), 'Helvetica'),
-        ('FONTSIZE', (0, 0), (-1, -1), 9),
-        ('ALIGN', (1, 0), (1, -1), 'CENTER'),
-        ('TOPPADDING', (0, 0), (-1, -1), 3),
-        ('BOTTOMPADDING', (0, 0), (-1, -1), 3),
-        ('BACKGROUND', (0, 1), (-1, 1), EMERALD_LIGHT),
-        ('BACKGROUND', (0, 2), (-1, 2), AMBER_LIGHT),
-        ('BACKGROUND', (0, 3), (-1, 3), AMBER_LIGHT),
-        ('BACKGROUND', (0, 4), (-1, 4), RED_LIGHT),
-        ('BACKGROUND', (0, 5), (-1, 5), SLATE_100),
-    ]))
-    story.append(summary_tbl)
-
-    story.append(Spacer(1, 6*mm))
-    story.append(Paragraph(
-        f'<b>Report generated:</b> {get_current_ist_datetime("%d %B %Y, %H:%M:%S")}',
-        styles['SmallText']
-    ))
-
-    # ── Build ──────────────────────────────────────────────────
+    # Build document
     doc.build(story, onFirstPage=_header_footer, onLaterPages=_header_footer)
     return buf.getvalue()

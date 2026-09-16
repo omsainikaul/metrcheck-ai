@@ -1,7 +1,10 @@
 import re
 from typing import Dict, Any, Optional, List, Tuple
-from models.schemas import ProductInfo, FieldProvenance, ProductImageEvidence, OCRWord
+from models.schemas import ProductInfo, FieldProvenance, ProductImageEvidence, OCRWord, MultilingualMetadata
 from extraction.patterns import PATTERNS, FALLBACK_PATTERNS
+from multilingual.extractor import multilingual_extractor
+from multilingual.detector import detect_document_languages
+from multilingual.normalizer import normalize_indic_digits
 from ocr.repair import (
     repair_fssai_license,
     repair_net_quantity,
@@ -21,6 +24,7 @@ class LocalExtractor:
     - Context-bound phone extraction (preventing FSSAI / PIN code conflation)
     - Dynamic evidence-based confidence scoring (no hardcoded false-pass confidence)
     - End-to-end extraction provenance tracking
+    - Full 10-language multilingual intelligence integration
     """
 
     def extract(self, text: Any, images: Optional[List[ProductImageEvidence]] = None) -> ProductInfo:
@@ -31,6 +35,12 @@ class LocalExtractor:
         text = str(text or "")
         info: Dict[str, Any] = {'other_declarations': {}}
         confidences: Dict[str, float] = {}
+
+        # 0. Multilingual Pre-Extraction & Indic Digits Normalization
+        multi_extracted = multilingual_extractor.extract_multilingual_fields(text, images=images)
+        doc_lang_meta = multi_extracted.get("multilingual_metadata") or detect_document_languages(text)
+        raw_text = text
+        text = normalize_indic_digits(text)
 
 
         # -------------------------------------------------------------
@@ -293,7 +303,7 @@ class LocalExtractor:
         # -------------------------------------------------------------
         # Corporate legal entity regex (generic for Indian manufacturing & FMCG brands)
         co_entity_pattern = re.compile(
-            r'\b([A-Z0-9][A-Za-z0-9\s,\.\-\&]{2,45}?(?:PVT[.,\s]*LTD\.?|PRIVATE\s*LIMITED|PYT[.,\s]*LT\.?|PVT\.?|LTD\.?|LIMITED|LLP|HEALTH\s*FOODS(?:\s*PVT[.,\s]*LTD\.?)?|FOODS(?:\s*PVT[.,\s]*LTD\.?)?|SNACKS|BEVERAGES|AGRO|INDUSTRIES|ENTERPRISES|BAKERS))\b',
+            r'\b([A-Z0-9][A-Za-z0-9\s,\.\-\&]{2,45}?(?:PVT[.,\s]*LTD\.?|PRIVATE\s*LIMITED|PYT[.,\s]*LT\.?|PTO[.,\s]*LTD\.?|PVT\.?|LTD\.?|LIMITED|PTO\.?|LLP|HEALTH\s*FO+DS?(?:\s*(?:PVT|PTO|PYT)[.,\s]*(?:LTD|PTO)\.?)?|FO+DS?(?:\s*(?:PVT|PTO|PYT)[.,\s]*(?:LTD|PTO)\.?)?|ALPINO[A-Za-z0-9\s,\.\-\&]*|SNACKS|BEVERAGES|AGRO|INDUSTRIES|ENTERPRISES|BAKERS))\b',
             re.IGNORECASE
         )
         
@@ -564,6 +574,8 @@ class LocalExtractor:
             r'\bINGR?EDI?ENTS?\b',
             r'\bCOMPOSITION\b',
             r'\bCONTAINS\b',
+            r'\bPROPRIETARY\s*FO\w*[\s:]*.*?(?:INCLUDING|NCLUDINO)\b',
+            r'\b(?:INCLUDING|NCLUDINO)\s*ROLLED\b',
             r'\bSAMAGRI\b',
             r'\bसामग्री\b',
             r'\bघटक\b'
@@ -998,8 +1010,14 @@ class LocalExtractor:
                 info['category'] = "Packaged Food / Spices & Seasonings"
             else:
                 info['category'] = "Packaged Food"
-        else:
-            info['category'] = "Packaged Commodity / General Non-Food"
+        # Merge multilingual extracted statutory fields if missing in standard info
+        for m_key, m_val in multi_extracted.items():
+            if m_key in ("other_declarations", "declaration_confidences", "field_provenance", "multilingual_metadata"):
+                continue
+            if m_val and (m_key not in info or not info[m_key]):
+                info[m_key] = m_val
+                if m_key in multi_extracted.get("declaration_confidences", {}):
+                    confidences[m_key] = multi_extracted["declaration_confidences"][m_key]
 
         info['declaration_confidences'] = confidences
 
@@ -1010,6 +1028,15 @@ class LocalExtractor:
             info['field_provenance'] = self._build_provenance_map(info, confidences, images)
         else:
             info['field_provenance'] = {}
+
+        # Merge multilingual field provenance records
+        if 'field_provenance' in multi_extracted:
+            for prov_key, prov_val in multi_extracted['field_provenance'].items():
+                if prov_key not in info['field_provenance']:
+                    info['field_provenance'][prov_key] = prov_val
+
+        if doc_lang_meta:
+            info['multilingual'] = MultilingualMetadata(**doc_lang_meta)
 
         prod_info = ProductInfo(**info, extraction_mode='local')
         prod_info._confidences = confidences
@@ -1028,7 +1055,7 @@ class LocalExtractor:
         provenance: Dict[str, FieldProvenance] = {}
 
         def _norm(s: str) -> str:
-            return re.sub(r'[^a-z0-9]', '', str(s or '').lower())
+            return re.sub(r'[^\w\d]', '', str(s or '').lower(), flags=re.UNICODE)
 
         for img_idx, img in enumerate(images):
             words = getattr(img, 'words', None) or []

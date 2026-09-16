@@ -6,7 +6,7 @@ from fastapi.staticfiles import StaticFiles
 
 from config import settings
 from database.db import init_db
-from api import analyze, ocr, extract, compliance_routes, history, demo, health, report, enforcement, integrations
+from api import analyze, ocr, extract, compliance_routes, history, demo, health, report, enforcement, integrations, vision
 from auth.routes import router as auth_router, admin_router
 
 os.makedirs(settings.UPLOAD_DIR, exist_ok=True)
@@ -42,6 +42,7 @@ app.include_router(auth_router, prefix="/api", tags=["Auth"])
 app.include_router(admin_router, prefix="/api", tags=["Admin"])
 app.include_router(enforcement.router, prefix="/api", tags=["Enforcement"])
 app.include_router(integrations.router, prefix="/api", tags=["Integrations & Metrology"])
+app.include_router(vision.router)
 
 @app.get("/")
 def read_root():

@@ -17,6 +17,7 @@ from services.image_service import process_and_save_image
 from integrations.fssai.verifier import fssai_verifier
 from integrations.gs1.verifier import gs1_verifier
 from services.calibration_service import calibration_service
+from vision.pipeline import vision_pipeline
 
 logger = logging.getLogger(__name__)
 
@@ -76,8 +77,8 @@ async def analyze_products(files: List[UploadFile], labels: Optional[List[str]] 
         logger.info(f"[PERF] {ev.label} OCR: {ocr_res.processing_time * 1000:.1f} ms (passes: {ocr_res.ocr_passes})")
     logger.info(f"[PERF] Combined OCR Phase: {t_ocr_all:.1f} ms")
 
-    # ── Phase 3: fill per-image OCR evidence (order preserved) ──
-    for (ev, _path), ocr_res in zip(pending, ocr_results):
+    # ── Phase 3: fill per-image OCR evidence & run Computer Vision Analysis ──
+    for idx, ((ev, _path), ocr_res) in enumerate(zip(pending, ocr_results)):
         total_processing_time += ocr_res.processing_time
         all_words.extend(ocr_res.words)
         ev.ocr_text = ocr_res.full_text
@@ -85,6 +86,22 @@ async def analyze_products(files: List[UploadFile], labels: Optional[List[str]] 
         ev.word_count = ocr_res.word_count or len(ocr_res.words) or len(ocr_res.full_text.split())
         ev.average_confidence = ocr_res.average_confidence
         ev.preprocessing_variant = ocr_res.preprocessing_variant
+
+        # Run Computer Vision Intelligence Pipeline
+        try:
+            t_vis0 = time.perf_counter()
+            words_dict = [w.model_dump() if hasattr(w, 'model_dump') else w for w in ocr_res.words]
+            ev.vision_analysis = vision_pipeline.analyze_image(
+                image_path=_path,
+                ocr_text=ocr_res.full_text,
+                words=words_dict,
+                image_index=idx,
+                image_label=ev.label
+            )
+            t_vis = (time.perf_counter() - t_vis0) * 1000
+            logger.info(f"[PERF] {ev.label} Computer Vision Analysis: {t_vis:.1f} ms")
+        except Exception as e:
+            logger.warning(f"[VISION] Failed for image {ev.label}: {e}")
 
     # 4. Combine OCR text across all images
     if len(image_evidences) == 1:
@@ -108,6 +125,12 @@ async def analyze_products(files: List[UploadFile], labels: Optional[List[str]] 
     active_variant = primary_ocr.preprocessing_variant if primary_ocr else "Deep Learning Det + Rec"
     ocr_passes_count = sum(r.ocr_passes for r in ocr_results) if ocr_results else 1
 
+    # 5. Extract structured info from combined OCR text with per-image provenance
+    t_ext0 = time.perf_counter()
+    product_info = llm_extractor.extract(combined_text, images=image_evidences)
+    t_ext = (time.perf_counter() - t_ext0) * 1000
+    logger.info(f"[PERF] Structured Extraction: {t_ext:.1f} ms")
+
     combined_ocr_result = OCRResult(
         full_text=combined_text,
         words=all_words,
@@ -118,14 +141,9 @@ async def analyze_products(files: List[UploadFile], labels: Optional[List[str]] 
         engine=active_engine_name,
         preprocessing_variant=active_variant,
         regions_processed=total_regions,
-        ocr_passes=ocr_passes_count
+        ocr_passes=ocr_passes_count,
+        multilingual=getattr(product_info, 'multilingual', None)
     )
-    
-    # 5. Extract structured info from combined OCR text with per-image provenance
-    t_ext0 = time.perf_counter()
-    product_info = llm_extractor.extract(combined_text, images=image_evidences)
-    t_ext = (time.perf_counter() - t_ext0) * 1000
-    logger.info(f"[PERF] Extraction: {t_ext:.1f} ms")
     
     # 6. Compliance check with visual proof localization
     t_comp0 = time.perf_counter()
@@ -135,6 +153,7 @@ async def analyze_products(files: List[UploadFile], labels: Optional[List[str]] 
     logger.info(f"[PERF] Compliance & Evidence: {t_comp:.1f} ms")
     
     # 6B. Physical Calibration & Rule 12 Font Size Analysis
+    t_font0 = time.perf_counter()
     primary_img_path = pending[0][1] if pending else None
     calibration_result = None
     if primary_img_path:
@@ -147,6 +166,8 @@ async def analyze_products(files: List[UploadFile], labels: Optional[List[str]] 
         checks=compliance_result.checks,
         calibration_result=calibration_result
     )
+    t_font = (time.perf_counter() - t_font0) * 1000
+    logger.info(f"[PERF] Calibration & Font Size Analysis: {t_font:.1f} ms")
     
     # 6C. External Verifications (FSSAI Licence & GS1 Barcode)
     fssai_verification = await fssai_verifier.verify(product_info.fssai_license)
@@ -157,10 +178,8 @@ async def analyze_products(files: List[UploadFile], labels: Optional[List[str]] 
     primary_image_url = image_evidences[0].image_url if image_evidences else "/placeholder.png"
     created_at = get_current_utc_iso()
     
-    t_total_analysis = (time.perf_counter() - start_total_time) * 1000
-    logger.info(f"[PERF] TOTAL Backend Analysis: {t_total_analysis:.1f} ms ({t_total_analysis/1000:.2f} s)")
-    
     # 7. Save to DB
+    t_db0 = time.perf_counter()
     db_data = {
         'id': analysis_id,
         'product_name': product_info.product_name or 'Unknown Product',
@@ -175,6 +194,11 @@ async def analyze_products(files: List[UploadFile], labels: Optional[List[str]] 
         'owner_user_id': owner_user_id or ""
     }
     await save_analysis(db_data)
+    t_db = (time.perf_counter() - t_db0) * 1000
+    logger.info(f"[PERF] DB Save: {t_db:.1f} ms")
+
+    t_total_analysis = (time.perf_counter() - start_total_time) * 1000
+    logger.info(f"[PERF] TOTAL Backend Analysis: {t_total_analysis:.1f} ms ({t_total_analysis/1000:.2f} s)")
     
     return AnalysisResponse(
         id=analysis_id,
@@ -191,7 +215,9 @@ async def analyze_products(files: List[UploadFile], labels: Optional[List[str]] 
         fssai_verification=fssai_verification,
         gs1_verification=gs1_verification,
         calibration_result=calibration_result,
-        owner_user_id=owner_user_id or ""
+        owner_user_id=owner_user_id or "",
+        multilingual=getattr(product_info, 'multilingual', None),
+        vision_analysis=image_evidences[0].vision_analysis if image_evidences else None
     )
 
 async def analyze_product(file: UploadFile) -> AnalysisResponse:
@@ -269,5 +295,6 @@ async def analyze_text(text: str, owner_user_id: Optional[str] = None) -> Analys
         fssai_verification=fssai_verification,
         gs1_verification=gs1_verification,
         calibration_result=None,
-        owner_user_id=owner_user_id or ""
+        owner_user_id=owner_user_id or "",
+        multilingual=getattr(product_info, 'multilingual', None)
     )

@@ -1,7 +1,45 @@
+export interface MultilingualLanguageInfo {
+  code: string;
+  name: string;
+  script: string;
+  confidence: number;
+  token_count: number;
+}
+
+export interface SupportedReportLanguage {
+  code: string;
+  label: string;
+  native: string;
+}
+
+export const SUPPORTED_REPORT_LANGUAGES: SupportedReportLanguage[] = [
+  { code: 'en', label: 'English', native: 'English' },
+  { code: 'hi', label: 'Hindi', native: 'हिन्दी' },
+  { code: 'bn', label: 'Bengali', native: 'বাংলা' },
+  { code: 'mr', label: 'Marathi', native: 'मराठी' },
+  { code: 'gu', label: 'Gujarati', native: 'ગુજરાતી' },
+  { code: 'pa', label: 'Punjabi', native: 'ਪੰਜਾਬੀ' },
+  { code: 'ta', label: 'Tamil', native: 'தமிழ்' },
+  { code: 'te', label: 'Telugu', native: 'తెలుగు' },
+  { code: 'kn', label: 'Kannada', native: 'ಕನ್ನಡ' },
+  { code: 'ml', label: 'Malayalam', native: 'മലയാളം' },
+];
+
+export interface MultilingualMetadata {
+  primary_language: string;
+  primary_script: string;
+  detected_languages: MultilingualLanguageInfo[];
+  detected_scripts: string[];
+  mixed_language: boolean;
+  language_confidence: number;
+}
+
 export interface OCRWord {
   text: string;
   confidence: number;
   bbox: number[]; // [x1, y1, x2, y2]
+  language?: string | null;
+  script?: string | null;
 }
 
 export interface OCRResult {
@@ -15,6 +53,7 @@ export interface OCRResult {
   preprocessing_variant?: string;
   regions_processed?: number;
   ocr_passes?: number;
+  multilingual?: MultilingualMetadata | null;
 }
 
 export interface ProductInfo {
@@ -46,6 +85,7 @@ export interface ProductInfo {
   declaration_confidences?: Record<string, number>;
   field_provenance?: Record<string, FieldProvenance>;
   extraction_mode: string;
+  multilingual?: MultilingualMetadata | null;
 }
 
 export interface FieldProvenance {
@@ -59,6 +99,9 @@ export interface FieldProvenance {
   source_bbox?: number[] | null;
   confidence: number;
   match_method: string;
+  language?: string | null;
+  script?: string | null;
+  language_confidence?: number | null;
 }
 
 export interface EvidenceItem {
@@ -69,7 +112,7 @@ export interface EvidenceItem {
   normalized_value?: string | null;
   bbox?: number[] | null; // [x1, y1, x2, y2]
   geometry_type?: 'WORD_UNION' | 'LINE' | 'TOKEN' | 'NONE';
-  match_method?: 'DIRECT_OCR' | 'MULTI_TOKEN_OCR' | 'CONTEXTUAL_OCR' | 'SEMANTIC_PANEL' | 'EXACT_TOKEN' | 'TEXT_NORMALIZED' | 'TOKEN_SEQUENCE' | 'FIELD_MATCH' | 'NONE';
+  match_method?: 'DIRECT_OCR' | 'MULTI_TOKEN_OCR' | 'CONTEXTUAL_OCR' | 'SEMANTIC_PANEL' | 'EXACT_TOKEN' | 'TEXT_NORMALIZED' | 'TOKEN_SEQUENCE' | 'FIELD_MATCH' | 'MULTILINGUAL_DICTIONARY' | 'NONE';
   confidence: number;
   evidence_status: 'VERIFIED' | 'CONTEXTUAL' | 'NEEDS_REVIEW' | 'NO_EVIDENCE' | 'NOT_APPLICABLE' | 'UNAVAILABLE';
   evidence_type?: 'DIRECT_OCR' | 'DERIVED_FIELD' | 'PROVISO_DELEGATION' | 'NONE';
@@ -78,6 +121,9 @@ export interface EvidenceItem {
   field_type?: 'FIELD' | 'PANEL' | 'REGION';
   quality_score?: number | null;
   analysis_id?: string | null;
+  language?: string | null;
+  script?: string | null;
+  language_confidence?: number | null;
 }
 
 export interface ComplianceCheck {
@@ -169,6 +215,174 @@ export interface ComplianceResult {
   recommendations?: Recommendation[];
 }
 
+export interface ImageQualityMetrics {
+  blur_score: number;
+  motion_blur_score: number;
+  exposure_mean: number;
+  exposure_std: number;
+  glare_score: number;
+  skew_angle_deg: number;
+  contrast_score: number;
+  min_text_height_px: number;
+}
+
+export interface ImageQualityDefect {
+  defect_type: string;
+  severity: string;
+  message: string;
+  metric_value?: number | null;
+  bbox?: number[] | null;
+}
+
+export interface ImageQualityResult {
+  overall_score: number;
+  decision: 'ACCEPT' | 'WARNING' | 'REJECT';
+  is_acceptable: boolean;
+  metrics: ImageQualityMetrics;
+  defects: ImageQualityDefect[];
+  summary: string;
+}
+
+export interface PerspectiveCorrectionResult {
+  applied: boolean;
+  detected_quadrilateral?: number[][] | null;
+  skew_angle_deg: number;
+  trapezoid_score: number;
+  confidence: number;
+  non_destructive_matrix?: number[][] | null;
+}
+
+export interface PackageBoundaryResult {
+  detected: boolean;
+  bbox?: number[] | null;
+  normalized_bbox?: number[] | null;
+  polygon?: number[][] | null;
+  contour_points?: number[][] | null;
+  area_ratio: number;
+  aspect_ratio: number;
+  confidence: number;
+  confidence_tier: string;
+}
+
+export interface PanelClassificationResult {
+  primary_panel: 'FRONT' | 'BACK' | 'SIDE' | 'TOP' | 'BOTTOM' | 'PRINCIPAL_DISPLAY_PANEL' | 'UNKNOWN';
+  confidence: number;
+  confidence_tier: string;
+  supporting_signals: string[];
+  candidate_scores: Record<string, number>;
+  facets_detected?: Array<{ facet_name: string; bbox: number[] }> | null;
+}
+
+export interface SemanticRegionResult {
+  region_type: string;
+  detected: boolean;
+  confidence: number;
+  confidence_tier: string;
+  bbox?: number[] | null;
+  normalized_bbox?: number[] | null;
+  polygon?: number[][] | null;
+  detection_method: string;
+  matched_keywords: string[];
+  associated_text: string;
+  is_table_structure: boolean;
+  evidence_id?: string | null;
+}
+
+export interface SymbolDetectionResult {
+  symbol_type: string;
+  detected: boolean;
+  confidence: number;
+  confidence_tier: string;
+  bbox?: number[] | null;
+  normalized_bbox?: number[] | null;
+  color_scheme?: string | null;
+  detection_method: string;
+  notes?: string | null;
+  evidence_id?: string | null;
+}
+
+export interface LogoDetectionResult {
+  logo_name: string;
+  detected: boolean;
+  confidence: number;
+  bbox?: number[] | null;
+  normalized_bbox?: number[] | null;
+  detection_method: string;
+  evidence_id?: string | null;
+}
+
+export interface BarcodeDetectionResult {
+  detected: boolean;
+  barcode_type: string;
+  bbox?: number[] | null;
+  normalized_bbox?: number[] | null;
+  orientation: string;
+  decoded_value?: string | null;
+  confidence: number;
+  confidence_tier: string;
+  detection_method: string;
+}
+
+export interface QRDetectionResult {
+  detected: boolean;
+  bbox?: number[] | null;
+  normalized_bbox?: number[] | null;
+  decoded_payload?: string | null;
+  is_safe_payload: boolean;
+  confidence: number;
+  confidence_tier: string;
+  detection_method: string;
+  warning?: string | null;
+}
+
+export interface TextRegionInfo {
+  region_id: string;
+  bbox: number[];
+  normalized_bbox: number[];
+  text: string;
+  token_count: number;
+  confidence: number;
+  estimated_font_height_px: number;
+  is_small_text: boolean;
+  orientation: number;
+  script?: string | null;
+  language?: string | null;
+}
+
+export interface VisionTimingMetrics {
+  quality_gate_ms: number;
+  geometry_ms: number;
+  package_boundary_ms: number;
+  panel_classification_ms: number;
+  text_regions_ms: number;
+  semantic_regions_ms: number;
+  symbols_ms: number;
+  barcodes_ms: number;
+  total_vision_ms: number;
+}
+
+export interface VisionAnalysisResult {
+  image_index: number;
+  image_label: string;
+  source_filename: string;
+  quality: ImageQualityResult;
+  geometry: PerspectiveCorrectionResult;
+  package_boundary: PackageBoundaryResult;
+  panel_classification: PanelClassificationResult;
+  semantic_regions: SemanticRegionResult[];
+  symbols: SymbolDetectionResult[];
+  logos: LogoDetectionResult[];
+  barcode: BarcodeDetectionResult;
+  qr_code: QRDetectionResult;
+  text_regions: TextRegionInfo[];
+  timing: VisionTimingMetrics;
+  evidence_items?: EvidenceItem[];
+  overall_confidence: number;
+  overall_confidence_tier: string;
+  status: string;
+  error_message?: string | null;
+}
+
 export interface ProductImageEvidence {
   filename: string;
   image_url: string;
@@ -180,6 +394,7 @@ export interface ProductImageEvidence {
   preprocessing_variant?: string;
   image_quality?: Record<string, any>;
   quality_warning?: string | null;
+  vision_analysis?: VisionAnalysisResult | null;
 }
 
 export interface CalibrationResult {
@@ -248,6 +463,8 @@ export interface AnalysisResponse {
   gs1_verification?: GS1VerificationResult | null;
   calibration_result?: CalibrationResult | null;
   owner_user_id?: string | null;
+  multilingual?: MultilingualMetadata | null;
+  vision_analysis?: VisionAnalysisResult | null;
 }
 
 export interface HistoryItem {

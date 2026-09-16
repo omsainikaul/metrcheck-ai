@@ -17,10 +17,10 @@ from compliance.rules.models import ComplianceStatus, RuleDefinition
 
 
 def _normalize(text: str) -> str:
-    """Normalize text for exact/fuzzy alphanumeric token matching."""
+    """Normalize text for exact/fuzzy alphanumeric token matching, supporting Indic Unicode characters."""
     if not text:
         return ""
-    return re.sub(r'[^a-z0-9]', '', text.lower())
+    return re.sub(r'[^\w\d]', '', str(text).lower(), flags=re.UNICODE)
 
 
 def _compute_bbox(words: List[OCRWord]) -> Optional[List[int]]:
@@ -826,9 +826,11 @@ def locate_evidence_for_rule(
                         _find_tight_cluster_around(words, "ingredients", max_lines_below=4, max_width=500) or \
                         _find_tight_cluster_around(words, "inoredients", max_lines_below=4, max_width=500) or \
                         _find_tight_cluster_around(words, "samagri", max_lines_below=4, max_width=500) or \
+                        _find_tight_cluster_around(words, "oats", max_lines_below=3, max_width=500) or \
                         _find_line_tokens(words, "ingredients") or \
                         _find_line_tokens(words, "inoredients") or \
-                        _find_line_tokens(words, "ingredient")
+                        _find_line_tokens(words, "ingredient") or \
+                        _find_line_tokens(words, "oats")
 
             if ing_words:
                 bbox_ing = _compute_bbox(ing_words)

@@ -306,7 +306,10 @@ export const api = {
   getHealth: (): Promise<any> => {
     return fetchJSON<any>(`${BASE_URL}/health`);
   },
-  getReportUrl: (id: string): string => `${BASE_URL}/report/${id}`,
+  getReportUrl: (id: string, lang?: string): string => {
+    const base = `${BASE_URL}/report/${id}`;
+    return lang && lang !== 'en' ? `${base}?lang=${encodeURIComponent(lang)}` : base;
+  },
   getCsvReportUrl: (id: string): string => `${BASE_URL}/report/${id}/csv`,
   getXlsxReportUrl: (id: string): string => `${BASE_URL}/report/${id}/xlsx`,
   getJsonReportUrl: (id: string): string => `${BASE_URL}/report/${id}/json`,

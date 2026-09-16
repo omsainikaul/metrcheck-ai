@@ -1,6 +1,7 @@
 import { BrowserRouter, Routes, Route, Navigate, useLocation } from 'react-router-dom';
 import type { ReactNode } from 'react';
 import { ThemeProvider } from './context/ThemeContext';
+import { LanguageProvider } from './context/LanguageContext';
 import { WorkspaceProvider } from './context/WorkspaceContext';
 import { RoleProvider } from './context/RoleContext';
 import { AuthProvider, useAuth } from './context/AuthContext';
@@ -58,9 +59,10 @@ function AdminOnly({ children }: { children: ReactNode }) {
 function App() {
   return (
     <ThemeProvider>
-      <AuthProvider>
-        <WorkspaceProvider>
-          <RoleProvider>
+      <LanguageProvider>
+        <AuthProvider>
+          <WorkspaceProvider>
+            <RoleProvider>
             <BrowserRouter>
               <Routes>
                 {/* Public pages */}
@@ -92,6 +94,7 @@ function App() {
           </RoleProvider>
         </WorkspaceProvider>
       </AuthProvider>
+      </LanguageProvider>
     </ThemeProvider>
   );
 }

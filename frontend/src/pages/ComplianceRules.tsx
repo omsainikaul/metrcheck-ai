@@ -2,10 +2,12 @@ import { useEffect, useState } from 'react';
 import { ShieldCheck, Search, ChevronDown, ChevronUp } from 'lucide-react';
 import { api } from '../services/api';
 import { type ComplianceRule } from '../types';
+import { useLanguage } from '../context/LanguageContext';
 import SeverityBadge from '../components/ui/SeverityBadge';
 import LoadingSkeleton from '../components/ui/LoadingSkeleton';
 
 export default function ComplianceRules() {
+  const { t } = useLanguage();
   const [rules, setRules] = useState<ComplianceRule[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -60,8 +62,8 @@ export default function ComplianceRules() {
             <ShieldCheck className="w-6 h-6" />
           </div>
           <div>
-            <h1 className="text-2xl font-bold text-slate-900 dark:text-slate-100 tracking-tight">Compliance Rules</h1>
-            <p className="text-sm text-slate-500 dark:text-slate-400">Searchable statutory rules registry</p>
+            <h1 className="text-2xl font-bold text-slate-900 dark:text-slate-100 tracking-tight">{t('navigation.compliance_rules')}</h1>
+            <p className="text-sm text-slate-500 dark:text-slate-400">{t('rules.registry_subtitle')}</p>
           </div>
         </div>
       </div>
@@ -75,7 +77,7 @@ export default function ComplianceRules() {
               <Search className="w-4 h-4 text-slate-400 absolute left-3 top-1/2 -translate-y-1/2" />
               <input
                 type="text"
-                placeholder="Search rules by ID, label, or description..."
+                placeholder={t('rules.search_rules')}
                 value={searchQuery}
                 onChange={(e) => setSearchQuery(e.target.value)}
                 className="w-full pl-9 pr-3 py-2 bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500/20 focus:border-indigo-500"
@@ -92,7 +94,7 @@ export default function ComplianceRules() {
                       : 'text-slate-600 dark:text-slate-400 hover:bg-slate-50 dark:hover:bg-slate-800'
                   }`}
                 >
-                  {d === 'ALL' ? 'All' : d === 'LEGAL_METROLOGY' ? 'Legal Metrology' : 'FSSAI'}
+                  {d === 'ALL' ? t('common.all') : d === 'LEGAL_METROLOGY' ? t('rules.legal_metrology') : t('rules.food_safety')}
                 </button>
               ))}
             </div>

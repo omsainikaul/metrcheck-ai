@@ -3,9 +3,11 @@ import { Outlet, useLocation, Link } from 'react-router-dom';
 import Sidebar from './Sidebar';
 import { useWorkspace, WORKSPACE_DEFINITIONS } from '../../context/WorkspaceContext';
 import { useAuth } from '../../context/AuthContext';
+import { useLanguage } from '../../context/LanguageContext';
 import { type WorkspaceType } from '../../types';
 import { Menu, ChevronRight, Sparkles, SearchCheck, ShieldAlert, Store, Lock, Check } from 'lucide-react';
 import ThemeToggle from '../ui/ThemeToggle';
+import LanguageSelector from '../ui/LanguageSelector';
 
 export default function Layout() {
   const location = useLocation();
@@ -13,71 +15,72 @@ export default function Layout() {
   const [mobileOpen, setMobileOpen] = useState(false);
   const { user } = useAuth();
   const { currentWorkspace, setWorkspace, workspaceInfo, isWorkspaceAllowed } = useWorkspace();
+  const { t } = useLanguage();
   const [workspaceDropdownOpen, setWorkspaceDropdownOpen] = useState(false);
   
   const getPageInfo = () => {
     const path = location.pathname;
     if (path === '/') {
       return { 
-        title: `${workspaceInfo.shortLabel} Dashboard`, 
+        title: `${workspaceInfo.shortLabel} ${t('navigation.dashboard')}`, 
         subtitle: `${workspaceInfo.tagline} • Legal Metrology & FSSAI Compliance Overview`,
-        breadcrumb: 'Dashboard'
+        breadcrumb: t('navigation.dashboard')
       };
     }
     if (path.startsWith('/demo')) {
       return { 
-        title: 'SIH Demonstration Mode', 
+        title: t('navigation.demo_mode'), 
         subtitle: 'Benchmark Packaging Scenarios for Evaluation',
-        breadcrumb: 'Demo Mode'
+        breadcrumb: t('navigation.demo_mode')
       };
     }
     if (path.startsWith('/analyze')) {
       return { 
-        title: currentWorkspace === 'MERCHANT' ? 'Pre-Flight Packaging Screening' : currentWorkspace === 'AUDIT' ? 'Technical Packaging Verification' : 'Statutory Compliance Inspection', 
+        title: currentWorkspace === 'MERCHANT' ? t('navigation.analyze_package') : currentWorkspace === 'AUDIT' ? 'Technical Packaging Verification' : 'Statutory Compliance Inspection', 
         subtitle: 'Upload multi-angle packaging artwork for AI statutory verification',
-        breadcrumb: 'Screening'
+        breadcrumb: t('navigation.screening')
       };
     }
     if (path.startsWith('/results')) {
       return { 
-        title: 'Analysis Results & Evidence', 
+        title: t('results.title'), 
         subtitle: 'Statutory rule findings, OCR evidence localization & corrective actions',
-        breadcrumb: 'Results'
+        breadcrumb: t('results.title')
       };
     }
     if (path.startsWith('/history')) {
       return { 
-        title: currentWorkspace === 'ENFORCEMENT' ? 'Inspection Case Records' : currentWorkspace === 'AUDIT' ? 'Audited Compliance Logs' : 'Screening History', 
+        title: currentWorkspace === 'ENFORCEMENT' ? 'Inspection Case Records' : currentWorkspace === 'AUDIT' ? 'Audited Compliance Logs' : t('navigation.screening_history'), 
         subtitle: 'Audited commodity screenings and historical compliance reports',
-        breadcrumb: 'History'
+        breadcrumb: t('navigation.screening_history')
       };
     }
     if (path.startsWith('/rules')) {
       return { 
-        title: 'Statutory Rule Registry', 
+        title: t('navigation.compliance_rules'), 
         subtitle: 'Legal Metrology (Packaged Commodities) Rules 2011 & FSSAI Regulations',
-        breadcrumb: 'Rule Registry'
+        breadcrumb: t('navigation.compliance_rules')
       };
     }
     if (path.startsWith('/admin/users')) {
       return { 
-        title: 'User Management & Role Provisioning', 
+        title: t('navigation.user_management'), 
         subtitle: 'Provision authorized officers, manage roles, and enforce workspace access',
-        breadcrumb: 'Administration / Users'
+        breadcrumb: `${t('navigation.administration')} / ${t('navigation.user_management')}`
       };
     }
     if (path.startsWith('/admin/audit-logs')) {
       return { 
-        title: 'Security Audit Trail & Logs', 
+        title: t('navigation.security_audit_logs'), 
         subtitle: 'Immutable chronological record of administrative actions and security events',
-        breadcrumb: 'Administration / Audit Logs'
+        breadcrumb: `${t('navigation.administration')} / ${t('navigation.security_audit_logs')}`
       };
     }
     if (path.startsWith('/settings')) {
       return { 
-        title: 'Account & Security Settings', 
+        title: t('navigation.settings'), 
         subtitle: 'Manage recovery email, password, and session preferences',
-        breadcrumb: 'Account Settings'
+        breadcrumb: t('navigation.settings')
       };
     }
     return { title: 'MetrCheck AI', subtitle: '', breadcrumb: '' };
@@ -127,8 +130,11 @@ export default function Layout() {
             </div>
           </div>
 
-          {/* Right Header: Workspace Switcher, Badges & Theme Toggle */}
+          {/* Right Header: Global Language, Workspace Switcher, Badges & Theme Toggle */}
           <div className="flex items-center gap-2 sm:gap-2.5 shrink-0">
+            {/* Global Report Language Selector */}
+            <LanguageSelector compact={true} />
+
             {/* Workspace Switcher Dropdown */}
             <div className="relative">
               <button

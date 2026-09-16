@@ -1,10 +1,27 @@
-from pydantic import BaseModel
-from typing import List, Dict, Optional, Any
+from typing import List, Optional, Dict, Any, Union
+from pydantic import BaseModel, Field
+
+class MultilingualLanguageInfo(BaseModel):
+    code: str
+    name: str
+    script: str
+    confidence: float = 0.0
+    token_count: int = 0
+
+class MultilingualMetadata(BaseModel):
+    primary_language: str = "en"
+    primary_script: str = "Latin"
+    detected_languages: List[MultilingualLanguageInfo] = []
+    detected_scripts: List[str] = []
+    mixed_language: bool = False
+    language_confidence: float = 0.0
 
 class OCRWord(BaseModel):
     text: str
     confidence: float
     bbox: List[int]
+    language: Optional[str] = None
+    script: Optional[str] = None
 
 class OCRResult(BaseModel):
     full_text: str
@@ -17,6 +34,7 @@ class OCRResult(BaseModel):
     preprocessing_variant: str = "Deep Learning Det + Rec + Angle Classifier"
     regions_processed: int = 1
     ocr_passes: int = 2
+    multilingual: Optional[MultilingualMetadata] = None
 
 class FieldProvenance(BaseModel):
     field_name: str
@@ -28,7 +46,10 @@ class FieldProvenance(BaseModel):
     source_token_ids: List[str] = []
     source_bbox: Optional[List[int]] = None
     confidence: float = 0.0
-    match_method: str = "DIRECT_OCR"  # DIRECT_OCR, MULTI_TOKEN_OCR, CONTEXTUAL_OCR, SEMANTIC_PANEL, NONE
+    match_method: str = "DIRECT_OCR"  # DIRECT_OCR, MULTI_TOKEN_OCR, CONTEXTUAL_OCR, SEMANTIC_PANEL, MULTILINGUAL_DICTIONARY, NONE
+    language: Optional[str] = None
+    script: Optional[str] = None
+    language_confidence: Optional[float] = None
 
 class ProductInfo(BaseModel):
     product_name: Optional[str] = None
@@ -69,6 +90,7 @@ class ProductInfo(BaseModel):
     declaration_confidences: Dict[str, float] = {}
     field_provenance: Dict[str, FieldProvenance] = {}
     extraction_mode: str = 'local'
+    multilingual: Optional[MultilingualMetadata] = None
 
 class EvidenceItem(BaseModel):
     id: Optional[str] = None
@@ -78,7 +100,7 @@ class EvidenceItem(BaseModel):
     normalized_value: Optional[str] = None
     bbox: Optional[List[int]] = None  # [x1, y1, x2, y2]
     geometry_type: str = "WORD_UNION"  # WORD_UNION, LINE, TOKEN, NONE
-    match_method: str = "DIRECT_OCR"  # DIRECT_OCR, MULTI_TOKEN_OCR, CONTEXTUAL_OCR, SEMANTIC_PANEL, TOKEN_SEQUENCE, EXACT_TOKEN, NONE
+    match_method: str = "DIRECT_OCR"  # DIRECT_OCR, MULTI_TOKEN_OCR, CONTEXTUAL_OCR, SEMANTIC_PANEL, TOKEN_SEQUENCE, EXACT_TOKEN, MULTILINGUAL_DICTIONARY, NONE
     confidence: float = 0.0
     evidence_status: str = "VERIFIED"  # VERIFIED, CONTEXTUAL, NEEDS_REVIEW, NO_EVIDENCE, NOT_APPLICABLE, UNAVAILABLE
     evidence_type: str = "DIRECT_OCR"  # DIRECT_OCR, DERIVED_FIELD, PROVISO_DELEGATION, NONE
@@ -87,6 +109,9 @@ class EvidenceItem(BaseModel):
     field_type: str = "FIELD"  # FIELD, PANEL, REGION
     quality_score: Optional[float] = None
     analysis_id: Optional[str] = None
+    language: Optional[str] = None
+    script: Optional[str] = None
+    language_confidence: Optional[float] = None
 
 class ComplianceCheck(BaseModel):
     rule_id: str
@@ -169,6 +194,8 @@ class ComplianceResult(BaseModel):
     recommendations: List[Recommendation] = []
 
 
+from vision.schemas import VisionAnalysisResult
+
 class ProductImageEvidence(BaseModel):
     filename: str
     image_url: str
@@ -180,6 +207,7 @@ class ProductImageEvidence(BaseModel):
     preprocessing_variant: str = 'Deep Learning Det + Rec + Angle Classifier'
     image_quality: Optional[Dict[str, Any]] = None
     quality_warning: Optional[str] = None
+    vision_analysis: Optional[VisionAnalysisResult] = None
 
 class CalibrationResult(BaseModel):
     status: str = "CALIBRATION_MISSING"  # PHYSICAL_MEASUREMENT_VERIFIED, PHYSICAL_MEASUREMENT_ESTIMATED, CALIBRATION_MISSING, CALIBRATION_INVALID, MEASUREMENT_UNRELIABLE
@@ -222,6 +250,8 @@ class AnalysisResponse(BaseModel):
     gs1_verification: Optional[GS1VerificationResult] = None
     calibration_result: Optional[CalibrationResult] = None
     owner_user_id: Optional[str] = None
+    multilingual: Optional[MultilingualMetadata] = None
+    vision_analysis: Optional[VisionAnalysisResult] = None
 
 class HistoryItem(BaseModel):
     id: str

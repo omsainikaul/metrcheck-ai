@@ -6,6 +6,7 @@ Consumes the existing analysis result — does NOT recalculate anything.
 Supports both real analyses from SQLite and instant demo fixtures.
 """
 
+from typing import Optional, List, Dict, Any
 from fastapi import APIRouter, HTTPException
 from fastapi.responses import StreamingResponse
 from database.db import get_analysis
@@ -24,9 +25,10 @@ router = APIRouter()
 
 
 @router.get("/report/{id}")
-async def get_report(id: str):
-    """Generate and return a professional PDF compliance report for the given analysis."""
+async def get_report(id: str, lang: Optional[str] = "en"):
+    """Generate and return a professional PDF compliance report for the given analysis in the specified language."""
     data = await get_analysis(id)
+    report_lang = lang or "en"
     
     # ── Demo fallback if not in database yet ──
     if not data and (id.startswith("demo-") or id in ("1", "2", "3")):
@@ -40,8 +42,8 @@ async def get_report(id: str):
                 case_id = parts[1]
         try:
             demo_analysis = await get_demo_case(case_id)
-            pdf_bytes = generate_pdf_report(demo_analysis)
-            filename = f"metrcheck-report-{id}.pdf"
+            pdf_bytes = generate_pdf_report(demo_analysis, lang=report_lang)
+            filename = f"metrcheck-report-{id}-{report_lang}.pdf"
             return StreamingResponse(
                 io.BytesIO(pdf_bytes),
                 media_type="application/pdf",
@@ -99,11 +101,11 @@ async def get_report(id: str):
         created_at=data['created_at']
     )
 
-    # ── Generate PDF ──
-    pdf_bytes = generate_pdf_report(analysis)
+    # ── Generate PDF in requested language ──
+    pdf_bytes = generate_pdf_report(analysis, lang=report_lang)
 
     # ── Return as downloadable PDF ──
-    filename = f"metrcheck-report-{id}.pdf"
+    filename = f"metrcheck-report-{id}-{report_lang}.pdf"
     return StreamingResponse(
         io.BytesIO(pdf_bytes),
         media_type="application/pdf",

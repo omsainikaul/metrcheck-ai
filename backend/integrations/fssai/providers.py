@@ -95,6 +95,7 @@ class FoSCoSApiProvider(BaseFSSAIProvider):
 class LocalFSSAICacheProvider(BaseFSSAIProvider):
     """
     Local verified cache provider for FSSAI licences with explicit provenance.
+    Queries in-memory dictionary and persistent SQLite verification_cache table.
     """
     def __init__(self):
         self._cache: Dict[str, Dict[str, Any]] = {}
@@ -104,12 +105,14 @@ class LocalFSSAICacheProvider(BaseFSSAIProvider):
 
     async def verify_licence(self, licence_number: str) -> FSSAIVerificationRecord:
         now_ts = get_current_utc_iso()
+        
+        # 1. Check in-memory cache
         if licence_number in self._cache:
             entry = self._cache[licence_number]
             return FSSAIVerificationRecord(
                 licence_number=licence_number,
                 status=entry.get("status", FSSAIVerificationStatus.VERIFIED),
-                provider="MetrCheck Verified FSSAI Local Cache",
+                provider=entry.get("provider", "MetrCheck Verified FSSAI Local Cache"),
                 business_name=entry.get("business_name"),
                 licence_type=entry.get("licence_type"),
                 valid_upto=entry.get("valid_upto"),
@@ -118,6 +121,33 @@ class LocalFSSAICacheProvider(BaseFSSAIProvider):
                 message="FSSAI licence matched in local verified cache records.",
                 raw_payload=entry
             )
+            
+        # 2. Check persistent SQLite cache
+        try:
+            from database.db import get_cached_verification
+            db_entry = await get_cached_verification("FSSAI", licence_number)
+            if db_entry:
+                status_val = db_entry.get("status", FSSAIVerificationStatus.VERIFIED)
+                if isinstance(status_val, str):
+                    try:
+                        status_val = FSSAIVerificationStatus(status_val)
+                    except ValueError:
+                        status_val = FSSAIVerificationStatus.VERIFIED
+                return FSSAIVerificationRecord(
+                    licence_number=licence_number,
+                    status=status_val,
+                    provider=db_entry.get("provider", f"SQLite Persistent Cache ({db_entry.get('_cache_source', 'LOCAL')})"),
+                    business_name=db_entry.get("business_name"),
+                    licence_type=db_entry.get("licence_type"),
+                    valid_upto=db_entry.get("valid_upto"),
+                    is_live=False,
+                    verification_timestamp=db_entry.get("_cached_at", now_ts),
+                    message="FSSAI licence retrieved from persistent offline database cache.",
+                    raw_payload=db_entry
+                )
+        except Exception as e:
+            logger.debug(f"SQLite cache lookup skipped: {e}")
+
         return FSSAIVerificationRecord(
             licence_number=licence_number,
             status=FSSAIVerificationStatus.NOT_FOUND,

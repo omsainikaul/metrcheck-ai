@@ -104,17 +104,37 @@ export interface FieldProvenance {
   language_confidence?: number | null;
 }
 
+export interface ExtractionCandidateItem {
+  value: string;
+  raw_text?: string;
+  confidence: number;
+  source?: string | null;
+  panel?: string | null;
+  bbox?: number[] | null;
+  is_primary?: boolean;
+}
+
 export interface EvidenceItem {
   id?: string;
-  image_index: number;
-  image_label: string;
-  text: string;
+  image_index?: number;
+  image_label?: string;
+  field_name?: string;
+  extracted_text?: string;
+  panel?: string;
+  text?: string;
   normalized_value?: string | null;
   bbox?: number[] | null; // [x1, y1, x2, y2]
+  bounding_box?: { x: number; y: number; width: number; height: number } | null;
   geometry_type?: 'WORD_UNION' | 'LINE' | 'TOKEN' | 'NONE';
-  match_method?: 'DIRECT_OCR' | 'MULTI_TOKEN_OCR' | 'CONTEXTUAL_OCR' | 'SEMANTIC_PANEL' | 'EXACT_TOKEN' | 'TEXT_NORMALIZED' | 'TOKEN_SEQUENCE' | 'FIELD_MATCH' | 'MULTILINGUAL_DICTIONARY' | 'NONE';
-  confidence: number;
-  evidence_status: 'VERIFIED' | 'CONTEXTUAL' | 'NEEDS_REVIEW' | 'NO_EVIDENCE' | 'NOT_APPLICABLE' | 'UNAVAILABLE';
+  match_method?: string;
+  confidence?: number;
+  ocr_confidence?: number;
+  reliability_score?: number;
+  reliability_tier?: 'HIGH' | 'MEDIUM' | 'LOW' | 'NEEDS_VERIFICATION' | string;
+  linked_rule_id?: string | null;
+  linked_field?: string | null;
+  regulation_reference?: string | null;
+  evidence_status?: 'VERIFIED' | 'CONTEXTUAL' | 'NEEDS_REVIEW' | 'NO_EVIDENCE' | 'NOT_APPLICABLE' | 'UNAVAILABLE';
   evidence_type?: 'DIRECT_OCR' | 'DERIVED_FIELD' | 'PROVISO_DELEGATION' | 'NONE';
   explanation?: string | null;
   source_token_ids?: string[];
@@ -133,11 +153,22 @@ export interface ComplianceCheck {
   required: boolean;
   detected: boolean;
   detected_value: string | null;
+  extracted_value?: string | null;
   severity: string;
   status: string;
   description: string;
   source: string;
   explanation: string | null;
+  pass_reason?: string | null;
+  fail_reason?: string | null;
+  review_reason?: string | null;
+  linked_rule_id?: string | null;
+  linked_field?: string | null;
+  regulation_reference?: string | null;
+  field_status?: 'PRESENT' | 'MISSING' | 'AMBIGUOUS' | 'CONFLICT' | 'UNCERTAIN' | string | null;
+  reliability_score?: number | null;
+  reliability_tier?: 'HIGH' | 'MEDIUM' | 'LOW' | 'NEEDS_VERIFICATION' | string | null;
+  candidates?: ExtractionCandidateItem[] | null;
   recommendation: string | null;
   domain?: 'LEGAL_METROLOGY' | 'FSSAI';
   source_name?: string | null;
@@ -153,6 +184,69 @@ export interface ComplianceCheck {
   bbox_width?: number | null;
   bbox_height?: number | null;
   evidence?: EvidenceItem[];
+  execution_trace?: RuleExecutionTrace | null;
+  rule_version?: string | null;
+}
+
+export interface RuleExecutionTrace {
+  rule_id: string;
+  rule_version: string;
+  category: string;
+  effective_from: string;
+  effective_to?: string | null;
+  evaluated_fields: string[];
+  inputs: Record<string, any>;
+  prerequisites_met: boolean;
+  conditions_evaluated: string[];
+  exemption_applied?: string | null;
+  output_status: string;
+  execution_ms: number;
+  explanation: string;
+}
+
+export interface RuleConflictItem {
+  conflict_type: string;
+  rule_ids: string[];
+  description: string;
+  severity: 'HIGH' | 'MEDIUM' | 'LOW' | string;
+  resolution_hint?: string | null;
+}
+
+export interface HeatmapBox {
+  field_name: string;
+  rule_id?: string | null;
+  status: 'PASS' | 'FAIL' | 'REVIEW' | string;
+  reliability_score: number;
+  reliability_tier: string;
+  bbox: { x: number; y: number; width: number; height: number };
+  extracted_text: string;
+  intensity: number;
+}
+
+export interface EvidenceHeatmapResponse {
+  front_boxes: HeatmapBox[];
+  back_boxes: HeatmapBox[];
+  total_regions: number;
+}
+
+export interface PanelComplianceHeatmapResponse {
+  front_panel: { total_fields: number; passed: number; failed: number; review: number; status: string };
+  back_panel: { total_fields: number; passed: number; failed: number; review: number; status: string };
+  zones: Record<string, any>;
+}
+
+export interface EvidenceAuditLogItem {
+  id: string;
+  analysis_id: string;
+  rule_id?: string | null;
+  field_name?: string | null;
+  action: string;
+  old_value?: string | null;
+  new_value?: string | null;
+  reason?: string | null;
+  user_id: string;
+  user_role: string;
+  timestamp: string;
 }
 
 export interface ComplianceIssue {
@@ -201,6 +295,97 @@ export interface Recommendation {
   evidence?: EvidenceItem[];
 }
 
+export interface RuleScore {
+  rule_id: string;
+  rule_name: string;
+  domain: string;
+  base_weight: number;
+  multiplier: number;
+  weighted_points_earned: number;
+  max_weighted_points: number;
+  status: string;
+  percentage: number;
+}
+
+export interface CategoryScore {
+  category: string;
+  earned_points: number;
+  max_points: number;
+  score: number;
+  total_rules: number;
+  passed_rules: number;
+  failed_rules: number;
+  review_rules: number;
+}
+
+export interface ConfidenceSummary {
+  ocr_avg_confidence: number;
+  extraction_avg_confidence: number;
+  evidence_reliability_avg: number;
+  aggregate_confidence: number;
+  confidence_tier: 'HIGH' | 'MEDIUM' | 'LOW' | string;
+  has_conflicting_candidates: boolean;
+}
+
+export interface RiskFactor {
+  factor_id: string;
+  title: string;
+  severity: 'CRITICAL' | 'HIGH' | 'MEDIUM' | 'LOW' | string;
+  description: string;
+  source_reference: string;
+  impact_on_score: number;
+}
+
+export interface RiskAssessment {
+  risk_level: 'CRITICAL' | 'HIGH' | 'MEDIUM' | 'LOW' | string;
+  level?: string;
+  grounded_explanation: string;
+  missing_declaration_count: number;
+  critical_violation_count: number;
+  review_required_count: number;
+  insufficient_evidence_count: number;
+  risk_factors: RiskFactor[];
+  confidence_adjusted_score: number;
+}
+
+export interface ScoringConfiguration {
+  scoring_version: string;
+  status_multipliers: Record<string, number>;
+  severity_weights: Record<string, number>;
+  risk_thresholds: Record<string, number>;
+  confidence_penalty_factor: number;
+  description: string;
+}
+
+export interface ScoreHistoryEntry {
+  analysis_id: string;
+  product_name: string;
+  score: number;
+  risk_level: string;
+  created_at: string;
+  rule_scores?: Record<string, RuleScore>;
+  category_scores?: Record<string, CategoryScore>;
+}
+
+export interface ProductRiskHistory {
+  product_name: string;
+  total_analyses: number;
+  average_score: number;
+  current_risk_level: string;
+  history: ScoreHistoryEntry[];
+  score_trend: number[];
+}
+
+export interface BatchRiskDistribution {
+  total_screened: number;
+  critical_count: number;
+  high_count: number;
+  medium_count: number;
+  low_count: number;
+  average_score: number;
+  risk_percentages: Record<string, number>;
+}
+
 export interface ComplianceResult {
   checks: ComplianceCheck[];
   score: number;
@@ -213,6 +398,12 @@ export interface ComplianceResult {
   not_applicable_rules?: number;
   issues: ComplianceIssue[];
   recommendations?: Recommendation[];
+  conflicts?: RuleConflictItem[];
+  rule_scores?: Record<string, RuleScore>;
+  category_scores?: Record<string, CategoryScore>;
+  risk_assessment?: RiskAssessment;
+  confidence_summary?: ConfidenceSummary;
+  scoring_version?: string;
 }
 
 export interface ImageQualityMetrics {
@@ -465,6 +656,7 @@ export interface AnalysisResponse {
   owner_user_id?: string | null;
   multilingual?: MultilingualMetadata | null;
   vision_analysis?: VisionAnalysisResult | null;
+  external_verification?: ExternalVerificationSummary | null;
 }
 
 export interface HistoryItem {
@@ -492,14 +684,51 @@ export interface DashboardStats {
 }
 
 export interface ComplianceRule {
-  rule_id: string;
-  field: string;
-  field_label: string;
-  required: boolean;
+  id: string;
+  rule_id?: string;
+  title: string;
+  field?: string;
+  field_label?: string;
+  domain: 'LEGAL_METROLOGY' | 'FSSAI' | string;
+  category_applicability: 'ALL' | 'FOOD' | 'NON_FOOD' | 'COSMETICS' | 'MEDICAL_DEVICES' | 'EXPORT' | string;
+  effective_from: string;
+  effective_to?: string | null;
+  rule_version: string;
   severity: string;
-  description: string;
-  source: string;
-  recommendation: string;
+  requirement: string;
+  source_name: string;
+  source_reference: string;
+  source_url?: string | null;
+  evidence_fields: string[];
+  conditions?: string[];
+  exceptions?: string[];
+  exemptions?: string[];
+  prerequisites?: string[];
+  dependent_rules?: string[];
+  description?: string;
+  source?: string;
+  recommendation?: string;
+}
+
+export interface RuleTestRequest {
+  rule_id: string;
+  product_info: Record<string, any>;
+  ocr_text?: string;
+  context_override?: Record<string, any> | null;
+}
+
+export interface RuleTestResponse {
+  rule_id: string;
+  rule_name: string;
+  domain: string;
+  status: string;
+  reason: string;
+  detected_value?: string | null;
+  pass_reason?: string | null;
+  fail_reason?: string | null;
+  review_reason?: string | null;
+  execution_trace: RuleExecutionTrace;
+  is_simulation: boolean;
 }
 
 export type AnalysisStage = 
@@ -631,3 +860,528 @@ export interface ShowCauseNotice {
   authority: string;
   legal_basis: string[];
 }
+
+// ── Pre-Print Packaging Compliance (Section 8) ──────────────────────────
+export interface ArtworkLayoutRegion {
+  region_id: string;
+  region_type: string;
+  bbox_normalized: number[];
+  bbox_pixels?: number[];
+  confidence: number;
+  text_content?: string;
+  font_size_pt_estimated?: number | null;
+}
+
+export interface ArtworkPageInfo {
+  page_number: number;
+  width: number;
+  height: number;
+  dpi: number;
+  preview_image_path?: string | null;
+  extracted_text?: string;
+  text_source: 'PDF_VECTOR' | 'OCR' | 'HYBRID';
+  layout_regions: ArtworkLayoutRegion[];
+  word_count: number;
+}
+
+export interface PlacementCheckResult {
+  check_name: string;
+  field_name: string;
+  passed: boolean;
+  status: 'PASS' | 'FAIL' | 'REVIEW' | 'NOT_APPLICABLE';
+  finding: string;
+  recommended_zone: string;
+  actual_zone?: string | null;
+  legal_citation: string;
+  bbox_normalized?: number[] | null;
+}
+
+export interface FontSizeEstimateResult {
+  field_name: string;
+  text_sample: string;
+  estimated_height_mm: number;
+  estimated_pt_size: number;
+  mandated_minimum_mm: number;
+  is_compliant: boolean;
+  confidence: number;
+  estimation_method: string;
+  disclaimer: string;
+  bbox_normalized?: number[] | null;
+}
+
+export interface DesignerCorrectionItem {
+  item_id: string;
+  field_name: string;
+  severity: 'CRITICAL' | 'MAJOR' | 'MINOR' | 'INFO';
+  issue: string;
+  suggested_action: string;
+  affected_area?: string | null;
+  legal_reference: string;
+  is_blocking_for_print: boolean;
+}
+
+export interface PreprintApprovalRecord {
+  approval_id: string;
+  artwork_id: string;
+  reviewer_id: string;
+  reviewer_name: string;
+  reviewer_role: string;
+  decision: 'APPROVED' | 'REJECTED' | 'REQUEST_CHANGES';
+  comments: string;
+  timestamp: string;
+  conditions?: string[];
+  legal_disclaimer_acknowledged: boolean;
+}
+
+export interface PreprintApprovalRequest {
+  reviewer_id?: string;
+  reviewer_name: string;
+  reviewer_role: string;
+  decision: 'APPROVED' | 'REJECTED' | 'REQUEST_CHANGES';
+  comments: string;
+  conditions?: string[];
+  legal_disclaimer_acknowledged: boolean;
+}
+
+export interface ArtworkDocument {
+  id: string;
+  filename: string;
+  file_path: string;
+  file_type: string;
+  file_size: number;
+  page_count: number;
+  dimensions: Record<string, any>;
+  dpi: number;
+  source_identity: string;
+  compliance_ruleset: string;
+  parent_artwork_id?: string | null;
+  iteration_number: number;
+  workflow_status: 'DRAFT' | 'ACTION_REQUIRED' | 'CHANGES_REQUESTED' | 'READY_FOR_PRINT' | 'REJECTED';
+  approval_status: 'PENDING' | 'APPROVED' | 'REJECTED' | 'CHANGES_REQUESTED';
+  approval_record?: PreprintApprovalRecord | null;
+  analysis_result?: PreprintAnalysisResponse | null;
+  pages_data?: ArtworkPageInfo[];
+  owner_user_id?: string;
+  created_at: string;
+  updated_at: string;
+}
+
+export interface PreprintUploadResponse {
+  success: boolean;
+  artwork_id: string;
+  filename: string;
+  file_type: string;
+  file_size: number;
+  page_count: number;
+  dimensions: Record<string, any>;
+  dpi: number;
+  pages: ArtworkPageInfo[];
+  message: string;
+}
+
+export interface ScoringBreakdown {
+  final_score: number;
+  risk_level: string;
+  confidence_penalty?: number;
+  category_scores?: Record<string, CategoryScore>;
+  rule_scores?: Record<string, RuleScore>;
+  confidence_summary?: ConfidenceSummary;
+}
+
+export interface PreprintAnalysisResponse {
+  artwork_id: string;
+  filename: string;
+  file_type: string;
+  page_count: number;
+  source_identity: string;
+  compliance_ruleset: string;
+  iteration_number: number;
+  parent_artwork_id?: string | null;
+  overall_status: 'COMPLIANT' | 'NEEDS_REVIEW' | 'NON_COMPLIANT';
+  overall_score: number;
+  workflow_status: 'DRAFT' | 'ACTION_REQUIRED' | 'CHANGES_REQUESTED' | 'READY_FOR_PRINT' | 'REJECTED';
+  missing_declarations: string[];
+  mandatory_checklist: Record<string, boolean>;
+  placement_checks: PlacementCheckResult[];
+  font_size_estimates: FontSizeEstimateResult[];
+  designer_corrections: DesignerCorrectionItem[];
+  pages: ArtworkPageInfo[];
+  product_info: ProductInfo;
+  compliance_result: ComplianceResult;
+  scoring_breakdown: ScoringBreakdown;
+  ready_for_print_eligible: boolean;
+  print_blocking_issues_count: number;
+  summary_notes: string[];
+}
+
+// ── Section 9 Version Comparison Schemas ─────────────────────────────────
+export interface FieldDiffItem {
+  field: string;
+  field_label: string;
+  change_type: 'ADDED' | 'REMOVED' | 'CHANGED' | 'UNCHANGED' | 'NEEDS_REVIEW';
+  old_value?: string | null;
+  new_value?: string | null;
+  old_normalized_value?: string | null;
+  new_normalized_value?: string | null;
+  delta_info?: {
+    amount_delta?: number;
+    percent_delta?: number;
+    unit?: string;
+    currency?: string;
+  } | null;
+  requires_review: boolean;
+  explanation: string;
+  evidence_a?: EvidenceItem[] | null;
+  evidence_b?: EvidenceItem[] | null;
+}
+
+export interface IngredientItemDiff {
+  name: string;
+  status: 'ADDED' | 'REMOVED' | 'UNCHANGED' | 'MODIFIED';
+  details?: string | null;
+}
+
+export interface IngredientsDiff {
+  status: 'UNCHANGED' | 'CHANGED' | 'ADDED' | 'REMOVED' | 'REORDERED_ONLY' | 'UNCERTAIN';
+  added_ingredients: string[];
+  removed_ingredients: string[];
+  common_ingredients: string[];
+  is_order_changed: boolean;
+  raw_diff_summary: string;
+  items: IngredientItemDiff[];
+}
+
+export interface NutrientDiffItem {
+  nutrient_name: string;
+  old_value?: string | null;
+  new_value?: string | null;
+  old_amount?: number | null;
+  new_amount?: number | null;
+  amount_delta?: number | null;
+  unit: string;
+  change_type: 'UNCHANGED' | 'CHANGED' | 'ADDED' | 'REMOVED';
+}
+
+export interface NutritionDiff {
+  status: 'UNCHANGED' | 'CHANGED' | 'ADDED' | 'REMOVED' | 'UNCERTAIN';
+  nutrients: NutrientDiffItem[];
+  summary: string;
+}
+
+export interface RuleStateDiff {
+  rule_id: string;
+  rule_name: string;
+  domain: string;
+  old_status: string;
+  new_status: string;
+  transition_type: 'FIXED' | 'REGRESSED' | 'UNCHANGED' | 'NEWLY_EVALUATED' | 'MODIFIED';
+  explanation: string;
+}
+
+export interface IssueResolutionItem {
+  issue_id: string;
+  rule_id?: string | null;
+  field?: string | null;
+  resolution_status: 'RESOLVED' | 'STILL_PRESENT' | 'CHANGED' | 'NEW_ISSUE' | 'UNRESOLVED_REVIEW';
+  old_issue_text?: string | null;
+  new_issue_text?: string | null;
+  severity: string;
+  explanation: string;
+}
+
+export interface VersionSnapshot {
+  version_id: string;
+  version_label: string;
+  version_type: 'ANALYSIS' | 'ARTWORK';
+  product_name: string;
+  timestamp: string;
+  score: number;
+  risk_level: string;
+  image_url?: string | null;
+  owner_user_id?: string | null;
+  product_info?: ProductInfo | null;
+  compliance_result?: ComplianceResult | null;
+  iteration_number?: number | null;
+  parent_id?: string | null;
+}
+
+export interface VersionTimelineEvent {
+  event_id: string;
+  event_type: 'VERSION_CREATED' | 'ARTWORK_UPLOADED' | 'ANALYSIS_RUN' | 'CORRECTION_SUBMITTED' | 'SIGN_OFF_APPROVED' | 'COMPARISON_PERFORMED';
+  title: string;
+  description: string;
+  timestamp: string;
+  version_id: string;
+  actor_username?: string | null;
+  score?: number | null;
+  risk_level?: string | null;
+  metadata: Record<string, any>;
+}
+
+export interface VersionComparisonRequest {
+  version_a_id: string;
+  version_b_id: string;
+  version_type_a?: string;
+  version_type_b?: string;
+}
+
+export interface VersionComparisonResult {
+  comparison_id: string;
+  version_a: VersionSnapshot;
+  version_b: VersionSnapshot;
+  created_at: string;
+  score_a: number;
+  score_b: number;
+  score_delta: number;
+  risk_level_a: string;
+  risk_level_b: string;
+  risk_shift: 'IMPROVED' | 'DEGRADED' | 'UNCHANGED';
+  critical_issues_a: number;
+  critical_issues_b: number;
+  missing_declarations_a: number;
+  missing_declarations_b: number;
+  declaration_diffs: FieldDiffItem[];
+  added_declarations: FieldDiffItem[];
+  removed_declarations: FieldDiffItem[];
+  changed_declarations: FieldDiffItem[];
+  unchanged_declarations: FieldDiffItem[];
+  review_required_declarations: FieldDiffItem[];
+  mrp_diff?: FieldDiffItem | null;
+  quantity_diff?: FieldDiffItem | null;
+  manufacturer_diff?: FieldDiffItem | null;
+  fssai_diff?: FieldDiffItem | null;
+  ingredients_diff?: IngredientsDiff | null;
+  nutrition_diff?: NutritionDiff | null;
+  rule_diffs: RuleStateDiff[];
+  issue_resolutions: IssueResolutionItem[];
+  resolved_issues_count: number;
+  remaining_issues_count: number;
+  new_issues_count: number;
+  summary_verdict: string;
+  notes: string[];
+}
+
+// ════════════════════════════════════════════════════════════════════════════
+// SECTION 10: HUMAN VERIFICATION / OFFICER WORKFLOW TYPES
+// ════════════════════════════════════════════════════════════════════════════
+
+export type ReviewStatus = 
+  | 'PENDING_REVIEW' 
+  | 'ASSIGNED' 
+  | 'IN_REVIEW' 
+  | 'CORRECTION_REQUIRED' 
+  | 'VERIFIED_PASS' 
+  | 'VERIFIED_FAIL' 
+  | 'VERIFIED_NEEDS_REVIEW' 
+  | 'REJECTED' 
+  | 'ESCALATED' 
+  | 'REOPENED' 
+  | 'CLOSED';
+
+export type HumanVerifiedStatus = 
+  | 'VERIFIED_PASS' 
+  | 'VERIFIED_FAIL' 
+  | 'VERIFIED_NEEDS_REVIEW' 
+  | 'REJECTED' 
+  | 'NOT_VERIFIED';
+
+export interface FieldCorrectionItem {
+  field_name: string;
+  field_label: string;
+  original_value?: string | null;
+  corrected_value: string;
+  reason?: string | null;
+  officer_username: string;
+  officer_role: string;
+  timestamp: string;
+  evidence_id?: string | null;
+}
+
+export interface OfficerCommentItem {
+  comment_id: string;
+  comment_type: 'GENERAL' | 'CORRECTION' | 'REJECTION' | 'ESCALATION' | 'REOPEN' | 'SIGN_OFF';
+  text: string;
+  officer_username: string;
+  officer_role: string;
+  timestamp: string;
+}
+
+export interface ReviewHistoryEvent {
+  event_id: string;
+  action: string;
+  actor_username: string;
+  actor_role: string;
+  details: string;
+  previous_state?: string | null;
+  new_state?: string | null;
+  timestamp: string;
+  metadata: Record<string, any>;
+}
+
+export interface ReviewItem {
+  review_id: string;
+  analysis_id: string;
+  target_type: string;
+  product_name: string;
+  status: ReviewStatus;
+  assigned_officer?: string | null;
+  assigned_by?: string | null;
+  assigned_at?: string | null;
+  created_at: string;
+  updated_at: string;
+  verified_by?: string | null;
+  verified_at?: string | null;
+  final_human_status?: string | null;
+  ai_score: number;
+  ai_risk_level: string;
+  ai_status: string;
+  critical_issues_count: number;
+  review_reasons: string[];
+  age_hours: number;
+}
+
+export interface ReviewDetailResponse {
+  review_id: string;
+  analysis_id: string;
+  target_type: string;
+  product_name: string;
+  status: ReviewStatus;
+  assigned_officer?: string | null;
+  assigned_by?: string | null;
+  assigned_at?: string | null;
+  created_at: string;
+  updated_at: string;
+  verified_by?: string | null;
+  verified_at?: string | null;
+  final_human_status?: string | null;
+  ai_score: number;
+  ai_risk_level: string;
+  ai_status: string;
+  human_score?: number | null;
+  human_risk_level?: string | null;
+  critical_issues_count: number;
+  review_reasons: string[];
+  ai_snapshot: Record<string, any>;
+  human_verified_result?: Record<string, any> | null;
+  field_corrections: FieldCorrectionItem[];
+  evidence_modifications: Array<Record<string, any>>;
+  comments: OfficerCommentItem[];
+  history: ReviewHistoryEvent[];
+}
+
+export interface OfficerWorkloadItem {
+  officer_username: string;
+  officer_name: string;
+  officer_role: string;
+  total_assigned: number;
+  pending_count: number;
+  in_review_count: number;
+  completed_count: number;
+  escalated_count: number;
+}
+
+export interface OfficerDashboardSummary {
+  total_queue: number;
+  pending_review: number;
+  assigned: number;
+  in_review: number;
+  verified: number;
+  rejected: number;
+  escalated: number;
+  reopened: number;
+  workload: OfficerWorkloadItem[];
+}
+
+export interface AIvsHumanDiffItem {
+  field_name: string;
+  field_label: string;
+  ai_value?: string | null;
+  human_value?: string | null;
+  is_changed: boolean;
+  change_type: 'UNCHANGED' | 'CORRECTED' | 'ADDED' | 'REMOVED';
+  officer_username?: string | null;
+  timestamp?: string | null;
+  reason?: string | null;
+}
+
+export interface AIvsHumanComparison {
+  analysis_id: string;
+  review_id: string;
+  ai_score: number;
+  human_score: number;
+  score_delta: number;
+  ai_risk_level: string;
+  human_risk_level: string;
+  ai_status: string;
+  human_status: string;
+  total_fields_evaluated: number;
+  corrected_fields_count: number;
+  field_diffs: AIvsHumanDiffItem[];
+  summary: string;
+}
+
+// ── Section 13: External Verification & Cross-Checking Types ──
+
+export type CrossCheckStatus =
+  | 'MATCH'
+  | 'PARTIAL_MATCH'
+  | 'MISMATCH'
+  | 'NOT_APPLICABLE'
+  | 'UNVERIFIED'
+  | 'NOT_FOUND'
+  | 'REVIEW_REQUIRED';
+
+export type ApiAvailabilityState = 'ONLINE' | 'OFFLINE' | 'UNCONFIGURED' | 'DEGRADED';
+
+export type VerificationConfidenceTier = 'HIGH' | 'MEDIUM' | 'LOW' | 'ZERO';
+
+export interface CrossCheckFieldResult {
+  check_type: string;
+  field_name: string;
+  extracted_value?: string | null;
+  registry_value?: string | null;
+  status: CrossCheckStatus;
+  similarity_score: number;
+  matched_tokens: string[];
+  discrepancy_details?: string | null;
+  verification_source: string;
+  is_critical_mismatch: boolean;
+}
+
+export interface VerificationConfidence {
+  score: number;
+  tier: VerificationConfidenceTier;
+  checksum_passed: boolean;
+  registry_confirmed: boolean;
+  field_agreement_rate: number;
+  cache_freshness_sec?: number | null;
+  factors?: Record<string, any>;
+  verdict: string;
+}
+
+export interface ApiAvailabilityStatus {
+  service_name: string;
+  state: ApiAvailabilityState;
+  endpoint?: string | null;
+  last_checked?: string | null;
+  latency_ms?: number | null;
+  message: string;
+}
+
+export interface ExternalVerificationSummary {
+  fssai_verification?: FSSAIVerificationResult | null;
+  gs1_verification?: GS1VerificationResult | null;
+  qr_payload?: string | null;
+  barcode_detected?: string | null;
+  cross_checks: CrossCheckFieldResult[];
+  overall_consistency_status: CrossCheckStatus;
+  confidence: VerificationConfidence;
+  api_availability: Record<string, ApiAvailabilityStatus>;
+  offline_mode: boolean;
+  verification_timestamp: string;
+  verification_sources: string[];
+  discrepancies: string[];
+  summary_verdict: string;
+}
+
+

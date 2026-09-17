@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { Outlet, useLocation, Link } from 'react-router-dom';
 import Sidebar from './Sidebar';
 import { useWorkspace, WORKSPACE_DEFINITIONS } from '../../context/WorkspaceContext';
@@ -88,8 +88,26 @@ export default function Layout() {
 
   const pageInfo = getPageInfo();
 
+  // Close workspace dropdown on Escape key
+  useEffect(() => {
+    const handleKeyDown = (e: KeyboardEvent) => {
+      if (e.key === 'Escape') {
+        setWorkspaceDropdownOpen(false);
+      }
+    };
+    if (workspaceDropdownOpen) {
+      window.addEventListener('keydown', handleKeyDown);
+      return () => window.removeEventListener('keydown', handleKeyDown);
+    }
+  }, [workspaceDropdownOpen]);
+
   return (
     <div className="flex h-screen bg-slate-50/70 dark:bg-slate-950 overflow-hidden font-sans text-slate-900 dark:text-slate-100 antialiased transition-colors duration-200">
+      {/* Skip to Main Content Link for Keyboard / Screen Reader Accessibility */}
+      <a href="#main-content" className="skip-to-content">
+        Skip to main content
+      </a>
+
       {/* Sidebar Navigation */}
       <Sidebar 
         collapsed={collapsed}
@@ -271,7 +289,7 @@ export default function Layout() {
         </header>
 
         {/* Scrollable Page Body */}
-        <main className="flex-1 overflow-y-auto p-4 sm:p-6 lg:p-8">
+        <main id="main-content" tabIndex={-1} className="flex-1 overflow-y-auto p-4 sm:p-6 lg:p-8 focus:outline-none">
           <div className="max-w-7xl mx-auto space-y-6">
             <Outlet />
           </div>

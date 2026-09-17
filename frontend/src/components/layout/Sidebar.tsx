@@ -1,3 +1,4 @@
+import { useEffect } from 'react';
 import { NavLink, useNavigate, useLocation } from 'react-router-dom';
 import { 
   LayoutDashboard, 
@@ -18,7 +19,10 @@ import {
   Store,
   SearchCheck,
   ShieldAlert,
-  Settings
+  Settings,
+  Printer,
+  GitCompare,
+  UserCheck
 } from 'lucide-react';
 import { useAuth } from '../../context/AuthContext';
 import { useWorkspace } from '../../context/WorkspaceContext';
@@ -96,6 +100,19 @@ export default function Sidebar({
     navigate('/login');
   };
 
+  // Close mobile drawer on Escape key
+  useEffect(() => {
+    const handleKeyDown = (e: KeyboardEvent) => {
+      if (e.key === 'Escape' && mobileOpen && onCloseMobile) {
+        onCloseMobile();
+      }
+    };
+    if (mobileOpen) {
+      window.addEventListener('keydown', handleKeyDown);
+      return () => window.removeEventListener('keydown', handleKeyDown);
+    }
+  }, [mobileOpen, onCloseMobile]);
+
   const roleLabel = user?.role === 'ADMIN' ? 'Administrator'
     : user?.role === 'ENFORCEMENT_OFFICER' ? 'Enforcement Officer'
     : user?.role === 'AUDIT_OFFICER' ? 'Audit Officer'
@@ -121,7 +138,15 @@ export default function Sidebar({
   ];
 
   const screeningLinks: NavItem[] = [
-    { to: '/analyze', icon: ScanSearch, label: t('navigation.analyze_package'), highlight: true },
+    { 
+      to: '/analyze', 
+      icon: ScanSearch, 
+      label: currentWorkspace === 'MERCHANT' ? t('navigation.analyze_package') : currentWorkspace === 'AUDIT' ? 'Technical Packaging Verification' : 'Statutory Compliance Inspection',
+      highlight: true 
+    },
+    { to: '/preprint', icon: Printer, label: 'Pre-Print Compliance', badge: 'Sec 8' },
+    { to: '/versions', icon: GitCompare, label: 'Version Comparison', badge: 'Sec 9' },
+    { to: '/reviews', icon: UserCheck, label: 'Officer Review', badge: 'Sec 10' },
     { to: '/analyze-listing', icon: FileText, label: t('navigation.listing_check') },
     { to: '/history', icon: History, label: t('navigation.screening_history') }
   ];
@@ -141,6 +166,7 @@ export default function Sidebar({
       to={link.to}
       onClick={onCloseMobile}
       title={collapsed ? link.label : undefined}
+      aria-label={link.label}
       className={({ isActive }) =>
         `flex items-center gap-3 px-3 py-2 rounded-xl transition-all group relative ${
           isActive 
@@ -149,7 +175,7 @@ export default function Sidebar({
         } ${collapsed ? 'justify-center' : ''}`
       }
     >
-      <link.icon className="w-4.5 h-4.5 shrink-0 transition-transform group-hover:scale-105" />
+      <link.icon className="w-4.5 h-4.5 shrink-0 transition-transform group-hover:scale-105" aria-hidden="true" />
       
       {!collapsed && (
         <div className="flex items-center justify-between flex-1 min-w-0">
@@ -181,6 +207,9 @@ export default function Sidebar({
       )}
 
       <aside 
+        aria-label="Application Sidebar Navigation"
+        role={mobileOpen ? "dialog" : undefined}
+        aria-modal={mobileOpen ? "true" : undefined}
         className={`
           fixed md:static inset-y-0 left-0 z-50 
           bg-slate-900 text-slate-100 flex flex-col shrink-0 
@@ -211,12 +240,14 @@ export default function Sidebar({
             type="button"
             onClick={onCloseMobile}
             className="p-1.5 rounded-lg text-slate-400 hover:text-white hover:bg-slate-800 md:hidden cursor-pointer"
+            aria-label="Close navigation drawer"
           >
             <X className="w-5 h-5" />
           </button>
         </div>
 
-        <nav className="flex-1 p-3 space-y-5 overflow-y-auto">
+        {/* Scrollable Navigation List */}
+        <nav className="flex-1 overflow-y-auto px-3 py-4 space-y-6" aria-label="Main Navigation">
           {/* Workspaces */}
           <div className="space-y-1">
             {!collapsed && <span className="text-[10px] font-bold text-slate-400 uppercase tracking-wider px-3 pb-1 block">{t('navigation.workspaces')}</span>}

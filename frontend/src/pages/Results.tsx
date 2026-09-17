@@ -29,6 +29,7 @@ import { useWorkspace } from '../context/WorkspaceContext';
 // Results sub-components
 import ResultsHeader from '../components/results/ResultsHeader';
 import ExecutiveSummary from '../components/results/ExecutiveSummary';
+import RiskFactorBreakdown from '../components/results/RiskFactorBreakdown';
 import PackagePreview from '../components/results/PackagePreview';
 import AttentionRequired from '../components/results/AttentionRequired';
 import ActionQueue from '../components/results/ActionQueue';
@@ -107,6 +108,21 @@ export default function Results() {
     };
     fetchData();
   }, [id, location.state]);
+
+  // Handle Escape key to dismiss modals & drawers
+  useEffect(() => {
+    const handleKeyDown = (e: KeyboardEvent) => {
+      if (e.key === 'Escape') {
+        if (showDeleteModal) setShowDeleteModal(false);
+        if (showNoticeModal) setShowNoticeModal(false);
+        if (selectedCheck) setSelectedCheck(null);
+      }
+    };
+    if (showDeleteModal || showNoticeModal || selectedCheck) {
+      window.addEventListener('keydown', handleKeyDown);
+      return () => window.removeEventListener('keydown', handleKeyDown);
+    }
+  }, [showDeleteModal, showNoticeModal, selectedCheck]);
 
   // Resolve and normalize images array (deduplicates identical images and guarantees Front is primary)
   // Must execute unconditionally on EVERY render to comply with React Rules of Hooks
@@ -295,6 +311,7 @@ export default function Results() {
   // ── Sticky section nav config ──────────────────────────────────────
   const sectionNavItems = [
     { id: 'section-summary', label: 'Summary' },
+    ...((cr.risk_assessment || cr.category_scores) ? [{ id: 'section-risk', label: 'Risk Factors' }] : []),
     ...(imageList.length > 0 ? [{ id: 'section-preview', label: 'Package Preview' }] : []),
     ...(failedChecks.length > 0 || reviewChecks.length > 0 ? [{ id: 'section-attention', label: 'Attention' }] : []),
     ...(actionableRecs.length > 0 ? [{ id: 'section-actions', label: 'Actions' }] : []),
@@ -384,8 +401,23 @@ export default function Results() {
           statusExplanation={getStatusExplanation()}
           isCompliant={isCompliant}
           isReviewRequired={isReviewRequired}
+          riskAssessment={cr.risk_assessment}
+          categoryScores={cr.category_scores}
+          confidenceSummary={cr.confidence_summary}
         />
       </div>
+
+      {/* ── SECTION: Risk Factor Breakdown ─────────────────────────── */}
+      {(cr.risk_assessment || cr.category_scores) && (
+        <div id="section-risk" className="scroll-mt-16">
+          <RiskFactorBreakdown
+            riskAssessment={cr.risk_assessment}
+            categoryScores={cr.category_scores}
+            confidenceSummary={cr.confidence_summary}
+            score={cr.score ?? 0}
+          />
+        </div>
+      )}
 
       {/* ── SECTION: Package Preview (Prominent Front View) ────────── */}
       {imageList.length > 0 && (
@@ -463,12 +495,13 @@ export default function Results() {
       )}
 
       {/* ── SECTION: External Verification ─────────────────────────── */}
-      {(data.fssai_verification || data.gs1_verification) && (
+      {(data.fssai_verification || data.gs1_verification || data.external_verification) && (
         <div id="section-verification" className="scroll-mt-16">
           <ExternalVerification
             fssaiVerification={data.fssai_verification}
             gs1Verification={data.gs1_verification}
             fssaiLicense={product_info.fssai_license}
+            externalVerification={data.external_verification}
           />
         </div>
       )}
@@ -501,7 +534,12 @@ export default function Results() {
 
       {/* ── Delete Analysis Confirmation Modal ─────────────────────── */}
       {showDeleteModal && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-900/50 dark:bg-slate-950/80 backdrop-blur-xs p-4 animate-in fade-in duration-200">
+        <div 
+          role="dialog"
+          aria-modal="true"
+          aria-label="Delete Analysis Record Confirmation"
+          className="fixed inset-0 z-50 flex items-center justify-center bg-slate-900/50 dark:bg-slate-950/80 backdrop-blur-xs p-4 animate-in fade-in duration-200"
+        >
           <div className="bg-white dark:bg-slate-900 rounded-2xl shadow-xl max-w-md w-full p-6 space-y-4 border border-slate-200 dark:border-slate-800">
             <div className="flex items-start justify-between">
               <div className="flex items-center gap-3">
@@ -517,6 +555,7 @@ export default function Results() {
                 onClick={() => setShowDeleteModal(false)}
                 className="text-slate-400 hover:text-slate-600 dark:hover:text-slate-300 p-1 rounded-lg hover:bg-slate-100 dark:hover:bg-slate-800 transition-colors cursor-pointer"
                 disabled={isDeleting}
+                aria-label="Close delete dialog"
               >
                 <X className="w-5 h-5" />
               </button>
@@ -582,7 +621,12 @@ export default function Results() {
 
       {/* ── Statutory Show-Cause Notice Generator Modal (Enforcement Officer Mode) ── */}
       {showNoticeModal && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-900/60 dark:bg-slate-950/80 backdrop-blur-xs p-4 animate-in fade-in duration-200">
+        <div 
+          role="dialog"
+          aria-modal="true"
+          aria-label="Statutory Show-Cause Notice Draft"
+          className="fixed inset-0 z-50 flex items-center justify-center bg-slate-900/60 dark:bg-slate-950/80 backdrop-blur-xs p-4 animate-in fade-in duration-200"
+        >
           <div className="bg-white dark:bg-slate-900 rounded-2xl shadow-2xl max-w-3xl w-full p-6 sm:p-8 space-y-5 border border-slate-200 dark:border-slate-800 max-h-[90vh] overflow-y-auto">
             {/* Modal Header */}
             <div className="flex items-start justify-between border-b border-slate-200 dark:border-slate-800 pb-4">
@@ -602,6 +646,7 @@ export default function Results() {
                 type="button"
                 onClick={() => setShowNoticeModal(false)}
                 className="text-slate-400 hover:text-slate-600 dark:hover:text-slate-200 p-1.5 rounded-xl hover:bg-slate-100 dark:hover:bg-slate-800 transition-colors cursor-pointer"
+                aria-label="Close notice dialog"
               >
                 <X className="w-5 h-5" />
               </button>

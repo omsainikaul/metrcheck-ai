@@ -1,7 +1,10 @@
 import os
 import sys
+import hashlib
 import aiosqlite
 import json
+import uuid
+from datetime import datetime, timezone
 from typing import Optional, List, Dict, Any
 from config import settings, PROD_DATABASE_PATH
 
@@ -46,17 +49,20 @@ async def init_db():
             )
         ''')
         await db.commit()
-        # Ensure column exists if table was created previously without 'images' or 'owner_user_id'
-        try:
-            await db.execute('ALTER TABLE analyses ADD COLUMN images TEXT')
-            await db.commit()
-        except Exception:
-            pass
-        try:
-            await db.execute("ALTER TABLE analyses ADD COLUMN owner_user_id TEXT DEFAULT ''")
-            await db.commit()
-        except Exception:
-            pass
+        # Ensure columns exist if table was created previously
+        for col, typedef in [
+            ("images", "TEXT"),
+            ("owner_user_id", "TEXT DEFAULT ''"),
+            ("integrity_hash", "TEXT DEFAULT ''"),
+            ("system_version", "TEXT DEFAULT ''"),
+            ("ocr_engine_version", "TEXT DEFAULT ''"),
+            ("ruleset_version", "TEXT DEFAULT ''"),
+        ]:
+            try:
+                await db.execute(f"ALTER TABLE analyses ADD COLUMN {col} {typedef}")
+                await db.commit()
+            except Exception:
+                pass
 
         # ── Users table (role-based access) ──
         await db.execute('''
@@ -140,6 +146,129 @@ async def init_db():
         ''')
         await db.commit()
 
+        # ── Evidence Audit & Correction Logs table (Section 5) ──
+        await db.execute('''
+            CREATE TABLE IF NOT EXISTS evidence_audit_logs (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                analysis_id TEXT NOT NULL,
+                evidence_id TEXT NOT NULL,
+                rule_id TEXT NOT NULL,
+                actor_username TEXT NOT NULL,
+                action_type TEXT NOT NULL,
+                previous_value TEXT,
+                new_value TEXT,
+                comments TEXT,
+                created_at TEXT NOT NULL
+            )
+        ''')
+        await db.commit()
+
+        # ── Pre-Print Packaging Artworks table (Section 8) ──
+        await db.execute('''
+            CREATE TABLE IF NOT EXISTS artworks (
+                id TEXT PRIMARY KEY,
+                filename TEXT NOT NULL,
+                file_path TEXT NOT NULL,
+                file_type TEXT NOT NULL,
+                file_size INTEGER NOT NULL,
+                page_count INTEGER NOT NULL DEFAULT 1,
+                dimensions TEXT NOT NULL DEFAULT '{}',
+                dpi REAL NOT NULL DEFAULT 72.0,
+                source_identity TEXT NOT NULL DEFAULT 'PRE-PRINT ARTWORK',
+                compliance_ruleset TEXT NOT NULL DEFAULT 'Legal Metrology (Packaged Commodities) Rules, 2011',
+                parent_artwork_id TEXT,
+                iteration_number INTEGER NOT NULL DEFAULT 1,
+                workflow_status TEXT NOT NULL DEFAULT 'DRAFT',
+                approval_status TEXT NOT NULL DEFAULT 'PENDING',
+                approval_record TEXT,
+                analysis_result TEXT,
+                pages_data TEXT,
+                owner_user_id TEXT DEFAULT '',
+                created_at TEXT NOT NULL,
+                updated_at TEXT NOT NULL
+            )
+        ''')
+        await db.commit()
+
+        # ── Version Comparisons table (Section 9) ──
+        await db.execute('''
+            CREATE TABLE IF NOT EXISTS version_comparisons (
+                id TEXT PRIMARY KEY,
+                version_a_id TEXT NOT NULL,
+                version_b_id TEXT NOT NULL,
+                version_type_a TEXT NOT NULL DEFAULT 'ANALYSIS',
+                version_type_b TEXT NOT NULL DEFAULT 'ANALYSIS',
+                product_name TEXT DEFAULT '',
+                score_a REAL DEFAULT 0.0,
+                score_b REAL DEFAULT 0.0,
+                score_delta REAL DEFAULT 0.0,
+                risk_shift TEXT DEFAULT 'UNCHANGED',
+                comparison_result TEXT NOT NULL,
+                owner_user_id TEXT DEFAULT '',
+                created_at TEXT NOT NULL
+            )
+        ''')
+        await db.commit()
+
+        # ── Officer Reviews table (Section 10) ──
+        await db.execute('''
+            CREATE TABLE IF NOT EXISTS officer_reviews (
+                id TEXT PRIMARY KEY,
+                analysis_id TEXT NOT NULL,
+                target_type TEXT NOT NULL DEFAULT 'ANALYSIS',
+                product_name TEXT DEFAULT '',
+                status TEXT NOT NULL DEFAULT 'PENDING_REVIEW',
+                assigned_officer TEXT DEFAULT '',
+                assigned_by TEXT DEFAULT '',
+                assigned_at TEXT,
+                verified_by TEXT DEFAULT '',
+                verified_at TEXT,
+                final_human_status TEXT DEFAULT '',
+                ai_score REAL DEFAULT 0.0,
+                ai_risk_level TEXT DEFAULT 'LOW',
+                ai_status TEXT DEFAULT 'PASS',
+                ai_snapshot TEXT NOT NULL,
+                human_verified_result TEXT,
+                field_corrections TEXT DEFAULT '[]',
+                evidence_modifications TEXT DEFAULT '[]',
+                comments TEXT DEFAULT '[]',
+                history TEXT DEFAULT '[]',
+                created_at TEXT NOT NULL,
+                updated_at TEXT NOT NULL
+            )
+        ''')
+        await db.commit()
+
+        # ── Verification Cache table (Section 13) ──
+        await db.execute('''
+            CREATE TABLE IF NOT EXISTS verification_cache (
+                identifier_type TEXT NOT NULL,
+                identifier_value TEXT NOT NULL,
+                record_json TEXT NOT NULL,
+                source TEXT NOT NULL,
+                cached_at TEXT NOT NULL,
+                expires_at TEXT NOT NULL,
+                PRIMARY KEY (identifier_type, identifier_value)
+            )
+        ''')
+        await db.commit()
+
+        # ── Security Audit Logs table with cryptographic hash chain (Section 15) ──
+        await db.execute('''
+            CREATE TABLE IF NOT EXISTS security_audit_logs (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                event_type TEXT NOT NULL,
+                actor_username TEXT DEFAULT '',
+                ip_address TEXT DEFAULT '',
+                resource_id TEXT DEFAULT '',
+                details TEXT DEFAULT '',
+                prev_hash TEXT NOT NULL,
+                event_hash TEXT NOT NULL,
+                created_at TEXT NOT NULL
+            )
+        ''')
+        await db.commit()
+
         # Idempotently clean up any legacy demo and synthetic test fixtures from SQLite table
         await db.execute("DELETE FROM analyses WHERE id LIKE 'demo-%' OR id LIKE 'test-%' OR id IN ('1', '2', '3')")
         await db.commit()
@@ -153,21 +282,40 @@ async def init_db():
 async def save_analysis(data: dict):
     db = await get_db()
     try:
+        ext_data = data.get('extracted_data', {})
+        if not isinstance(ext_data, str):
+            ext_data = json.dumps(ext_data)
+        comp_res = data.get('compliance_result', {})
+        if not isinstance(comp_res, str):
+            comp_res = json.dumps(comp_res)
+        images_val = data.get('images', [])
+        if not isinstance(images_val, str):
+            images_val = json.dumps(images_val)
+        created_at_val = data.get('created_at') or datetime.now(timezone.utc).isoformat()
+
         await db.execute('''
-            INSERT INTO analyses (id, product_name, image_filename, ocr_text, extracted_data, compliance_result, score, status, created_at, images, owner_user_id)
-            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+            INSERT OR REPLACE INTO analyses (
+                id, product_name, image_filename, ocr_text, extracted_data,
+                compliance_result, score, status, created_at, images,
+                owner_user_id, integrity_hash, system_version, ocr_engine_version, ruleset_version
+            )
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
         ''', (
             data['id'],
             data['product_name'],
-            data['image_filename'],
-            data['ocr_text'],
-            json.dumps(data['extracted_data']),
-            json.dumps(data['compliance_result']),
-            data['score'],
-            data['status'],
-            data['created_at'],
-            json.dumps(data.get('images', [])),
-            data.get('owner_user_id', '') or ''
+            data.get('image_filename', ''),
+            data.get('ocr_text', ''),
+            ext_data,
+            comp_res,
+            data.get('score', 0),
+            data.get('status', 'PENDING'),
+            created_at_val,
+            images_val,
+            data.get('owner_user_id', '') or '',
+            data.get('integrity_hash', '') or '',
+            data.get('system_version', '') or '',
+            data.get('ocr_engine_version', '') or '',
+            data.get('ruleset_version', '') or ''
         ))
         await db.commit()
     finally:
@@ -423,6 +571,8 @@ async def list_users(role: str | None = None):
         return [dict(row) for row in rows]
     finally:
         await db.close()
+
+get_all_users = list_users
 
 async def update_user(username: str, full_name: str = None, jurisdiction: str = None,
                       role: str = None, password_hash: str = None, salt: str = None,
@@ -826,4 +976,1049 @@ async def get_trend_stats(days: int = 14):
         return {"labels": labels, "total": totals, "compliant": compliants, "violations": violations}
     finally:
         await db.close()
+
+
+# ── Section 5 Evidence Audit & Modification Database Operations ──
+
+async def save_evidence_audit_log(
+    analysis_id: str,
+    evidence_id: str,
+    rule_id: str,
+    actor_username: str,
+    action_type: str,
+    previous_value: Optional[str] = None,
+    new_value: Optional[str] = None,
+    comments: Optional[str] = None
+) -> int:
+    import datetime
+    db = await get_db()
+    try:
+        now_iso = datetime.datetime.now().isoformat()
+        cursor = await db.execute('''
+            INSERT INTO evidence_audit_logs (analysis_id, evidence_id, rule_id, actor_username, action_type, previous_value, new_value, comments, created_at)
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+        ''', (
+            analysis_id,
+            evidence_id,
+            rule_id,
+            actor_username,
+            action_type,
+            previous_value,
+            new_value,
+            comments or "",
+            now_iso
+        ))
+        await db.commit()
+        return cursor.lastrowid
+    finally:
+        await db.close()
+
+
+async def get_evidence_audit_logs(analysis_id: str) -> List[Dict[str, Any]]:
+    db = await get_db()
+    try:
+        async with db.execute(
+            "SELECT * FROM evidence_audit_logs WHERE analysis_id = ? ORDER BY id ASC",
+            (analysis_id,)
+        ) as cursor:
+            rows = await cursor.fetchall()
+            return [dict(r) for r in rows]
+    finally:
+        await db.close()
+
+
+async def update_analysis_compliance_evidence(analysis_id: str, compliance_result: Dict[str, Any]) -> bool:
+    db = await get_db()
+    try:
+        res_json = json.dumps(compliance_result)
+        # Also re-sync score and status
+        score = compliance_result.get('score', 0.0)
+        status = compliance_result.get('status', 'NON_COMPLIANT')
+        await db.execute('''
+            UPDATE analyses 
+            SET compliance_result = ?, score = ?, status = ?
+            WHERE id = ?
+        ''', (res_json, score, status, analysis_id))
+        await db.commit()
+        return True
+    finally:
+        await db.close()
+
+
+# ── Section 7 Compliance Scoring & Risk Database Operations ──
+
+def _extract_analysis_risk_info(analysis_row: dict) -> dict:
+    """Helper to extract risk level, score, and rule/category scores safely with legacy fallback."""
+    cr_raw = analysis_row.get("compliance_result")
+    cr = {}
+    if isinstance(cr_raw, str):
+        try:
+            cr = json.loads(cr_raw)
+        except Exception:
+            cr = {}
+    elif isinstance(cr_raw, dict):
+        cr = cr_raw
+
+    score = float(analysis_row.get("score") if analysis_row.get("score") is not None else cr.get("score", 0.0))
+    risk_assessment = cr.get("risk_assessment") or {}
+    risk_level = risk_assessment.get("risk_level") or risk_assessment.get("level")
+
+    failed_count = cr.get("failed_rules", 0) or 0
+    passed_count = cr.get("passed_rules", 0) or 0
+    review_count = (cr.get("needs_review_rules", 0) or 0) + (cr.get("warning_rules", 0) or 0)
+    total_rules = cr.get("total_rules", 14) or 14
+
+    if not risk_level:
+        # Legacy fallback
+        if failed_count >= 2:
+            risk_level = "HIGH"
+        elif failed_count == 1:
+            risk_level = "CRITICAL"
+        elif review_count > 0:
+            risk_level = "MEDIUM"
+        elif score >= 90.0:
+            risk_level = "LOW"
+        else:
+            risk_level = "MEDIUM"
+
+    category_scores = cr.get("category_scores", [])
+    if isinstance(category_scores, dict):
+        category_scores = list(category_scores.values())
+
+    return {
+        "analysis_id": analysis_row.get("id", ""),
+        "product_name": analysis_row.get("product_name", "Unknown Product"),
+        "timestamp": analysis_row.get("created_at", ""),
+        "score": score,
+        "risk_level": risk_level,
+        "scoring_version": cr.get("scoring_version", "2026.1"),
+        "applicable_rules_count": total_rules,
+        "passed_rules": passed_count,
+        "failed_rules": failed_count,
+        "review_rules": review_count,
+        "category_scores": category_scores,
+    }
+
+
+async def get_product_risk_history(product_name: str) -> Dict[str, Any]:
+    """Retrieve compliance score and risk trajectory over time for a given product."""
+    db = await get_db()
+    try:
+        norm_name = product_name.strip().lower()
+        async with db.execute(
+            "SELECT * FROM analyses WHERE LOWER(product_name) = ? AND id NOT LIKE 'demo-%' AND id NOT IN ('1','2','3') ORDER BY created_at ASC",
+            (norm_name,)
+        ) as cursor:
+            rows = await cursor.fetchall()
+            
+        if not rows:
+            # Try LIKE matching if exact match yields 0
+            async with db.execute(
+                "SELECT * FROM analyses WHERE LOWER(product_name) LIKE ? AND id NOT LIKE 'demo-%' AND id NOT IN ('1','2','3') ORDER BY created_at ASC",
+                (f"%{norm_name}%",)
+            ) as cursor:
+                rows = await cursor.fetchall()
+
+        entries = [_extract_analysis_risk_info(dict(r)) for r in rows]
+        total = len(entries)
+        current_risk = entries[-1]["risk_level"] if entries else "LOW"
+        current_score = entries[-1]["score"] if entries else 0.0
+
+        risk_trend = "STABLE"
+        if len(entries) >= 2:
+            prev_score = entries[-2]["score"]
+            if current_score > prev_score + 3.0:
+                risk_trend = "IMPROVING"
+            elif current_score < prev_score - 3.0:
+                risk_trend = "DEGRADING"
+
+        return {
+            "product_name": product_name,
+            "total_analyses": total,
+            "current_risk_level": current_risk,
+            "current_score": current_score,
+            "risk_trend": risk_trend,
+            "history_entries": entries,
+        }
+    finally:
+        await db.close()
+
+
+async def get_batch_risk_distribution(owner_user_id: Optional[str] = None) -> Dict[str, Any]:
+    """Aggregate risk level distribution across screened packages."""
+    analyses = await get_analyses()
+    if owner_user_id:
+        norm_owner = owner_user_id.lower()
+        analyses = [
+            a for a in analyses 
+            if a.get("owner_user_id") and a.get("owner_user_id", "").lower() == norm_owner
+        ]
+
+    total = len(analyses)
+    counts = {"CRITICAL": 0, "HIGH": 0, "MEDIUM": 0, "LOW": 0}
+    status_counts = {"COMPLIANT": 0, "REVIEW": 0, "FAIL": 0}
+    scores: List[float] = []
+
+    for a in analyses:
+        info = _extract_analysis_risk_info(a)
+        lvl = info["risk_level"].upper()
+        if lvl in counts:
+            counts[lvl] += 1
+        else:
+            counts["MEDIUM"] += 1
+        
+        if info["failed_rules"] > 0:
+            status_counts["FAIL"] += 1
+        elif info["review_rules"] > 0:
+            status_counts["REVIEW"] += 1
+        else:
+            status_counts["COMPLIANT"] += 1
+
+        scores.append(info["score"])
+
+    avg_score = round(sum(scores) / total, 2) if total > 0 else 0.0
+    percentages = {
+        lvl: round((c / total) * 100.0, 1) if total > 0 else 0.0
+        for lvl, c in counts.items()
+    }
+
+    return {
+        "total_analyzed": total,
+        "critical_count": counts["CRITICAL"],
+        "high_count": counts["HIGH"],
+        "medium_count": counts["MEDIUM"],
+        "low_count": counts["LOW"],
+        "failure_count": status_counts["FAIL"],
+        "review_required_count": status_counts["REVIEW"],
+        "compliant_count": status_counts["COMPLIANT"],
+        "average_score": avg_score,
+        "average_risk_score": round(100.0 - avg_score, 1) if total > 0 else 0.0,
+        "distribution_percentages": percentages,
+    }
+
+
+# ════════════════════════════════════════════════════════════════════════════
+# PRE-PRINT PACKAGING ARTWORK OPERATIONS (Section 8)
+# ════════════════════════════════════════════════════════════════════════════
+
+async def save_artwork(artwork_data: Dict[str, Any]) -> None:
+    """Save or update an artwork document in the database."""
+    db = await get_db()
+    try:
+        await db.execute('''
+            INSERT OR REPLACE INTO artworks (
+                id, filename, file_path, file_type, file_size,
+                page_count, dimensions, dpi, source_identity,
+                compliance_ruleset, parent_artwork_id, iteration_number,
+                workflow_status, approval_status, approval_record,
+                analysis_result, pages_data, owner_user_id,
+                created_at, updated_at
+            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+        ''', (
+            artwork_data['id'],
+            artwork_data['filename'],
+            artwork_data['file_path'],
+            artwork_data['file_type'],
+            artwork_data['file_size'],
+            artwork_data.get('page_count', 1),
+            json.dumps(artwork_data.get('dimensions', {})),
+            artwork_data.get('dpi', 72.0),
+            artwork_data.get('source_identity', 'PRE-PRINT ARTWORK'),
+            artwork_data.get('compliance_ruleset', 'Legal Metrology (Packaged Commodities) Rules, 2011'),
+            artwork_data.get('parent_artwork_id'),
+            artwork_data.get('iteration_number', 1),
+            artwork_data.get('workflow_status', 'DRAFT'),
+            artwork_data.get('approval_status', 'PENDING'),
+            json.dumps(artwork_data.get('approval_record')) if artwork_data.get('approval_record') else None,
+            json.dumps(artwork_data.get('analysis_result')) if artwork_data.get('analysis_result') else None,
+            json.dumps(artwork_data.get('pages_data', [])),
+            artwork_data.get('owner_user_id', '') or '',
+            artwork_data['created_at'],
+            artwork_data.get('updated_at', artwork_data['created_at'])
+        ))
+        await db.commit()
+    finally:
+        await db.close()
+
+
+async def get_artwork(artwork_id: str) -> Optional[Dict[str, Any]]:
+    """Retrieve an artwork by its unique ID."""
+    db = await get_db()
+    try:
+        async with db.execute('SELECT * FROM artworks WHERE id = ?', (artwork_id,)) as cursor:
+            row = await cursor.fetchone()
+            if not row:
+                return None
+            data = dict(row)
+            if data.get('dimensions') and isinstance(data['dimensions'], str):
+                try:
+                    data['dimensions'] = json.loads(data['dimensions'])
+                except Exception:
+                    data['dimensions'] = {}
+            if data.get('approval_record') and isinstance(data['approval_record'], str):
+                try:
+                    data['approval_record'] = json.loads(data['approval_record'])
+                except Exception:
+                    pass
+            if data.get('analysis_result') and isinstance(data['analysis_result'], str):
+                try:
+                    data['analysis_result'] = json.loads(data['analysis_result'])
+                except Exception:
+                    pass
+            if data.get('pages_data') and isinstance(data['pages_data'], str):
+                try:
+                    data['pages_data'] = json.loads(data['pages_data'])
+                except Exception:
+                    data['pages_data'] = []
+            return data
+    finally:
+        await db.close()
+
+
+async def list_artworks(owner_user_id: Optional[str] = None) -> List[Dict[str, Any]]:
+    """List all artworks, optionally filtered by owner."""
+    db = await get_db()
+    try:
+        if owner_user_id:
+            query = "SELECT * FROM artworks WHERE LOWER(owner_user_id) = LOWER(?) ORDER BY created_at DESC"
+            params = (owner_user_id,)
+        else:
+            query = "SELECT * FROM artworks ORDER BY created_at DESC"
+            params = ()
+        async with db.execute(query, params) as cursor:
+            rows = await cursor.fetchall()
+            results = []
+            for row in rows:
+                data = dict(row)
+                if data.get('dimensions') and isinstance(data['dimensions'], str):
+                    try:
+                        data['dimensions'] = json.loads(data['dimensions'])
+                    except Exception:
+                        data['dimensions'] = {}
+                if data.get('approval_record') and isinstance(data['approval_record'], str):
+                    try:
+                        data['approval_record'] = json.loads(data['approval_record'])
+                    except Exception:
+                        pass
+                if data.get('analysis_result') and isinstance(data['analysis_result'], str):
+                    try:
+                        data['analysis_result'] = json.loads(data['analysis_result'])
+                    except Exception:
+                        pass
+                if data.get('pages_data') and isinstance(data['pages_data'], str):
+                    try:
+                        data['pages_data'] = json.loads(data['pages_data'])
+                    except Exception:
+                        data['pages_data'] = []
+                results.append(data)
+            return results
+    finally:
+        await db.close()
+
+
+async def update_artwork_analysis(
+    artwork_id: str,
+    analysis_result: Dict[str, Any],
+    workflow_status: str,
+    updated_at: str
+) -> bool:
+    """Update analysis result and workflow status for an artwork."""
+    db = await get_db()
+    try:
+        await db.execute('''
+            UPDATE artworks 
+            SET analysis_result = ?, workflow_status = ?, updated_at = ?
+            WHERE id = ?
+        ''', (json.dumps(analysis_result), workflow_status, updated_at, artwork_id))
+        await db.commit()
+        return True
+    finally:
+        await db.close()
+
+
+async def update_artwork_approval(
+    artwork_id: str,
+    approval_status: str,
+    approval_record: Dict[str, Any],
+    workflow_status: str,
+    updated_at: str
+) -> bool:
+    """Update approval status and review record for an artwork."""
+    db = await get_db()
+    try:
+        await db.execute('''
+            UPDATE artworks 
+            SET approval_status = ?, approval_record = ?, workflow_status = ?, updated_at = ?
+            WHERE id = ?
+        ''', (approval_status, json.dumps(approval_record), workflow_status, updated_at, artwork_id))
+        await db.commit()
+        return True
+    finally:
+        await db.close()
+
+
+async def delete_artwork(artwork_id: str) -> bool:
+    """Delete an artwork record by ID."""
+    db = await get_db()
+    try:
+        await db.execute('DELETE FROM artworks WHERE id = ?', (artwork_id,))
+        await db.commit()
+        return True
+    finally:
+        await db.close()
+
+
+# ════════════════════════════════════════════════════════════════════════════
+# VERSION COMPARISON & TIMELINE OPERATIONS (Section 9)
+# ════════════════════════════════════════════════════════════════════════════
+
+async def save_version_comparison(comp_data: Dict[str, Any]) -> None:
+    comp_id = comp_data.get('comparison_id') or comp_data.get('id') or str(uuid.uuid4())
+    v_a = comp_data.get('version_a', {}) if isinstance(comp_data.get('version_a'), dict) else {}
+    v_b = comp_data.get('version_b', {}) if isinstance(comp_data.get('version_b'), dict) else {}
+    
+    v_a_id = v_a.get('version_id') or comp_data.get('version_a_id', '')
+    v_b_id = v_b.get('version_id') or comp_data.get('version_b_id', '')
+    v_type_a = v_a.get('version_type') or comp_data.get('version_type_a', 'ANALYSIS')
+    v_type_b = v_b.get('version_type') or comp_data.get('version_type_b', 'ANALYSIS')
+    prod_name = v_b.get('product_name') or comp_data.get('product_name') or comp_data.get('entity_id', '')
+    created_at = comp_data.get('created_at') or datetime.now(timezone.utc).isoformat()
+
+    db = await get_db()
+    try:
+        await db.execute('''
+            INSERT OR REPLACE INTO version_comparisons (
+                id, version_a_id, version_b_id, version_type_a, version_type_b,
+                product_name, score_a, score_b, score_delta, risk_shift,
+                comparison_result, owner_user_id, created_at
+            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+        ''', (
+            comp_id,
+            v_a_id,
+            v_b_id,
+            v_type_a,
+            v_type_b,
+            prod_name,
+            float(comp_data.get('score_a', 0.0)),
+            float(comp_data.get('score_b', 0.0)),
+            float(comp_data.get('score_delta') or comp_data.get('delta_score', 0.0)),
+            comp_data.get('risk_shift', 'UNCHANGED'),
+            json.dumps(comp_data),
+            comp_data.get('owner_user_id', '') or '',
+            created_at
+        ))
+        await db.commit()
+    finally:
+        await db.close()
+
+
+async def get_version_comparison(comp_id: str) -> Optional[Dict[str, Any]]:
+    """Retrieve a version comparison by ID."""
+    db = await get_db()
+    try:
+        async with db.execute('SELECT * FROM version_comparisons WHERE id = ?', (comp_id,)) as cursor:
+            row = await cursor.fetchone()
+            if not row:
+                return None
+            data = dict(row)
+            if data.get('comparison_result') and isinstance(data['comparison_result'], str):
+                try:
+                    return json.loads(data['comparison_result'])
+                except Exception:
+                    pass
+            return data
+    finally:
+        await db.close()
+
+
+async def list_version_comparisons(owner_user_id: Optional[str] = None, limit: int = 50) -> List[Dict[str, Any]]:
+    """List recent version comparisons."""
+    db = await get_db()
+    try:
+        if owner_user_id:
+            query = "SELECT * FROM version_comparisons WHERE LOWER(owner_user_id) = LOWER(?) ORDER BY created_at DESC LIMIT ?"
+            params = (owner_user_id, limit)
+        else:
+            query = "SELECT * FROM version_comparisons ORDER BY created_at DESC LIMIT ?"
+            params = (limit,)
+        async with db.execute(query, params) as cursor:
+            rows = await cursor.fetchall()
+            results = []
+            for row in rows:
+                data = dict(row)
+                if data.get('comparison_result') and isinstance(data['comparison_result'], str):
+                    try:
+                        results.append(json.loads(data['comparison_result']))
+                    except Exception:
+                        results.append(data)
+                else:
+                    results.append(data)
+            return results
+    finally:
+        await db.close()
+
+
+async def get_version_timeline(entity_id: str) -> List[Dict[str, Any]]:
+    """
+    Builds a chronological timeline of version events for a product name or artwork chain.
+    """
+    db = await get_db()
+    timeline_events: List[Dict[str, Any]] = []
+    try:
+        norm_id = entity_id.strip()
+
+        # 1. Search in analyses table (Physical package screenings)
+        async with db.execute(
+            "SELECT * FROM analyses WHERE LOWER(product_name) = LOWER(?) OR id = ? ORDER BY created_at ASC",
+            (norm_id, norm_id)
+        ) as cursor:
+            analysis_rows = await cursor.fetchall()
+            for r in analysis_rows:
+                a_dict = dict(r)
+                info = _extract_analysis_risk_info(a_dict)
+                timeline_events.append({
+                    "event_id": f"evt-scan-{a_dict['id']}",
+                    "event_type": "ANALYSIS_RUN",
+                    "title": f"Package Screening: {a_dict.get('product_name', 'Unknown')}",
+                    "description": f"Compliance score: {info['score']}/100 with risk level {info['risk_level']}.",
+                    "timestamp": a_dict.get("created_at", ""),
+                    "version_id": a_dict["id"],
+                    "actor_username": a_dict.get("owner_user_id", ""),
+                    "score": info["score"],
+                    "risk_level": info["risk_level"],
+                    "metadata": {"type": "PHYSICAL_PACKAGE_SCREENING"}
+                })
+
+        # 2. Search in artworks table (Pre-print artwork revisions)
+        async with db.execute(
+            "SELECT * FROM artworks WHERE id = ? OR parent_artwork_id = ? OR LOWER(filename) LIKE LOWER(?) ORDER BY created_at ASC",
+            (norm_id, norm_id, f"%{norm_id}%")
+        ) as cursor:
+            artwork_rows = await cursor.fetchall()
+            for r in artwork_rows:
+                art_dict = dict(r)
+                ana_res = {}
+                if art_dict.get("analysis_result") and isinstance(art_dict["analysis_result"], str):
+                    try:
+                        ana_res = json.loads(art_dict["analysis_result"])
+                    except Exception:
+                        pass
+                
+                score = ana_res.get("overall_score", 0.0)
+                status = art_dict.get("workflow_status", "DRAFT")
+
+                timeline_events.append({
+                    "event_id": f"evt-art-{art_dict['id']}",
+                    "event_type": "ARTWORK_UPLOADED" if art_dict.get("iteration_number", 1) == 1 else "CORRECTION_SUBMITTED",
+                    "title": f"Artwork Revision v{art_dict.get('iteration_number', 1)}: {art_dict.get('filename', '')}",
+                    "description": f"Pre-print packaging verification. Workflow status: {status}.",
+                    "timestamp": art_dict.get("created_at", ""),
+                    "version_id": art_dict["id"],
+                    "actor_username": art_dict.get("owner_user_id", ""),
+                    "score": score,
+                    "risk_level": "LOW" if score >= 90 else "MEDIUM",
+                    "metadata": {
+                        "iteration_number": art_dict.get("iteration_number", 1),
+                        "parent_artwork_id": art_dict.get("parent_artwork_id"),
+                        "workflow_status": status
+                    }
+                })
+
+        # 3. Search in version_comparisons table
+        async with db.execute(
+            "SELECT * FROM version_comparisons WHERE LOWER(product_name) LIKE LOWER(?) OR version_a_id = ? OR version_b_id = ? OR id = ? ORDER BY created_at ASC",
+            (f"%{norm_id}%", norm_id, norm_id, norm_id)
+        ) as cursor:
+            comp_rows = await cursor.fetchall()
+            for r in comp_rows:
+                c_dict = dict(r)
+                timeline_events.append({
+                    "event_id": f"evt-cmp-{c_dict['id']}",
+                    "event_type": "COMPARISON",
+                    "title": f"Version Comparison: {c_dict.get('version_a_id', '')} vs {c_dict.get('version_b_id', '')}",
+                    "description": f"Score delta: {c_dict.get('score_delta', 0.0):+0.1f} ({c_dict.get('risk_shift', 'UNCHANGED')}).",
+                    "timestamp": c_dict.get("created_at", ""),
+                    "version_id": c_dict.get("version_b_id", "") or c_dict["id"],
+                    "actor_username": c_dict.get("owner_user_id", ""),
+                    "score": c_dict.get("score_b"),
+                    "risk_level": "LOW" if (c_dict.get("score_b") or 0) >= 90 else "MEDIUM",
+                    "metadata": {
+                        "comparison_id": c_dict["id"],
+                        "version_a_id": c_dict.get("version_a_id"),
+                        "version_b_id": c_dict.get("version_b_id"),
+                        "risk_shift": c_dict.get("risk_shift")
+                    }
+                })
+
+        # Sort combined events chronologically
+        timeline_events.sort(key=lambda x: x.get("timestamp", ""))
+        return timeline_events
+    finally:
+        await db.close()
+
+
+# ════════════════════════════════════════════════════════════════════════════
+# 8. SECTION 10: OFFICER REVIEWS CRUD
+# ════════════════════════════════════════════════════════════════════════════
+
+async def save_review(review_dict: Dict[str, Any]) -> None:
+    """Insert or update an officer review record."""
+    db = await get_db()
+    try:
+        rev_id = review_dict["id"]
+        ana_id = review_dict["analysis_id"]
+        target_type = review_dict.get("target_type", "ANALYSIS")
+        prod_name = review_dict.get("product_name", "")
+        status = review_dict.get("status", "PENDING_REVIEW")
+        assigned_officer = review_dict.get("assigned_officer", "") or ""
+        assigned_by = review_dict.get("assigned_by", "") or ""
+        assigned_at = review_dict.get("assigned_at")
+        verified_by = review_dict.get("verified_by", "") or ""
+        verified_at = review_dict.get("verified_at")
+        final_human_status = review_dict.get("final_human_status", "") or ""
+        ai_score = float(review_dict.get("ai_score", 0.0))
+        ai_risk_level = review_dict.get("ai_risk_level", "LOW")
+        ai_status = review_dict.get("ai_status", "PASS")
+        
+        ai_snap = review_dict.get("ai_snapshot", {})
+        if not isinstance(ai_snap, str):
+            ai_snap = json.dumps(ai_snap)
+        human_res = review_dict.get("human_verified_result", {})
+        if (not human_res or human_res == {}) and "human_score" in review_dict:
+            human_res = {"score": review_dict["human_score"], "status": review_dict.get("final_human_status", "")}
+        if not isinstance(human_res, str):
+            human_res = json.dumps(human_res)
+        field_corr = review_dict.get("field_corrections", [])
+        if not isinstance(field_corr, str):
+            field_corr = json.dumps(field_corr)
+        ev_mods = review_dict.get("evidence_modifications", [])
+        if not isinstance(ev_mods, str):
+            ev_mods = json.dumps(ev_mods)
+        comments = review_dict.get("comments", [])
+        if not isinstance(comments, str):
+            comments = json.dumps(comments)
+        history = review_dict.get("history", [])
+        if not isinstance(history, str):
+            history = json.dumps(history)
+        
+        created_at = review_dict.get("created_at") or datetime.now(timezone.utc).isoformat()
+        updated_at = review_dict.get("updated_at") or datetime.now(timezone.utc).isoformat()
+
+        await db.execute('''
+            INSERT OR REPLACE INTO officer_reviews (
+                id, analysis_id, target_type, product_name, status,
+                assigned_officer, assigned_by, assigned_at,
+                verified_by, verified_at, final_human_status,
+                ai_score, ai_risk_level, ai_status,
+                ai_snapshot, human_verified_result, field_corrections,
+                evidence_modifications, comments, history,
+                created_at, updated_at
+            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+        ''', (
+            rev_id, ana_id, target_type, prod_name, status,
+            assigned_officer, assigned_by, assigned_at,
+            verified_by, verified_at, final_human_status,
+            ai_score, ai_risk_level, ai_status,
+            ai_snap, human_res, field_corr,
+            ev_mods, comments, history,
+            created_at, updated_at
+        ))
+        await db.commit()
+    finally:
+        await db.close()
+
+
+async def get_review(review_id: str) -> Optional[Dict[str, Any]]:
+    """Retrieve an officer review by ID."""
+    db = await get_db()
+    try:
+        async with db.execute('SELECT * FROM officer_reviews WHERE id = ?', (review_id,)) as cursor:
+            row = await cursor.fetchone()
+            if not row:
+                return None
+            return dict(row)
+    finally:
+        await db.close()
+
+
+async def get_review_by_analysis_id(analysis_id: str) -> Optional[Dict[str, Any]]:
+    """Retrieve an officer review by analysis ID."""
+    db = await get_db()
+    try:
+        async with db.execute('SELECT * FROM officer_reviews WHERE analysis_id = ?', (analysis_id,)) as cursor:
+            row = await cursor.fetchone()
+            if not row:
+                return None
+            return dict(row)
+    finally:
+        await db.close()
+
+
+async def list_reviews(
+    status: Optional[str] = None,
+    assigned_officer: Optional[str] = None,
+    risk_level: Optional[str] = None,
+    limit: int = 100
+) -> List[Dict[str, Any]]:
+    """List officer reviews with optional filtering."""
+    db = await get_db()
+    try:
+        query = 'SELECT * FROM officer_reviews WHERE 1=1'
+        params: List[Any] = []
+
+        if status:
+            if status == "PENDING":
+                query += ' AND status = "PENDING_REVIEW"'
+            elif status == "VERIFIED":
+                query += ' AND status LIKE "VERIFIED%"'
+            else:
+                query += ' AND status = ?'
+                params.append(status)
+
+        if assigned_officer:
+            query += ' AND LOWER(assigned_officer) = LOWER(?)'
+            params.append(assigned_officer)
+
+        if risk_level:
+            query += ' AND UPPER(ai_risk_level) = UPPER(?)'
+            params.append(risk_level)
+
+        query += ' ORDER BY created_at DESC LIMIT ?'
+        params.append(limit)
+
+        async with db.execute(query, tuple(params)) as cursor:
+            rows = await cursor.fetchall()
+            return [dict(r) for r in rows]
+    finally:
+        await db.close()
+
+
+async def delete_review(review_id: str) -> bool:
+    """Delete a review record (for test cleanup)."""
+    db = await get_db()
+    try:
+        cursor = await db.execute('DELETE FROM officer_reviews WHERE id = ?', (review_id,))
+        await db.commit()
+        return cursor.rowcount > 0
+    finally:
+        await db.close()
+
+
+# ── Section 13: Persistent Verification Cache CRUD ──
+
+async def save_cached_verification(
+    identifier_type: str,
+    identifier_value: str,
+    record_data: Dict[str, Any],
+    source: str,
+    ttl_seconds: int = 86400 * 30
+):
+    """
+    Saves or updates a verification record in the persistent SQLite cache.
+    """
+    from datetime import datetime, timezone, timedelta
+    now_dt = datetime.now(timezone.utc)
+    cached_at = now_dt.isoformat()
+    expires_at = (now_dt + timedelta(seconds=ttl_seconds)).isoformat()
+    
+    clean_type = identifier_type.strip().upper()
+    clean_val = identifier_value.strip()
+
+    db = await get_db()
+    try:
+        await db.execute('''
+            INSERT OR REPLACE INTO verification_cache (
+                identifier_type, identifier_value, record_json, source, cached_at, expires_at
+            ) VALUES (?, ?, ?, ?, ?, ?)
+        ''', (
+            clean_type,
+            clean_val,
+            json.dumps(record_data),
+            source,
+            cached_at,
+            expires_at
+        ))
+        await db.commit()
+    finally:
+        await db.close()
+
+
+async def get_cached_verification(identifier_type: str, identifier_value: str) -> Optional[Dict[str, Any]]:
+    """
+    Retrieves a cached verification record if present and not expired.
+    """
+    from datetime import datetime, timezone
+    now_iso = datetime.now(timezone.utc).isoformat()
+    clean_type = identifier_type.strip().upper()
+    clean_val = identifier_value.strip()
+
+    db = await get_db()
+    try:
+        async with db.execute('''
+            SELECT record_json, source, cached_at, expires_at
+            FROM verification_cache
+            WHERE identifier_type = ? AND identifier_value = ? AND expires_at > ?
+        ''', (clean_type, clean_val, now_iso)) as cursor:
+            row = await cursor.fetchone()
+            if row:
+                rec = json.loads(row['record_json'])
+                rec['_cached_at'] = row['cached_at']
+                rec['_cache_source'] = row['source']
+                return rec
+            return None
+    finally:
+        await db.close()
+
+
+async def delete_cached_verification(identifier_type: str, identifier_value: str) -> bool:
+    """
+    Deletes a specific cached verification entry.
+    """
+    clean_type = identifier_type.strip().upper()
+    clean_val = identifier_value.strip()
+
+    db = await get_db()
+    try:
+        cursor = await db.execute('''
+            DELETE FROM verification_cache
+            WHERE identifier_type = ? AND identifier_value = ?
+        ''', (clean_type, clean_val))
+        await db.commit()
+        return cursor.rowcount > 0
+    finally:
+        await db.close()
+
+
+async def clear_expired_verification_cache() -> int:
+    """
+    Purges all expired records from the verification cache.
+    """
+    from datetime import datetime, timezone
+    now_iso = datetime.now(timezone.utc).isoformat()
+
+    db = await get_db()
+    try:
+        cursor = await db.execute('''
+            DELETE FROM verification_cache
+            WHERE expires_at <= ?
+        ''', (now_iso,))
+        await db.commit()
+        return cursor.rowcount
+    finally:
+        await db.close()
+
+
+async def list_cached_verifications(identifier_type: Optional[str] = None, limit: int = 100) -> List[Dict[str, Any]]:
+    """
+    Lists cached verification entries.
+    """
+    db = await get_db()
+    try:
+        query = 'SELECT identifier_type, identifier_value, source, cached_at, expires_at FROM verification_cache'
+        params: List[Any] = []
+        if identifier_type:
+            query += ' WHERE identifier_type = ?'
+            params.append(identifier_type.strip().upper())
+        query += ' ORDER BY cached_at DESC LIMIT ?'
+        params.append(limit)
+
+        async with db.execute(query, tuple(params)) as cursor:
+            rows = await cursor.fetchall()
+            return [dict(r) for r in rows]
+    finally:
+        await db.close()
+
+
+async def get_verification_cache_stats() -> Dict[str, Any]:
+    """
+    Returns high-level statistics about the persistent verification cache.
+    """
+    from datetime import datetime, timezone
+    now_iso = datetime.now(timezone.utc).isoformat()
+
+    db = await get_db()
+    try:
+        total = 0
+        active = 0
+        fssai_count = 0
+        gs1_count = 0
+
+        async with db.execute('SELECT COUNT(*) as count FROM verification_cache') as cur:
+            row = await cur.fetchone()
+            total = row['count'] if row else 0
+
+        async with db.execute('SELECT COUNT(*) as count FROM verification_cache WHERE expires_at > ?', (now_iso,)) as cur:
+            row = await cur.fetchone()
+            active = row['count'] if row else 0
+
+        async with db.execute('SELECT COUNT(*) as count FROM verification_cache WHERE identifier_type = "FSSAI" AND expires_at > ?', (now_iso,)) as cur:
+            row = await cur.fetchone()
+            fssai_count = row['count'] if row else 0
+
+        async with db.execute('SELECT COUNT(*) as count FROM verification_cache WHERE identifier_type = "GS1_GTIN" AND expires_at > ?', (now_iso,)) as cur:
+            row = await cur.fetchone()
+            gs1_count = row['count'] if row else 0
+
+        return {
+            "total_cached_records": total,
+            "active_cached_records": active,
+            "expired_cached_records": max(0, total - active),
+            "fssai_cached_count": fssai_count,
+            "gs1_cached_count": gs1_count,
+            "cache_engine": "SQLite persistent WAL WAL-mode cache"
+        }
+    finally:
+        await db.close()
+
+
+# ═══════════════════════════════════════════════════════════════════════
+# SECTION 15: SECURITY AUDIT LOGGING & CRYPTOGRAPHIC HASH CHAIN
+# ═══════════════════════════════════════════════════════════════════════
+
+GENESIS_AUDIT_HASH = "GENESIS_ROOT_METRCHECK_SEC_V1"
+
+
+async def log_security_event(
+    event_type: str,
+    actor_username: str = "",
+    ip_address: str = "",
+    resource_id: str = "",
+    details: str = "",
+) -> Dict[str, Any]:
+    """
+    Append an immutable security audit event with cryptographic SHA-256 forward-chaining.
+    Every event binds to the previous event's hash, preventing retroactive log tampering.
+    """
+    from datetime import datetime, timezone
+    now_iso = datetime.now(timezone.utc).isoformat()
+
+    db = await get_db()
+    try:
+        # Fetch the most recent event's hash to form the blockchain-like hash link
+        prev_hash = GENESIS_AUDIT_HASH
+        async with db.execute('SELECT event_hash FROM security_audit_logs ORDER BY id DESC LIMIT 1') as cur:
+            row = await cur.fetchone()
+            if row and row['event_hash']:
+                prev_hash = row['event_hash']
+
+        # Deterministically compute cryptographic SHA-256 block hash
+        raw_payload = f"{prev_hash}|{now_iso}|{event_type}|{actor_username or ''}|{ip_address or ''}|{resource_id or ''}|{details or ''}"
+        event_hash = hashlib.sha256(raw_payload.encode('utf-8')).hexdigest()
+
+        cur = await db.execute('''
+            INSERT INTO security_audit_logs (
+                event_type, actor_username, ip_address, resource_id, details, prev_hash, event_hash, created_at
+            )
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+        ''', (
+            event_type,
+            actor_username or '',
+            ip_address or '',
+            resource_id or '',
+            details or '',
+            prev_hash,
+            event_hash,
+            now_iso
+        ))
+        await db.commit()
+        last_id = cur.lastrowid
+
+        return {
+            "id": last_id,
+            "event_type": event_type,
+            "actor_username": actor_username,
+            "ip_address": ip_address,
+            "resource_id": resource_id,
+            "details": details,
+            "prev_hash": prev_hash,
+            "event_hash": event_hash,
+            "created_at": now_iso
+        }
+    finally:
+        await db.close()
+
+
+async def get_security_audit_logs(limit: int = 100, event_type: str = "") -> List[Dict[str, Any]]:
+    """Retrieve security audit logs, ordered chronologically descending."""
+    db = await get_db()
+    try:
+        if event_type:
+            async with db.execute(
+                "SELECT * FROM security_audit_logs WHERE event_type = ? ORDER BY id DESC LIMIT ?",
+                (event_type, limit)
+            ) as cur:
+                rows = await cur.fetchall()
+                return [dict(r) for r in rows]
+        else:
+            async with db.execute(
+                "SELECT * FROM security_audit_logs ORDER BY id DESC LIMIT ?",
+                (limit,)
+            ) as cur:
+                rows = await cur.fetchall()
+                return [dict(r) for r in rows]
+    finally:
+        await db.close()
+
+
+async def verify_security_audit_chain() -> Dict[str, Any]:
+    """
+    Verify the cryptographic integrity of the security audit log hash chain.
+    Iterates sequentially through all entries from ID 1 up to the latest,
+    verifying each block's SHA-256 hash and the previous hash linkage.
+    """
+    db = await get_db()
+    try:
+        async with db.execute("SELECT * FROM security_audit_logs ORDER BY id ASC") as cur:
+            rows = await cur.fetchall()
+            records = [dict(r) for r in rows]
+
+        if not records:
+            return {
+                "valid": True,
+                "total_records": 0,
+                "genesis_hash": GENESIS_AUDIT_HASH,
+                "message": "Security audit log is empty. Chain is valid."
+            }
+
+        expected_prev_hash = GENESIS_AUDIT_HASH
+        for idx, rec in enumerate(records):
+            # Check 1: Previous hash link matches
+            if rec["prev_hash"] != expected_prev_hash:
+                return {
+                    "valid": False,
+                    "total_records": len(records),
+                    "broken_at_id": rec["id"],
+                    "broken_at_index": idx,
+                    "error": f"Broken chain link at log #{rec['id']}: expected prev_hash '{expected_prev_hash}', got '{rec['prev_hash']}'"
+                }
+
+            # Check 2: Block hash matches computed hash
+            raw_payload = f"{rec['prev_hash']}|{rec['created_at']}|{rec['event_type']}|{rec['actor_username'] or ''}|{rec['ip_address'] or ''}|{rec['resource_id'] or ''}|{rec['details'] or ''}"
+            computed_hash = hashlib.sha256(raw_payload.encode('utf-8')).hexdigest()
+            if rec["event_hash"] != computed_hash:
+                return {
+                    "valid": False,
+                    "total_records": len(records),
+                    "broken_at_id": rec["id"],
+                    "broken_at_index": idx,
+                    "error": f"Tampered block payload at log #{rec['id']}: stored hash '{rec['event_hash']}' != computed hash '{computed_hash}'"
+                }
+
+            expected_prev_hash = rec["event_hash"]
+
+        return {
+            "valid": True,
+            "total_records": len(records),
+            "head_hash": expected_prev_hash,
+            "genesis_hash": GENESIS_AUDIT_HASH,
+            "message": f"Cryptographic audit chain verified successfully across {len(records)} events."
+        }
+    finally:
+        await db.close()
+
+
+
+
+
+
 

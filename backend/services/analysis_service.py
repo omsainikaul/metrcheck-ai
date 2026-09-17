@@ -16,8 +16,11 @@ from models.schemas import AnalysisResponse, OCRResult, ProductInfo, ComplianceR
 from services.image_service import process_and_save_image
 from integrations.fssai.verifier import fssai_verifier
 from integrations.gs1.verifier import gs1_verifier
+from integrations.cross_checker import cross_check_engine
 from services.calibration_service import calibration_service
 from vision.pipeline import vision_pipeline
+from services.integrity_service import compute_analysis_integrity_hash
+from version import SYSTEM_VERSION, OCR_PIPELINE_VERSION, COMPLIANCE_RULESET_VERSION
 
 logger = logging.getLogger(__name__)
 
@@ -174,24 +177,59 @@ async def analyze_products(files: List[UploadFile], labels: Optional[List[str]] 
     barcode_val = product_info.barcode_detected or getattr(product_info, 'barcode', None) or (product_info.other_declarations.get('barcode') if product_info.other_declarations else None)
     gs1_verification = await gs1_verifier.verify(barcode_val)
 
+    # 6D. Cross-Checking & Statutory Consistency Evaluation (Section 13)
+    qr_payload_val = None
+    for ev in image_evidences:
+        if ev.vision_analysis and ev.vision_analysis.qr_code and ev.vision_analysis.qr_code.detected:
+            qr_payload_val = ev.vision_analysis.qr_code.decoded_payload
+            if qr_payload_val:
+                break
+
+    external_verification = cross_check_engine.evaluate_all(
+        extracted_data=product_info.model_dump(),
+        fssai_record=fssai_verification,
+        gs1_record=gs1_verification,
+        qr_payload=qr_payload_val,
+        barcode_detected=barcode_val,
+        offline_mode=False
+    )
+
     primary_filename = image_evidences[0].filename if image_evidences else ""
     primary_image_url = image_evidences[0].image_url if image_evidences else "/placeholder.png"
     created_at = get_current_utc_iso()
     
     # 7. Save to DB
+    # 7. Compute deterministic cryptographic integrity hash (Section 15)
+    extracted_dict = product_info.model_dump()
+    compliance_dict = compliance_result.model_dump()
+    integrity_hash = compute_analysis_integrity_hash(
+        analysis_id=analysis_id,
+        created_at=created_at,
+        product_name=product_info.product_name or 'Unknown Product',
+        score=compliance_result.score,
+        status=compliance_result.status,
+        extracted_data=extracted_dict,
+        compliance_result=compliance_dict
+    )
+
+    # 8. Save to DB
     t_db0 = time.perf_counter()
     db_data = {
         'id': analysis_id,
         'product_name': product_info.product_name or 'Unknown Product',
         'image_filename': primary_filename,
         'ocr_text': combined_text,
-        'extracted_data': product_info.model_dump(),
-        'compliance_result': compliance_result.model_dump(),
+        'extracted_data': extracted_dict,
+        'compliance_result': compliance_dict,
         'score': compliance_result.score,
         'status': compliance_result.status,
         'created_at': created_at,
         'images': [ev.model_dump() for ev in image_evidences],
-        'owner_user_id': owner_user_id or ""
+        'owner_user_id': owner_user_id or "",
+        'integrity_hash': integrity_hash,
+        'system_version': SYSTEM_VERSION,
+        'ocr_engine_version': OCR_PIPELINE_VERSION,
+        'ruleset_version': COMPLIANCE_RULESET_VERSION,
     }
     await save_analysis(db_data)
     t_db = (time.perf_counter() - t_db0) * 1000
@@ -217,7 +255,12 @@ async def analyze_products(files: List[UploadFile], labels: Optional[List[str]] 
         calibration_result=calibration_result,
         owner_user_id=owner_user_id or "",
         multilingual=getattr(product_info, 'multilingual', None),
-        vision_analysis=image_evidences[0].vision_analysis if image_evidences else None
+        vision_analysis=image_evidences[0].vision_analysis if image_evidences else None,
+        external_verification=external_verification,
+        integrity_hash=integrity_hash,
+        system_version=SYSTEM_VERSION,
+        ocr_engine_version=OCR_PIPELINE_VERSION,
+        ruleset_version=COMPLIANCE_RULESET_VERSION
     )
 
 async def analyze_product(file: UploadFile) -> AnalysisResponse:
@@ -249,7 +292,7 @@ async def analyze_text(text: str, owner_user_id: Optional[str] = None) -> Analys
         ocr_passes=1
     )
     
-    # 4. Font size & readability analysis
+    # 4. Font size analysis placeholder for text
     font_size_analysis = compute_font_size_and_readability(
         product_info=product_info,
         ocr_result=ocr_res,
@@ -257,26 +300,59 @@ async def analyze_text(text: str, owner_user_id: Optional[str] = None) -> Analys
         checks=compliance_result.checks
     )
 
-    # 5. External Verifications
-    fssai_verification = await fssai_verifier.verify(product_info.fssai_license)
+    # 5. External Cross-Checking for text mode
+    fssai_match = None
+    if product_info.fssai_license:
+        fssai_match = await fssai_verifier.verify(product_info.fssai_license)
+    fssai_verification = fssai_match
+
     barcode_val = product_info.barcode_detected or getattr(product_info, 'barcode', None) or (product_info.other_declarations.get('barcode') if product_info.other_declarations else None)
-    gs1_verification = await gs1_verifier.verify(barcode_val)
-    
+    gs1_match = None
+    if barcode_val:
+        gs1_match = await gs1_verifier.verify(barcode_val)
+    gs1_verification = gs1_match
+
+    external_verification = cross_check_engine.evaluate_all(
+        extracted_data=product_info.model_dump(),
+        fssai_record=fssai_verification,
+        gs1_record=gs1_verification,
+        qr_payload=None,
+        barcode_detected=barcode_val,
+        offline_mode=False
+    )
+
     created_at = get_current_utc_iso()
-    
+    extracted_dict = product_info.model_dump()
+    compliance_dict = compliance_result.model_dump()
+
+    # Deterministic cryptographic integrity hash
+    integrity_hash = compute_analysis_integrity_hash(
+        analysis_id=analysis_id,
+        created_at=created_at,
+        product_name=product_info.product_name or 'Unknown Product',
+        score=compliance_result.score,
+        status=compliance_result.status,
+        extracted_data=extracted_dict,
+        compliance_result=compliance_dict
+    )
+
     # 6. Save to DB
     db_data = {
         'id': analysis_id,
         'product_name': product_info.product_name or 'Unknown Product',
         'image_filename': "",
         'ocr_text': text,
-        'extracted_data': product_info.model_dump(),
-        'compliance_result': compliance_result.model_dump(),
+        'extracted_data': extracted_dict,
+        'compliance_result': compliance_dict,
         'score': compliance_result.score,
         'status': compliance_result.status,
         'created_at': created_at,
         'images': [],
-        'owner_user_id': owner_user_id or ""
+        'owner_user_id': owner_user_id or "",
+        'integrity_hash': integrity_hash,
+        'system_version': SYSTEM_VERSION,
+        'ocr_engine_version': OCR_PIPELINE_VERSION,
+        'ruleset_version': COMPLIANCE_RULESET_VERSION,
     }
     await save_analysis(db_data)
     
@@ -296,5 +372,10 @@ async def analyze_text(text: str, owner_user_id: Optional[str] = None) -> Analys
         gs1_verification=gs1_verification,
         calibration_result=None,
         owner_user_id=owner_user_id or "",
-        multilingual=getattr(product_info, 'multilingual', None)
+        multilingual=getattr(product_info, 'multilingual', None),
+        external_verification=external_verification,
+        integrity_hash=integrity_hash,
+        system_version=SYSTEM_VERSION,
+        ocr_engine_version=OCR_PIPELINE_VERSION,
+        ruleset_version=COMPLIANCE_RULESET_VERSION
     )

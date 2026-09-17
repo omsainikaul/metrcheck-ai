@@ -136,3 +136,30 @@ def record_forgot_password_attempt(client_ip: str, identifier: str = "") -> None
 def clear_rate_limits() -> None:
     """Helper to reset all rate limits during testing."""
     _rate_limiter.clear_all()
+
+
+# ── Analysis & Expensive Operations Rate Limiting (Section 15) ────────────
+ANALYSIS_IP_MAX = 60
+ANALYSIS_WINDOW_SEC = 60
+
+OCR_IP_MAX = 40
+OCR_WINDOW_SEC = 60
+
+
+def check_analysis_rate_limit(client_ip: str) -> Tuple[bool, str]:
+    """Protects expensive deep-learning analysis from abuse."""
+    key = f"analysis_ip:{client_ip}"
+    if not _rate_limiter.is_allowed(key, ANALYSIS_IP_MAX, ANALYSIS_WINDOW_SEC):
+        return False, "Rate limit exceeded for product analyses. Please wait a minute before submitting more requests."
+    _rate_limiter.record_attempt(key, ANALYSIS_WINDOW_SEC)
+    return True, ""
+
+
+def check_ocr_rate_limit(client_ip: str) -> Tuple[bool, str]:
+    """Protects raw OCR endpoint from compute exhaustion."""
+    key = f"ocr_ip:{client_ip}"
+    if not _rate_limiter.is_allowed(key, OCR_IP_MAX, OCR_WINDOW_SEC):
+        return False, "Rate limit exceeded for OCR extraction. Please wait a minute."
+    _rate_limiter.record_attempt(key, OCR_WINDOW_SEC)
+    return True, ""
+

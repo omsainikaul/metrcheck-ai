@@ -21,6 +21,10 @@ import ActivateAccount from './pages/ActivateAccount';
 import AdminUsers from './pages/AdminUsers';
 import AdminLogin from './pages/AdminLogin';
 import AccountSettings from './pages/AccountSettings';
+import PrePrintCompliance from './pages/PrePrintCompliance';
+import VersionComparison from './pages/VersionComparison';
+import OfficerDashboard from './pages/OfficerDashboard';
+import ReviewWorkspace from './pages/ReviewWorkspace';
 import ErrorBoundary from './components/ui/ErrorBoundary';
 
 function RequireAuth({ children }: { children: ReactNode }) {
@@ -81,6 +85,10 @@ function App() {
                   <Route path="/" element={<RequireAuth><Dashboard /></RequireAuth>} />
                   <Route path="/analyze" element={<RequireAuth><Analyze /></RequireAuth>} />
                   <Route path="/analyze-listing" element={<RequireAuth><AnalyzeListing /></RequireAuth>} />
+                  <Route path="/preprint" element={<RequireAuth><PrePrintCompliance /></RequireAuth>} />
+                  <Route path="/versions" element={<RequireAuth><VersionComparison /></RequireAuth>} />
+                  <Route path="/reviews" element={<RequireAuth><OfficerDashboard /></RequireAuth>} />
+                  <Route path="/reviews/:reviewId" element={<RequireAuth><ReviewWorkspace /></RequireAuth>} />
                   <Route path="/results/:id" element={<RequireAuth><ErrorBoundary><Results /></ErrorBoundary></RequireAuth>} />
                   <Route path="/history" element={<RequireAuth><History /></RequireAuth>} />
                   <Route path="/settings" element={<RequireAuth><AccountSettings /></RequireAuth>} />

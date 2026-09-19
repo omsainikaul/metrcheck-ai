@@ -42,6 +42,27 @@ class Settings(BaseSettings):
     METRCHECK_SMTP_TLS: bool = True
     METRCHECK_FRONTEND_URL: str = ""
     METRCHECK_DEMO_MODE: bool = True
+    # Trusted Reverse Proxy Networks / IPs (SEC-AUD-03)
+    TRUSTED_PROXIES: list[str] = [
+        "127.0.0.1",
+        "::1",
+        "localhost",
+    ]
+
+    @field_validator('TRUSTED_PROXIES', mode='before')
+    @classmethod
+    def parse_trusted_proxies(cls, v):
+        if isinstance(v, str):
+            v = v.strip()
+            if v.startswith('[') and v.endswith(']'):
+                import json
+                try:
+                    return json.loads(v)
+                except Exception:
+                    pass
+            return [p.strip() for p in v.split(',') if p.strip()]
+        return v
+
     @field_validator('UPLOAD_DIR', 'DATABASE_PATH', mode='after')
     @classmethod
     def resolve_paths(cls, v: str) -> str:

@@ -55,16 +55,90 @@ class InMemoryRateLimiter:
 _rate_limiter = InMemoryRateLimiter()
 
 
+import ipaddress
+from config import settings
+
+
+def _is_valid_ip(ip_str: str) -> bool:
+    """Validate whether string is a valid IPv4 or IPv6 address."""
+    if not ip_str or not isinstance(ip_str, str):
+        return False
+    try:
+        ipaddress.ip_address(ip_str.strip())
+        return True
+    except ValueError:
+        return False
+
+
+def is_trusted_proxy(client_host: str) -> bool:
+    """Check whether client_host matches any configured trusted proxy IP, hostname, or subnet."""
+    if not client_host:
+        return False
+
+    host_clean = client_host.strip().lower()
+
+    trusted_list = getattr(settings, "TRUSTED_PROXIES", ["127.0.0.1", "::1", "localhost", "10.0.0.0/8", "172.16.0.0/12", "192.168.0.0/16"])
+    if isinstance(trusted_list, str):
+        trusted_list = [p.strip() for p in trusted_list.split(",") if p.strip()]
+
+    for item in trusted_list:
+        item_clean = item.strip().lower()
+        if host_clean == item_clean:
+            return True
+        try:
+            net = ipaddress.ip_network(item_clean, strict=False)
+            addr = ipaddress.ip_address(host_clean)
+            if addr in net:
+                return True
+        except ValueError:
+            pass
+
+    return False
+
+
 def get_client_ip(request) -> str:
-    """Extract client IP safely from request or proxy headers."""
+    """Extract client IP safely from request or trusted proxy headers.
+
+    Security Policy:
+    - If the request is direct from an untrusted peer, forwarding headers (X-Forwarded-For, X-Real-IP)
+      are strictly ignored to prevent attacker-controlled rate-limit spoofing or bypass.
+    - If the request arrives from a verified trusted reverse proxy (e.g., Nginx):
+      1. X-Real-IP is prioritized (overwritten by Nginx using $remote_addr).
+      2. If X-Real-IP is missing, the rightmost valid IP in X-Forwarded-For is extracted.
+    - If headers are invalid, malformed, or missing, falls back to the direct peer socket IP.
+    """
     if not request:
         return "127.0.0.1"
-    forwarded = request.headers.get("x-forwarded-for")
+
+    peer_ip = "127.0.0.1"
+    if hasattr(request, "client") and request.client and request.client.host:
+        peer_ip = request.client.host.strip()
+
+    # If connection does not originate from a trusted reverse proxy,
+    # reject all forwarding headers to prevent attacker spoofing.
+    if not is_trusted_proxy(peer_ip):
+        return peer_ip
+
+    headers = getattr(request, "headers", None)
+    if not headers:
+        return peer_ip
+
+    # 1. Prefer X-Real-IP (sanitized/overwritten by Nginx)
+    real_ip = headers.get("x-real-ip")
+    if real_ip:
+        candidate = real_ip.strip()
+        if _is_valid_ip(candidate):
+            return candidate
+
+    # 2. Fallback to X-Forwarded-For (inspect rightmost valid IP added by trusted proxy)
+    forwarded = headers.get("x-forwarded-for")
     if forwarded:
-        return forwarded.split(",")[0].strip()
-    if request.client and request.client.host:
-        return request.client.host
-    return "127.0.0.1"
+        ips = [ip.strip() for ip in forwarded.split(",") if ip.strip()]
+        for candidate in reversed(ips):
+            if _is_valid_ip(candidate):
+                return candidate
+
+    return peer_ip
 
 
 # ── Login Rate Limiting ──────────────────────────────────────────────────

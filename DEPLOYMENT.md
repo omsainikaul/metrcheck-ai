@@ -39,9 +39,9 @@ docker compose down
 | Component | URL | Purpose |
 |---|---|---|
 | **Web Application** | [http://localhost:8080](http://localhost:8080) | Full React UI (Dashboard, Multi-angle Analysis, History, Admin) |
-| **API Health Check** | [http://localhost:8000/api/health](http://localhost:8000/api/health) | Backend status, OCR engine check & DB connectivity |
-| **Interactive API Docs** | [http://localhost:8000/docs](http://localhost:8000/docs) | Swagger UI for exploring and testing API endpoints |
-| **OpenAPI Schema** | [http://localhost:8000/openapi.json](http://localhost:8000/openapi.json) | Raw OpenAPI JSON specification |
+| **API Health Check (via Nginx)** | [http://localhost:8080/api/health](http://localhost:8080/api/health) | Backend status, OCR engine check & DB connectivity via reverse proxy |
+| **Standalone Backend (Local Dev)** | [http://localhost:8000/docs](http://localhost:8000/docs) | Swagger UI when running backend locally (`uvicorn main:app --port 8000`) |
+| **OpenAPI Schema (via Nginx)** | [http://localhost:8080/api/openapi.json](http://localhost:8080/api/openapi.json) | Raw OpenAPI JSON specification |
 
 ---
 

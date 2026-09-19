@@ -53,7 +53,27 @@ from database.db import (
     get_version_timeline
 )
 
+from auth.security import create_token, hash_password, ROLE_ADMIN
+from database.db import create_user, init_db
+
 client = TestClient(app)
+AUTH_HEADERS = {"Authorization": f"Bearer {create_token('admin_user', ROLE_ADMIN)}"}
+
+
+async def _ensure_test_user():
+    """Ensure test admin user exists in test DB."""
+    salt, pwh = hash_password("TestPass123!")
+    try:
+        await create_user(
+            username="admin_user",
+            password_hash=pwh,
+            salt=salt,
+            role=ROLE_ADMIN,
+            full_name="Admin User",
+            organization_id="org_admin"
+        )
+    except Exception:
+        pass
 
 
 # --------------------------------------------------------------------------
@@ -430,6 +450,7 @@ def test_deterministic_speed_under_20ms():
 @pytest.mark.asyncio
 async def test_api_version_targets_and_compare_saved():
     """Test /api/versions/targets and /api/versions/compare with saved analysis."""
+    await _ensure_test_user()
     # 1. Save two sample analyses in DB
     await save_analysis({
         "id": "ana_test_v1",
@@ -488,7 +509,7 @@ async def test_api_version_targets_and_compare_saved():
     })
 
     # 2. Get targets
-    r_targets = client.get("/api/versions/targets")
+    r_targets = client.get("/api/versions/targets", headers=AUTH_HEADERS)
     assert r_targets.status_code == 200
     targets_data = r_targets.json()
     assert "targets" in targets_data
@@ -502,7 +523,7 @@ async def test_api_version_targets_and_compare_saved():
         "version_type_b": "ANALYSIS"
     }
 
-    r_compare = client.post("/api/versions/compare", json=payload)
+    r_compare = client.post("/api/versions/compare", json=payload, headers=AUTH_HEADERS)
     assert r_compare.status_code == 200
     res = r_compare.json()
     assert res["version_a"]["version_id"] == "ana_test_v1"
@@ -513,19 +534,20 @@ async def test_api_version_targets_and_compare_saved():
 
     # 4. Retrieve saved comparison
     cmp_id = res["comparison_id"]
-    r_get = client.get(f"/api/versions/comparisons/{cmp_id}")
+    r_get = client.get(f"/api/versions/comparisons/{cmp_id}", headers=AUTH_HEADERS)
     assert r_get.status_code == 200
     assert r_get.json()["comparison_id"] == cmp_id
 
     # 5. List comparisons
-    r_list = client.get("/api/versions/comparisons")
+    r_list = client.get("/api/versions/comparisons", headers=AUTH_HEADERS)
     assert r_list.status_code == 200
-    assert len(r_list.json()) >= 1
+    assert len(r_list.json()["comparisons"]) >= 1
 
 
 @pytest.mark.asyncio
 async def test_api_timeline_endpoint():
     """Test /api/versions/timeline/{entity_id} endpoint."""
+    await _ensure_test_user()
     entity_id = "test_timeline_entity_api"
     
     # Save a comparison
@@ -549,7 +571,7 @@ async def test_api_timeline_endpoint():
         "details": {}
     })
 
-    r_timeline = client.get(f"/api/versions/timeline/{entity_id}")
+    r_timeline = client.get(f"/api/versions/timeline/{entity_id}", headers=AUTH_HEADERS)
     assert r_timeline.status_code == 200
     timeline_res = r_timeline.json()
     assert "events" in timeline_res
@@ -587,11 +609,12 @@ def test_ingredients_reordered_only():
 @pytest.mark.asyncio
 async def test_artwork_iterations_and_cross_comparison():
     """Req 2 & 3: Compare artwork v1 vs v2 and artwork vs physical screening."""
+    await _ensure_test_user()
     # 1. Save Artwork v1 and v2
     await save_artwork({
         "id": "art_test_v1",
         "filename": "butter_cookies_artwork_v1.pdf",
-        "file_path": "/uploads/art_test_v1.pdf",
+        "file_path": "/api/images/art_test_v1.pdf",
         "file_type": "PDF",
         "file_size": 10240,
         "page_count": 1,
@@ -626,7 +649,7 @@ async def test_artwork_iterations_and_cross_comparison():
     await save_artwork({
         "id": "art_test_v2",
         "filename": "butter_cookies_artwork_v2.pdf",
-        "file_path": "/uploads/art_test_v2.pdf",
+        "file_path": "/api/images/art_test_v2.pdf",
         "file_type": "PDF",
         "file_size": 10240,
         "page_count": 1,
@@ -664,7 +687,7 @@ async def test_artwork_iterations_and_cross_comparison():
         "version_b_id": "art_test_v2",
         "version_type_a": "ARTWORK",
         "version_type_b": "ARTWORK"
-    })
+    }, headers=AUTH_HEADERS)
     assert r_art_comp.status_code == 200
     res_art = r_art_comp.json()
     assert res_art["score_delta"] == 28.0
@@ -677,20 +700,22 @@ async def test_artwork_iterations_and_cross_comparison():
         "version_b_id": "art_test_v2",
         "version_type_a": "ANALYSIS",
         "version_type_b": "ARTWORK"
-    })
+    }, headers=AUTH_HEADERS)
     assert r_cross.status_code == 200
     res_cross = r_cross.json()
     assert res_cross["version_a"]["version_type"] == "ANALYSIS"
     assert res_cross["version_b"]["version_type"] == "ARTWORK"
 
 
-def test_error_handling_nonexistent_version():
+@pytest.mark.asyncio
+async def test_error_handling_nonexistent_version():
     """Verify 404 is returned when comparing non-existent version IDs."""
+    await _ensure_test_user()
     r = client.post("/api/versions/compare", json={
         "version_a_id": "non_existent_123",
         "version_b_id": "non_existent_456",
         "version_type_a": "ANALYSIS",
         "version_type_b": "ANALYSIS"
-    })
+    }, headers=AUTH_HEADERS)
     assert r.status_code == 404
 

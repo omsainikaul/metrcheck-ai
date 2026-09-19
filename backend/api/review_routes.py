@@ -10,6 +10,7 @@ from fastapi import APIRouter, Depends, HTTPException, Query, status
 from auth.security import (
     get_current_user,
     require_roles,
+    check_tenant_access,
     ROLE_ADMIN,
     ROLE_ENFORCEMENT,
     ROLE_AUDIT
@@ -55,6 +56,22 @@ from services.review_service import (
 router = APIRouter(prefix="/api/reviews", tags=["reviews"])
 
 
+def _check_review_access(user: dict, review: dict):
+    """Enforces tenant isolation and access control on officer reviews."""
+    if not user:
+        raise HTTPException(
+            status_code=401,
+            detail="Authentication required to access reviews."
+        )
+    if not review:
+        raise HTTPException(status_code=404, detail="Review not found")
+    if not check_tenant_access(user, review):
+        raise HTTPException(
+            status_code=403,
+            detail="Access denied. Cross-organization review access prohibited."
+        )
+
+
 # ─────────────────────────────────────────────────────────────────────────────
 # 1. OFFICER DASHBOARD & QUEUE
 # ─────────────────────────────────────────────────────────────────────────────
@@ -65,8 +82,12 @@ router = APIRouter(prefix="/api/reviews", tags=["reviews"])
     dependencies=[Depends(require_roles(ROLE_ADMIN, ROLE_ENFORCEMENT, ROLE_AUDIT))]
 )
 async def get_dashboard_metrics(current_user: dict = Depends(get_current_user)):
-    """Summary KPI metrics and officer workload for the officer dashboard."""
-    return await get_officer_dashboard_summary()
+    """Summary KPI metrics and officer workload for the officer dashboard with tenant scoping."""
+    user_role = current_user.get("role")
+    org_id = current_user.get("organization_id")
+    if user_role == ROLE_ADMIN:
+        org_id = None
+    return await get_officer_dashboard_summary(organization_id=org_id, user_role=user_role)
 
 
 @router.get(
@@ -83,12 +104,17 @@ async def get_review_queue(
 ):
     """
     Returns filterable review queue with deterministic priority ordering
-    (CRITICAL > HIGH > MEDIUM > LOW, followed by oldest age).
+    (CRITICAL > HIGH > MEDIUM > LOW, followed by oldest age) scoped to tenant.
     """
+    org_id = current_user.get("organization_id")
+    if current_user.get("role") == ROLE_ADMIN:
+        org_id = None
+
     raw_reviews = await list_reviews(
         status=status,
         assigned_officer=assigned_officer,
         risk_level=risk_level,
+        organization_id=org_id,
         limit=limit
     )
 
@@ -149,8 +175,10 @@ async def get_review_queue(
     dependencies=[Depends(require_roles(ROLE_ADMIN, ROLE_ENFORCEMENT, ROLE_AUDIT))]
 )
 async def list_available_officers(current_user: dict = Depends(get_current_user)):
-    """List of all registered officers available for assignment."""
+    """List of all registered officers available for assignment scoped to tenant."""
     all_users = await get_all_users()
+    user_role = current_user.get("role")
+    org_id = current_user.get("organization_id")
     officers = [
         {
             "username": u["username"],
@@ -160,6 +188,7 @@ async def list_available_officers(current_user: dict = Depends(get_current_user)
         }
         for u in all_users
         if u.get("role") in (ROLE_ADMIN, ROLE_ENFORCEMENT, ROLE_AUDIT)
+        and (user_role == ROLE_ADMIN or not org_id or u.get("organization_id") == org_id or not u.get("organization_id"))
     ]
     return {"officers": officers, "total": len(officers)}
 
@@ -184,6 +213,8 @@ async def get_review_details(
         raw = await get_or_create_review(review_id)
         if not raw:
             raise HTTPException(status_code=404, detail=f"Review '{review_id}' not found.")
+
+    _check_review_access(current_user, raw)
 
     rev = parse_review_db_record(raw)
     ai_snap = rev.get("ai_snapshot") or {}
@@ -242,6 +273,10 @@ async def assign_audit_review(
     current_user: dict = Depends(get_current_user)
 ):
     """Assign audit review to designated officer."""
+    raw = await get_review(review_id)
+    if not raw:
+        raise HTTPException(status_code=404, detail=f"Review '{review_id}' not found.")
+    _check_review_access(current_user, raw)
     try:
         updated = await assign_review(review_id, current_user, req)
         return {"status": "success", "review_id": review_id, "new_status": updated["status"], "assigned_officer": updated["assigned_officer"]}
@@ -259,6 +294,10 @@ async def accept_ai_review(
     current_user: dict = Depends(get_current_user)
 ):
     """Accept AI outcome and set final human-verified status."""
+    raw = await get_review(review_id)
+    if not raw:
+        raise HTTPException(status_code=404, detail=f"Review '{review_id}' not found.")
+    _check_review_access(current_user, raw)
     try:
         updated = await accept_ai_result(review_id, current_user, req)
         return {"status": "success", "review_id": review_id, "new_status": updated["status"], "final_human_status": updated["final_human_status"]}
@@ -276,6 +315,10 @@ async def reject_ai_review(
     current_user: dict = Depends(get_current_user)
 ):
     """Reject AI outcome with mandatory reason."""
+    raw = await get_review(review_id)
+    if not raw:
+        raise HTTPException(status_code=404, detail=f"Review '{review_id}' not found.")
+    _check_review_access(current_user, raw)
     try:
         updated = await reject_ai_result(review_id, current_user, req)
         return {"status": "success", "review_id": review_id, "new_status": updated["status"], "final_human_status": updated["final_human_status"]}
@@ -293,6 +336,10 @@ async def correct_extracted_field(
     current_user: dict = Depends(get_current_user)
 ):
     """Correct extracted statutory declaration value with deterministic recalculation."""
+    raw = await get_review(review_id)
+    if not raw:
+        raise HTTPException(status_code=404, detail=f"Review '{review_id}' not found.")
+    _check_review_access(current_user, raw)
     try:
         updated = await correct_field(review_id, current_user, req)
         human_res = updated.get("human_verified_result") or {}
@@ -318,6 +365,10 @@ async def add_review_evidence(
     current_user: dict = Depends(get_current_user)
 ):
     """Annotate and link missing evidence from package image."""
+    raw = await get_review(review_id)
+    if not raw:
+        raise HTTPException(status_code=404, detail=f"Review '{review_id}' not found.")
+    _check_review_access(current_user, raw)
     try:
         updated = await add_missing_evidence(review_id, current_user, req)
         return {"status": "success", "review_id": review_id, "total_modifications": len(updated.get("evidence_modifications", []))}
@@ -335,6 +386,10 @@ async def remove_review_evidence(
     current_user: dict = Depends(get_current_user)
 ):
     """Soft-remove incorrect automated evidence."""
+    raw = await get_review(review_id)
+    if not raw:
+        raise HTTPException(status_code=404, detail=f"Review '{review_id}' not found.")
+    _check_review_access(current_user, raw)
     try:
         updated = await remove_incorrect_evidence(review_id, current_user, req)
         return {"status": "success", "review_id": review_id, "evidence_id": req.evidence_id}
@@ -352,6 +407,10 @@ async def add_comment(
     current_user: dict = Depends(get_current_user)
 ):
     """Add structured comment to review."""
+    raw = await get_review(review_id)
+    if not raw:
+        raise HTTPException(status_code=404, detail=f"Review '{review_id}' not found.")
+    _check_review_access(current_user, raw)
     try:
         updated = await add_officer_comment(review_id, current_user, req)
         return {"status": "success", "review_id": review_id, "total_comments": len(updated.get("comments", []))}
@@ -369,6 +428,10 @@ async def escalate_audit_review(
     current_user: dict = Depends(get_current_user)
 ):
     """Escalate review to senior officers or administrators."""
+    raw = await get_review(review_id)
+    if not raw:
+        raise HTTPException(status_code=404, detail=f"Review '{review_id}' not found.")
+    _check_review_access(current_user, raw)
     try:
         updated = await escalate_review(review_id, current_user, req)
         return {"status": "success", "review_id": review_id, "new_status": updated["status"]}
@@ -386,6 +449,10 @@ async def reopen_audit_review(
     current_user: dict = Depends(get_current_user)
 ):
     """Reopen a completed or verified review."""
+    raw = await get_review(review_id)
+    if not raw:
+        raise HTTPException(status_code=404, detail=f"Review '{review_id}' not found.")
+    _check_review_access(current_user, raw)
     try:
         updated = await reopen_review(review_id, current_user, req)
         return {"status": "success", "review_id": review_id, "new_status": updated["status"]}
@@ -403,6 +470,10 @@ async def get_ai_vs_human_diff(
     current_user: dict = Depends(get_current_user)
 ):
     """Side-by-side comparison between automated AI output and human verified output."""
+    raw = await get_review(review_id)
+    if not raw:
+        raise HTTPException(status_code=404, detail=f"Review '{review_id}' not found.")
+    _check_review_access(current_user, raw)
     try:
         return await generate_ai_vs_human_comparison(review_id)
     except ValueError as e:
@@ -421,5 +492,6 @@ async def get_review_history_timeline(
     raw = await get_review(review_id)
     if not raw:
         raise HTTPException(status_code=404, detail=f"Review '{review_id}' not found.")
+    _check_review_access(current_user, raw)
     rev = parse_review_db_record(raw)
     return {"review_id": review_id, "history": rev.get("history", []), "total": len(rev.get("history", []))}

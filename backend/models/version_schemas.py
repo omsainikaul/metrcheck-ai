@@ -91,6 +91,7 @@ class VersionSnapshot(BaseModel):
     risk_level: str = "LOW"
     image_url: Optional[str] = None
     owner_user_id: Optional[str] = None
+    organization_id: Optional[str] = None
     product_info: Optional[ProductInfo] = None
     compliance_result: Optional[ComplianceResult] = None
     iteration_number: Optional[int] = None

@@ -24,7 +24,12 @@ from version import SYSTEM_VERSION, OCR_PIPELINE_VERSION, COMPLIANCE_RULESET_VER
 
 logger = logging.getLogger(__name__)
 
-async def analyze_products(files: List[UploadFile], labels: Optional[List[str]] = None, owner_user_id: Optional[str] = None) -> AnalysisResponse:
+async def analyze_products(
+    files: List[UploadFile],
+    labels: Optional[List[str]] = None,
+    owner_user_id: Optional[str] = None,
+    organization_id: Optional[str] = None
+) -> AnalysisResponse:
     start_total_time = time.perf_counter()
     analysis_id = str(uuid.uuid4())
     ocr_engine = get_ocr_engine()
@@ -61,7 +66,7 @@ async def analyze_products(files: List[UploadFile], labels: Optional[List[str]] 
 
         ev = ProductImageEvidence(
             filename=image_filename,
-            image_url=f"/uploads/{image_filename}",
+            image_url=f"/api/images/{image_filename}",
             label=label,
             image_quality=quality_data,
             quality_warning=quality_data.get('warning')
@@ -226,6 +231,7 @@ async def analyze_products(files: List[UploadFile], labels: Optional[List[str]] 
         'created_at': created_at,
         'images': [ev.model_dump() for ev in image_evidences],
         'owner_user_id': owner_user_id or "",
+        'organization_id': organization_id or "",
         'integrity_hash': integrity_hash,
         'system_version': SYSTEM_VERSION,
         'ocr_engine_version': OCR_PIPELINE_VERSION,
@@ -254,6 +260,7 @@ async def analyze_products(files: List[UploadFile], labels: Optional[List[str]] 
         gs1_verification=gs1_verification,
         calibration_result=calibration_result,
         owner_user_id=owner_user_id or "",
+        organization_id=organization_id or "",
         multilingual=getattr(product_info, 'multilingual', None),
         vision_analysis=image_evidences[0].vision_analysis if image_evidences else None,
         external_verification=external_verification,
@@ -267,7 +274,7 @@ async def analyze_product(file: UploadFile) -> AnalysisResponse:
     return await analyze_products([file], ["Front"])
 
 
-async def analyze_text(text: str, owner_user_id: Optional[str] = None) -> AnalysisResponse:
+async def analyze_text(text: str, owner_user_id: Optional[str] = None, organization_id: Optional[str] = None) -> AnalysisResponse:
     """Analyze raw product listing or label text without images."""
     analysis_id = str(uuid.uuid4())
     
@@ -349,6 +356,7 @@ async def analyze_text(text: str, owner_user_id: Optional[str] = None) -> Analys
         'created_at': created_at,
         'images': [],
         'owner_user_id': owner_user_id or "",
+        'organization_id': organization_id or "",
         'integrity_hash': integrity_hash,
         'system_version': SYSTEM_VERSION,
         'ocr_engine_version': OCR_PIPELINE_VERSION,
@@ -372,10 +380,5 @@ async def analyze_text(text: str, owner_user_id: Optional[str] = None) -> Analys
         gs1_verification=gs1_verification,
         calibration_result=None,
         owner_user_id=owner_user_id or "",
-        multilingual=getattr(product_info, 'multilingual', None),
-        external_verification=external_verification,
-        integrity_hash=integrity_hash,
-        system_version=SYSTEM_VERSION,
-        ocr_engine_version=OCR_PIPELINE_VERSION,
-        ruleset_version=COMPLIANCE_RULESET_VERSION
+        organization_id=organization_id or "",
     )

@@ -359,16 +359,42 @@ export const api = {
     return fetchJSON<any>(`${BASE_URL}/health`);
   },
   getReportUrl: (id: string, lang?: string): string => {
-    const base = `${BASE_URL}/report/${id}`;
-    return lang && lang !== 'en' ? `${base}?lang=${encodeURIComponent(lang)}` : base;
+    const params = new URLSearchParams();
+    if (lang && lang !== 'en') {
+      params.append('lang', lang);
+    }
+    const token = tokenStore.get();
+    if (token) {
+      params.append('token', token);
+    }
+    const qs = params.toString();
+    return `${BASE_URL}/report/${id}${qs ? `?${qs}` : ''}`;
   },
-  getCsvReportUrl: (id: string): string => `${BASE_URL}/report/${id}/csv`,
-  getXlsxReportUrl: (id: string): string => `${BASE_URL}/report/${id}/xlsx`,
-  getJsonReportUrl: (id: string): string => `${BASE_URL}/report/${id}/json`,
+  getCsvReportUrl: (id: string): string => {
+    const token = tokenStore.get();
+    return `${BASE_URL}/report/${id}/csv${token ? `?token=${encodeURIComponent(token)}` : ''}`;
+  },
+  getXlsxReportUrl: (id: string): string => {
+    const token = tokenStore.get();
+    return `${BASE_URL}/report/${id}/xlsx${token ? `?token=${encodeURIComponent(token)}` : ''}`;
+  },
+  getJsonReportUrl: (id: string): string => {
+    const token = tokenStore.get();
+    return `${BASE_URL}/report/${id}/json${token ? `?token=${encodeURIComponent(token)}` : ''}`;
+  },
   getAssetUrl: (url: string): string => {
     if (!url) return '';
-    if (url.startsWith('http://') || url.startsWith('https://') || url.startsWith('data:')) return url;
-    return API_HOST ? `${API_HOST}${url}` : url;
+    if (url.startsWith('data:')) return url;
+    let cleanUrl = url.startsWith('/uploads/') ? url.replace('/uploads/', '/api/images/') : url;
+    let fullUrl = (cleanUrl.startsWith('http://') || cleanUrl.startsWith('https://'))
+      ? cleanUrl
+      : (API_HOST ? `${API_HOST}${cleanUrl}` : cleanUrl);
+    const token = tokenStore.get();
+    if (token && !fullUrl.includes('token=')) {
+      const sep = fullUrl.includes('?') ? '&' : '?';
+      return `${fullUrl}${sep}token=${encodeURIComponent(token)}`;
+    }
+    return fullUrl;
   },
   extractText: (text: string): Promise<ProductInfo> =>
     fetchJSON<ProductInfo>(`${BASE_URL}/extract`, {

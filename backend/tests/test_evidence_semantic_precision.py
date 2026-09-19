@@ -33,7 +33,7 @@ def _make_image(label: str = "Back", words: list = None) -> ProductImageEvidence
     return ProductImageEvidence(
         image_index=0,
         filename=f"{label.lower()}.png",
-        image_url=f"/uploads/{label.lower()}.png",
+        image_url=f"/api/images/{label.lower()}.png",
         label=label,
         width=500,
         height=500,

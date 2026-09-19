@@ -31,6 +31,7 @@ from database.db import (
     update_artwork_approval,
     delete_artwork
 )
+from auth.security import create_token, ROLE_ADMIN
 
 
 client = TestClient(app)
@@ -334,10 +335,12 @@ def test_full_artwork_analysis_pipeline(tmp_path):
 
 def test_api_upload_and_analyze_artwork():
     """Test POST /api/preprint/upload and POST /api/preprint/{artwork_id}/analyze."""
+    token = create_token("admin", ROLE_ADMIN)
+    headers = {"Authorization": f"Bearer {token}"}
     png_bytes = _create_sample_png_bytes()
     files = {"file": ("cookie_box.png", png_bytes, "image/png")}
     
-    upload_res = client.post("/api/preprint/upload", files=files)
+    upload_res = client.post("/api/preprint/upload", files=files, headers=headers)
     assert upload_res.status_code == 200
     upload_data = upload_res.json()
     assert upload_data["success"] is True
@@ -345,7 +348,7 @@ def test_api_upload_and_analyze_artwork():
     assert artwork_id.startswith("art-")
 
     # Analyze
-    analyze_res = client.post(f"/api/preprint/{artwork_id}/analyze")
+    analyze_res = client.post(f"/api/preprint/{artwork_id}/analyze", headers=headers)
     assert analyze_res.status_code == 200
     ana_data = analyze_res.json()
     assert ana_data["artwork_id"] == artwork_id
@@ -355,12 +358,14 @@ def test_api_upload_and_analyze_artwork():
 
 def test_api_get_artwork_details():
     """Test GET /api/preprint/{artwork_id}."""
+    token = create_token("admin", ROLE_ADMIN)
+    headers = {"Authorization": f"Bearer {token}"}
     png_bytes = _create_sample_png_bytes()
     files = {"file": ("detail_test.png", png_bytes, "image/png")}
-    up = client.post("/api/preprint/upload", files=files).json()
+    up = client.post("/api/preprint/upload", files=files, headers=headers).json()
     art_id = up["artwork_id"]
 
-    get_res = client.get(f"/api/preprint/{art_id}")
+    get_res = client.get(f"/api/preprint/{art_id}", headers=headers)
     assert get_res.status_code == 200
     data = get_res.json()
     assert data["id"] == art_id
@@ -369,14 +374,16 @@ def test_api_get_artwork_details():
 
 def test_api_correction_upload_iteration():
     """Test POST /api/preprint/{artwork_id}/correction-upload increments iteration."""
+    token = create_token("admin", ROLE_ADMIN)
+    headers = {"Authorization": f"Bearer {token}"}
     png_bytes = _create_sample_png_bytes()
     files = {"file": ("v1.png", png_bytes, "image/png")}
-    up = client.post("/api/preprint/upload", files=files).json()
+    up = client.post("/api/preprint/upload", files=files, headers=headers).json()
     art_id_v1 = up["artwork_id"]
 
     # Upload corrected v2
     corr_files = {"file": ("v2_fixed.png", png_bytes, "image/png")}
-    corr_res = client.post(f"/api/preprint/{art_id_v1}/correction-upload", files=corr_files)
+    corr_res = client.post(f"/api/preprint/{art_id_v1}/correction-upload", files=corr_files, headers=headers)
     assert corr_res.status_code == 200
     corr_data = corr_res.json()
     assert corr_data["iteration_number"] == 2
@@ -385,9 +392,11 @@ def test_api_correction_upload_iteration():
 
 def test_api_approval_workflow_requires_disclaimer():
     """Test submitting approval without legal disclaimer is rejected with 400."""
+    token = create_token("admin", ROLE_ADMIN)
+    headers = {"Authorization": f"Bearer {token}"}
     png_bytes = _create_sample_png_bytes()
     files = {"file": ("appr_test.png", png_bytes, "image/png")}
-    up = client.post("/api/preprint/upload", files=files).json()
+    up = client.post("/api/preprint/upload", files=files, headers=headers).json()
     art_id = up["artwork_id"]
 
     body = {
@@ -397,16 +406,18 @@ def test_api_approval_workflow_requires_disclaimer():
         "comments": "Looks ready",
         "legal_disclaimer_acknowledged": False  # Missing acknowledgment
     }
-    res = client.post(f"/api/preprint/{art_id}/approval", json=body)
+    res = client.post(f"/api/preprint/{art_id}/approval", json=body, headers=headers)
     assert res.status_code == 400
     assert "Legal disclaimer must be acknowledged" in res.json()["detail"]
 
 
 def test_api_approval_workflow_request_changes():
     """Test submitting REQUEST_CHANGES transitions status to CHANGES_REQUESTED."""
+    token = create_token("admin", ROLE_ADMIN)
+    headers = {"Authorization": f"Bearer {token}"}
     png_bytes = _create_sample_png_bytes()
     files = {"file": ("req_change.png", png_bytes, "image/png")}
-    up = client.post("/api/preprint/upload", files=files).json()
+    up = client.post("/api/preprint/upload", files=files, headers=headers).json()
     art_id = up["artwork_id"]
 
     body = {
@@ -416,7 +427,7 @@ def test_api_approval_workflow_request_changes():
         "comments": "Please reposition MRP to PDP.",
         "legal_disclaimer_acknowledged": True
     }
-    res = client.post(f"/api/preprint/{art_id}/approval", json=body)
+    res = client.post(f"/api/preprint/{art_id}/approval", json=body, headers=headers)
     assert res.status_code == 200
     data = res.json()
     assert data["workflow_status"] == "CHANGES_REQUESTED"
@@ -425,21 +436,23 @@ def test_api_approval_workflow_request_changes():
 
 def test_api_list_and_delete_artworks():
     """Test listing and deleting artworks."""
+    token = create_token("admin", ROLE_ADMIN)
+    headers = {"Authorization": f"Bearer {token}"}
     png_bytes = _create_sample_png_bytes()
     files = {"file": ("del_test.png", png_bytes, "image/png")}
-    up = client.post("/api/preprint/upload", files=files).json()
+    up = client.post("/api/preprint/upload", files=files, headers=headers).json()
     art_id = up["artwork_id"]
 
     # List
-    list_res = client.get("/api/preprint")
+    list_res = client.get("/api/preprint", headers=headers)
     assert list_res.status_code == 200
     assert list_res.json()["total"] >= 1
 
     # Delete
-    del_res = client.delete(f"/api/preprint/{art_id}")
+    del_res = client.delete(f"/api/preprint/{art_id}", headers=headers)
     assert del_res.status_code == 200
     assert del_res.json()["success"] is True
 
     # Check 404 after delete
-    get_res = client.get(f"/api/preprint/{art_id}")
+    get_res = client.get(f"/api/preprint/{art_id}", headers=headers)
     assert get_res.status_code == 404

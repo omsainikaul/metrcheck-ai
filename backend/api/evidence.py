@@ -23,7 +23,7 @@ from database.db import (
     get_evidence_audit_logs,
     update_analysis_compliance_evidence,
 )
-from auth.security import get_current_user, require_roles, ROLE_ADMIN, ROLE_ENFORCEMENT, ROLE_AUDIT
+from auth.security import get_current_user, require_roles, check_tenant_access, ROLE_ADMIN, ROLE_ENFORCEMENT, ROLE_AUDIT
 
 router = APIRouter(prefix="/api/evidence", tags=["evidence"])
 
@@ -37,6 +37,9 @@ async def correct_evidence(
     analysis_data = await get_analysis(analysis_id)
     if not analysis_data:
         raise HTTPException(status_code=404, detail=f"Analysis with ID {analysis_id} not found")
+
+    if not check_tenant_access(current_user, analysis_data):
+        raise HTTPException(status_code=403, detail="Access denied. Cross-organization evidence correction prohibited.")
 
     analysis_res = analysis_data.get("result")
     if not analysis_res:
@@ -92,6 +95,7 @@ async def correct_evidence(
     await update_analysis_compliance_evidence(analysis_id, analysis_res)
 
     user_name = str(current_user.get("username") or current_user.get("sub") or "officer")
+    org_id = analysis_data.get("organization_id", "") or current_user.get("organization_id", "")
     await save_evidence_audit_log(
         analysis_id=analysis_id,
         evidence_id=req.evidence_id or f"{req.rule_id}-ev-1",
@@ -101,6 +105,7 @@ async def correct_evidence(
         previous_value=old_val,
         new_value=new_val,
         comments=req.comments or "Officer manual evidence correction",
+        organization_id=org_id,
     )
 
     return AnalysisResponse(**analysis_res)
@@ -115,6 +120,9 @@ async def review_action(
     analysis_data = await get_analysis(analysis_id)
     if not analysis_data:
         raise HTTPException(status_code=404, detail=f"Analysis with ID {analysis_id} not found")
+
+    if not check_tenant_access(current_user, analysis_data):
+        raise HTTPException(status_code=403, detail="Access denied. Cross-organization evidence review prohibited.")
 
     analysis_res = analysis_data.get("result")
     if not analysis_res:
@@ -148,6 +156,7 @@ async def review_action(
     analysis_res["compliance_checks"] = compliance_checks
     await update_analysis_compliance_evidence(analysis_id, analysis_res)
 
+    org_id = analysis_data.get("organization_id", "") or current_user.get("organization_id", "")
     await save_evidence_audit_log(
         analysis_id=analysis_id,
         evidence_id=req.evidence_id or f"{req.rule_id}-ev-1",
@@ -157,6 +166,7 @@ async def review_action(
         previous_value=old_status,
         new_value=matched_check.get("status"),
         comments=req.comments or f"Officer review action: {req.action}",
+        organization_id=org_id,
     )
 
     return {
@@ -173,6 +183,10 @@ async def get_evidence_history(
     analysis_id: str,
     current_user: dict = Depends(get_current_user),
 ):
+    analysis_data = await get_analysis(analysis_id)
+    if analysis_data and not check_tenant_access(current_user, analysis_data):
+        raise HTTPException(status_code=403, detail="Access denied. Cross-organization evidence history prohibited.")
+
     logs = await get_evidence_audit_logs(analysis_id)
     return EvidenceHistoryResponse(
         analysis_id=analysis_id,
@@ -190,6 +204,9 @@ async def get_heatmap(
     if not analysis_data:
         raise HTTPException(status_code=404, detail=f"Analysis with ID {analysis_id} not found")
 
+    if not check_tenant_access(current_user, analysis_data):
+        raise HTTPException(status_code=403, detail="Access denied. Cross-organization heatmap prohibited.")
+
     analysis_res = analysis_data.get("result", {})
     images = analysis_res.get("images", [])
     compliance_checks = analysis_res.get("compliance_checks", [])
@@ -206,8 +223,11 @@ async def get_panel_summary(
     if not analysis_data:
         raise HTTPException(status_code=404, detail=f"Analysis with ID {analysis_id} not found")
 
+    if not check_tenant_access(current_user, analysis_data):
+        raise HTTPException(status_code=403, detail="Access denied. Cross-organization panel summary prohibited.")
+
     analysis_res = analysis_data.get("result", {})
     images = analysis_res.get("images", [])
     compliance_checks = analysis_res.get("compliance_checks", [])
 
-    return get_panel_compliance_summary(compliance_checks, images, analysis_id=analysis_id)
+    return get_panel_compliance_summary(compliance_checks, images, analysis_id=analysis_id)

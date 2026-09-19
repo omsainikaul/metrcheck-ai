@@ -1,4 +1,4 @@
-﻿import pytest
+import pytest
 from fastapi.testclient import TestClient
 from main import app
 from multilingual.registry import (
@@ -33,9 +33,12 @@ def test_01_all_10_languages_registered_and_mapped():
         assert get_language_name(code) == english_name, f"English name mismatch for {code}"
         assert get_native_name(code) == native_name, f"Native name mismatch for {code}"
 
+from auth.security import create_token, ROLE_ADMIN
+
 def test_02_default_report_is_english():
     client = TestClient(app)
-    resp = client.get("/api/report/demo-1")
+    token = create_token("admin", ROLE_ADMIN)
+    resp = client.get("/api/report/demo-1", headers={"Authorization": f"Bearer {token}"})
     assert resp.status_code == 200
     assert resp.headers["content-type"] == "application/pdf"
     assert "metrcheck-report-demo-1-en.pdf" in resp.headers.get("content-disposition", "")
@@ -44,7 +47,8 @@ def test_02_default_report_is_english():
 @pytest.mark.parametrize("lang_code", ["en", "hi", "bn", "mr", "gu", "pa", "ta", "te", "kn", "ml"])
 def test_03_api_report_all_10_languages(lang_code):
     client = TestClient(app)
-    resp = client.get(f"/api/report/demo-1?lang={lang_code}")
+    token = create_token("admin", ROLE_ADMIN)
+    resp = client.get(f"/api/report/demo-1?lang={lang_code}", headers={"Authorization": f"Bearer {token}"})
     assert resp.status_code == 200, f"Failed for {lang_code}: {resp.status_code}"
     assert resp.headers["content-type"] == "application/pdf"
     assert f"metrcheck-report-demo-1-{lang_code}.pdf" in resp.headers.get("content-disposition", "")

@@ -39,7 +39,7 @@ async def test_merchant_ownership_delete_success():
         "score": 100.0,
         "status": "COMPLIANT",
         "created_at": "2026-09-12T12:00:00Z",
-        "images": [{"filename": f"{analysis_id}_front.png", "image_url": f"/uploads/{analysis_id}_front.png"}],
+        "images": [{"filename": f"{analysis_id}_front.png", "image_url": f"/api/images/{analysis_id}_front.png"}],
         "owner_user_id": "merchant_alice"
     })
 
@@ -80,7 +80,7 @@ async def test_merchant_cannot_delete_other_merchant_record():
         "score": 100.0,
         "status": "COMPLIANT",
         "created_at": "2026-09-12T12:00:00Z",
-        "images": [{"filename": f"{analysis_id}_front.png", "image_url": f"/uploads/{analysis_id}_front.png"}],
+        "images": [{"filename": f"{analysis_id}_front.png", "image_url": f"/api/images/{analysis_id}_front.png"}],
         "owner_user_id": "alice_m"
     })
 
@@ -311,7 +311,7 @@ async def test_image_vs_text_analysis_history_and_item_contracts():
         "status": "COMPLIANT",
         "created_at": "2026-09-13T10:00:00Z",
         "images": [
-            {"filename": f"{img_id}_front.png", "image_url": f"/uploads/{img_id}_front.png", "label": "Front", "word_count": 32, "ocr_text": "Real front text"}
+            {"filename": f"{img_id}_front.png", "image_url": f"/api/images/{img_id}_front.png", "label": "Front", "word_count": 32, "ocr_text": "Real front text"}
         ],
         "owner_user_id": "contract_user"
     })
@@ -347,7 +347,7 @@ async def test_image_vs_text_analysis_history_and_item_contracts():
     items = {item["id"]: item for item in resp_list.json()}
 
     assert img_id in items
-    assert items[img_id]["image_url"] == f"/uploads/{img_id}_front.png"
+    assert items[img_id]["image_url"] == f"/api/images/{img_id}_front.png"
 
     assert txt_id in items
     assert items[txt_id]["image_url"] == "/placeholder.png"
@@ -357,7 +357,7 @@ async def test_image_vs_text_analysis_history_and_item_contracts():
     assert resp_img.status_code == 200
     img_data = resp_img.json()
     assert len(img_data["images"]) == 1
-    assert img_data["images"][0]["image_url"] == f"/uploads/{img_id}_front.png"
+    assert img_data["images"][0]["image_url"] == f"/api/images/{img_id}_front.png"
     assert img_data["compliance_result"]["checks"][0]["field_label"] == "Maximum Retail Price (MRP)"
 
     resp_txt = client.get(f"/api/history/{txt_id}", headers={"Authorization": f"Bearer {token}"})

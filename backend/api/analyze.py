@@ -38,8 +38,9 @@ async def analyze_endpoint(
             parsed_labels = [l.strip() for l in labels.split(',') if l.strip()]
             
     owner_user_id = user.get("username", "") if user else ""
+    organization_id = user.get("organization_id", "") if user else ""
     try:
-        result = await analyze_products(upload_list, parsed_labels, owner_user_id=owner_user_id)
+        result = await analyze_products(upload_list, parsed_labels, owner_user_id=owner_user_id, organization_id=organization_id)
         return result
     except HTTPException:
         raise
@@ -59,8 +60,9 @@ async def analyze_text_endpoint(
     if not req.text or not req.text.strip():
         raise HTTPException(status_code=400, detail="Text is required for analysis.")
     owner_user_id = user.get("username", "") if user else ""
+    organization_id = user.get("organization_id", "") if user else ""
     try:
-        result = await analyze_text(req.text.strip(), owner_user_id=owner_user_id)
+        result = await analyze_text(req.text.strip(), owner_user_id=owner_user_id, organization_id=organization_id)
         return result
     except HTTPException:
         raise

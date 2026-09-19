@@ -1,6 +1,6 @@
 import os
 import json
-from fastapi import APIRouter, HTTPException, Depends, Query
+from fastapi import APIRouter, HTTPException, Depends, Query, status
 from typing import List, Optional, Dict, Any
 from collections import Counter
 from config import settings, PROD_UPLOAD_DIR
@@ -13,7 +13,7 @@ from compliance.rules.legal_metrology import compute_font_size_and_readability
 from integrations.fssai.verifier import fssai_verifier
 from integrations.gs1.verifier import gs1_verifier
 from api.demo import build_demo_response
-from auth.security import get_current_user, public_user, ROLE_ADMIN, ROLE_ENFORCEMENT, ROLE_AUDIT, ROLE_MERCHANT
+from auth.security import get_current_user, check_tenant_access, ROLE_ADMIN, ROLE_ENFORCEMENT, ROLE_AUDIT, ROLE_MERCHANT
 from services.integrity_service import verify_analysis_integrity
 
 router = APIRouter()
@@ -24,6 +24,15 @@ def _is_demo_id(analysis_id: str) -> bool:
         return False
     aid = str(analysis_id).strip().lower()
     return aid.startswith("demo-") or aid in ("1", "2", "3")
+
+
+def _check_history_access(user: dict, data: dict):
+    """Strict tenant isolation, IDOR, and RBAC access control protection for history items."""
+    if not check_tenant_access(user, data):
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="Access denied: You do not have permission to access or modify this record. Merchants can only delete their own records."
+        )
 
 
 def _cleanup_analysis_files(data: dict, analysis_id: str):
@@ -78,19 +87,34 @@ def _user_owns_record(user: Optional[dict], owner_user_id: Optional[str]) -> boo
 
 @router.get("/history", response_model=List[HistoryItem])
 async def list_history(user: dict = Depends(get_current_user)):
-    """Return list of genuine user screening analyses with IDOR protection for merchants."""
-    analyses = await get_analyses()
+    """Return list of screening analyses with tenant and IDOR protection."""
+    user_role = user.get("role")
+    user_org = (user.get("organization_id") or "").strip()
+
+    if user_role == ROLE_ADMIN:
+        analyses = await get_analyses()
+    elif user_role in (ROLE_ENFORCEMENT, ROLE_AUDIT):
+        analyses = await get_analyses(organization_id=user_org if user_org else None)
+    else:  # ROLE_MERCHANT
+        analyses = await get_analyses(organization_id=user_org if user_org else None)
+
     history = []
     for a in analyses:
         if _is_demo_id(a.get('id', '')):
             continue
+        
+        # Verify tenant boundary
+        res_org = (a.get("organization_id") or "").strip()
+        if user_role != ROLE_ADMIN and res_org and user_org and res_org != user_org:
+            continue
+
         # IDOR check: Merchant users can only list their own screening records
-        if user.get("role") == ROLE_MERCHANT:
+        if user_role == ROLE_MERCHANT:
             if not _user_owns_record(user, a.get("owner_user_id")):
                 continue
 
         img_fn = a.get('image_filename') or ''
-        image_url = f"/uploads/{img_fn}" if img_fn else "/placeholder.png"
+        image_url = f"/api/images/{img_fn}" if img_fn else "/placeholder.png"
         history.append(HistoryItem(
             id=a['id'],
             product_name=a['product_name'],
@@ -99,6 +123,7 @@ async def list_history(user: dict = Depends(get_current_user)):
             created_at=a['created_at'],
             image_url=image_url,
             owner_user_id=a.get('owner_user_id'),
+            organization_id=a.get('organization_id'),
             integrity_hash=a.get('integrity_hash')
         ))
     return history
@@ -111,16 +136,24 @@ async def search_history(
     limit: int = Query(default=50, ge=1, le=200),
     user: dict = Depends(get_current_user),
 ):
-    """Search & filter analysed products — requires authentication with IDOR protection."""
-    rows = await search_analyses(query=q, status=status, limit=limit)
+    """Search & filter analysed products — requires authentication with tenant and IDOR protection."""
+    user_role = user.get("role")
+    user_org = (user.get("organization_id") or "").strip()
+    org_filter = user_org if (user_role != ROLE_ADMIN and user_org) else None
+
+    rows = await search_analyses(query=q, status=status, organization_id=org_filter, limit=limit)
     res = []
     for a in rows:
-        if user.get("role") == ROLE_MERCHANT:
+        res_org = (a.get("organization_id") or "").strip()
+        if user_role != ROLE_ADMIN and res_org and user_org and res_org != user_org:
+            continue
+
+        if user_role == ROLE_MERCHANT:
             if not _user_owns_record(user, a.get("owner_user_id")):
                 continue
 
         img_fn = a.get('image_filename') or ''
-        image_url = f"/uploads/{img_fn}" if img_fn else "/placeholder.png"
+        image_url = f"/api/images/{img_fn}" if img_fn else "/placeholder.png"
         res.append(HistoryItem(
             id=a['id'],
             product_name=a['product_name'],
@@ -129,6 +162,7 @@ async def search_history(
             created_at=a['created_at'],
             image_url=image_url,
             owner_user_id=a.get('owner_user_id'),
+            organization_id=a.get('organization_id'),
             integrity_hash=a.get('integrity_hash')
         ).model_dump())
     return res
@@ -173,7 +207,7 @@ async def check_analysis_integrity_endpoint(id: str):
 
 
 @router.get("/history/{id}", response_model=AnalysisResponse)
-async def get_history_item(id: str, user: Optional[dict] = Depends(public_user)):
+async def get_history_item(id: str, user: dict = Depends(get_current_user)):
     """Retrieve an analysis record by ID. Serves demo benchmarks directly from in-memory fixtures."""
     if _is_demo_id(id):
         return build_demo_response(id)
@@ -182,14 +216,7 @@ async def get_history_item(id: str, user: Optional[dict] = Depends(public_user))
     if not data:
         raise HTTPException(status_code=404, detail="Analysis not found")
 
-    # IDOR check if authenticated as merchant
-    if user and user.get("role") == ROLE_MERCHANT:
-        owner = data.get("owner_user_id") or ""
-        if owner and not _user_owns_record(user, owner):
-            raise HTTPException(
-                status_code=403,
-                detail="Access denied. Merchants can only inspect their own screening records."
-            )
+    _check_history_access(user, data)
 
     images_list = []
     if 'images' in data and data['images']:
@@ -206,7 +233,7 @@ async def get_history_item(id: str, user: Optional[dict] = Depends(public_user))
     if not images_list and data.get('image_filename'):
         images_list = [ProductImageEvidence(
             filename=data['image_filename'],
-            image_url=f"/uploads/{data['image_filename']}",
+            image_url=f"/api/images/{data['image_filename']}",
             label="Front"
         )]
 
@@ -257,7 +284,7 @@ async def get_history_item(id: str, user: Optional[dict] = Depends(public_user))
     gs1_verification = await gs1_verifier.verify(barcode_val)
 
     primary_image_filename = data.get('image_filename') or (images_list[0].filename if images_list else '')
-    primary_image_url = f"/uploads/{primary_image_filename}" if primary_image_filename else "/placeholder.png"
+    primary_image_url = f"/api/images/{primary_image_filename}" if primary_image_filename else "/placeholder.png"
 
     return AnalysisResponse(
         id=data['id'],
@@ -274,6 +301,7 @@ async def get_history_item(id: str, user: Optional[dict] = Depends(public_user))
         gs1_verification=gs1_verification,
         calibration_result=None,
         owner_user_id=data.get('owner_user_id'),
+        organization_id=data.get('organization_id'),
         integrity_hash=data.get('integrity_hash'),
         system_version=data.get('system_version'),
         ocr_engine_version=data.get('ocr_engine_version'),
@@ -290,9 +318,11 @@ async def delete_history_item(id: str, user: dict = Depends(get_current_user)):
     if not data:
         raise HTTPException(status_code=404, detail=f"Analysis with ID '{id}' not found.")
 
+    _check_history_access(user, data)
+
     user_role = user.get("role")
     if user_role in (ROLE_ADMIN, ROLE_ENFORCEMENT):
-        # Privileged roles can delete screening records
+        # Privileged roles can delete screening records within their jurisdiction/tenant
         pass
     elif user_role == ROLE_MERCHANT:
         owner = data.get("owner_user_id") or ""
@@ -357,7 +387,7 @@ async def get_dashboard_stats(user: dict = Depends(get_current_user)):
             score=a['score'],
             status=a['status'],
             created_at=a['created_at'],
-            image_url=f"/uploads/{a['image_filename']}" if a.get('image_filename') else "/placeholder.png",
+            image_url=f"/api/images/{a['image_filename']}" if a.get('image_filename') else "/placeholder.png",
             owner_user_id=a.get('owner_user_id')
         ) for a in stats['recent']]
     )
@@ -366,13 +396,40 @@ async def get_dashboard_stats(user: dict = Depends(get_current_user)):
 @router.get("/stats/trends")
 async def get_trends(days: int = Query(default=14, ge=7, le=90),
                      user: dict = Depends(get_current_user)):
-    """Daily screening trend stats for the dashboard (last N days)."""
-    return await get_trend_stats(days=days)
+    """Daily screening trend stats for the dashboard (last N days) scoped to tenant/user."""
+    return await get_trend_stats(
+        days=days,
+        organization_id=user.get("organization_id"),
+        owner_user_id=user.get("username"),
+        user_role=user.get("role")
+    )
 
 
 @router.get("/stats/by-status")
 async def get_stats_by_status(user: dict = Depends(get_current_user)):
-    """Status breakdown for dashboard pie chart."""
-    analyses = await get_analyses()
+    """Status breakdown for dashboard pie chart scoped to tenant/user."""
+    role = user.get("role")
+    org_id = user.get("organization_id")
+
+    if role == "ADMIN":
+        analyses = await get_analyses()
+    elif role in ("ENFORCEMENT_OFFICER", "AUDIT_OFFICER"):
+        analyses = await get_analyses(organization_id=org_id)
+    elif role == "MERCHANT_PUBLIC":
+        analyses = await get_analyses(organization_id=org_id)
+        username = (user.get("username") or "").lower()
+        user_id_str = str(user.get("id", "")) if user.get("id") is not None else ""
+        analyses = [
+            a for a in analyses
+            if a.get("owner_user_id") and (
+                a.get("owner_user_id", "").lower() == username or
+                (user_id_str and str(a.get("owner_user_id", "")) == user_id_str)
+            )
+        ]
+    elif org_id:
+        analyses = await get_analyses(organization_id=org_id)
+    else:
+        analyses = await get_analyses()
+
     counts = Counter(a.get("status", "UNKNOWN") for a in analyses)
     return {"labels": list(counts.keys()), "values": list(counts.values())}

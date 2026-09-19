@@ -233,6 +233,7 @@ def create_initial_review_record(analysis_dict: Dict[str, Any]) -> Dict[str, Any
     return {
         "id": review_id,
         "analysis_id": ana_id,
+        "organization_id": analysis_dict.get("organization_id", ""),
         "target_type": "ANALYSIS",
         "product_name": analysis_dict.get("product_name", "Unknown Product"),
         "status": ReviewStatus.PENDING_REVIEW,
@@ -930,15 +931,31 @@ async def generate_ai_vs_human_comparison(review_id: str) -> AIvsHumanComparison
 # 5. DASHBOARD & WORKLOAD AGGREGATION
 # ════════════════════════════════════════════════════════════════════════════
 
-async def get_officer_dashboard_summary() -> OfficerDashboardSummary:
-    """Computes aggregated review queue metrics and workload by officer."""
-    reviews = await list_reviews(limit=500)
+async def get_officer_dashboard_summary(
+    organization_id: Optional[str] = None,
+    user_role: Optional[str] = None
+) -> OfficerDashboardSummary:
+    """Computes aggregated review queue metrics and workload by officer with tenant scoping."""
+    if user_role == "ADMIN":
+        reviews = await list_reviews(limit=500)
+    elif organization_id:
+        reviews = await list_reviews(organization_id=organization_id, limit=500)
+    else:
+        reviews = await list_reviews(limit=500)
+
     users = await get_all_users()
     
-    officer_users = [
-        u for u in users 
-        if u.get("role") in ("ADMIN", "ENFORCEMENT_OFFICER", "AUDIT_OFFICER")
-    ]
+    if user_role != "ADMIN" and organization_id:
+        officer_users = [
+            u for u in users 
+            if u.get("role") in ("ADMIN", "ENFORCEMENT_OFFICER", "AUDIT_OFFICER")
+            and (u.get("organization_id") == organization_id or not u.get("organization_id"))
+        ]
+    else:
+        officer_users = [
+            u for u in users 
+            if u.get("role") in ("ADMIN", "ENFORCEMENT_OFFICER", "AUDIT_OFFICER")
+        ]
 
     total_q = len(reviews)
     pending_cnt = sum(1 for r in reviews if r.get("status") == ReviewStatus.PENDING_REVIEW)

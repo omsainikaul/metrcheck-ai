@@ -434,6 +434,7 @@ class AnalysisResponse(BaseModel):
     gs1_verification: Optional[GS1VerificationResult] = None
     calibration_result: Optional[CalibrationResult] = None
     owner_user_id: Optional[str] = None
+    organization_id: Optional[str] = None
     multilingual: Optional[MultilingualMetadata] = None
     vision_analysis: Optional[VisionAnalysisResult] = None
     external_verification: Optional[ExternalVerificationSummary] = None
@@ -452,6 +453,7 @@ class HistoryItem(BaseModel):
     created_at: str
     image_url: str
     owner_user_id: Optional[str] = None
+    organization_id: Optional[str] = None
     integrity_hash: Optional[str] = None
 
 class DashboardStats(BaseModel):
@@ -470,14 +472,14 @@ class DashboardStats(BaseModel):
 # ── Section 5 Evidence API Request / Response Schemas ──
 
 class EvidenceCorrectionRequest(BaseModel):
-    evidence_id: str
+    evidence_id: Optional[str] = ""
     rule_id: str
     corrected_value: str
     comments: Optional[str] = None
     corrected_bbox: Optional[List[int]] = None
 
 class EvidenceReviewActionRequest(BaseModel):
-    evidence_id: str
+    evidence_id: Optional[str] = ""
     rule_id: str
     action: str  # APPROVE, REJECT, REQUEST_RESCAN
     comments: Optional[str] = None

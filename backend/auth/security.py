@@ -15,7 +15,7 @@ import secrets
 import time
 from typing import List, Optional
 
-from fastapi import Depends, HTTPException, status
+from fastapi import Depends, HTTPException, status, Query
 from fastapi.security import HTTPAuthorizationCredentials, HTTPBearer
 
 from config import settings
@@ -465,12 +465,14 @@ _bearer = HTTPBearer(auto_error=False)
 
 async def get_current_user(
     credentials: Optional[HTTPAuthorizationCredentials] = Depends(_bearer),
+    token: Optional[str] = Query(None, alias="token"),
 ) -> dict:
-    """Authenticate request via Bearer token. 401/403 when missing/invalid/expired/suspended."""
-    if credentials is None:
+    """Authenticate request via Bearer token or token query parameter. 401/403 when missing/invalid/expired/suspended."""
+    raw_token = credentials.credentials if credentials else token
+    if not raw_token:
         raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED,
                             detail="Authentication required. Please log in.")
-    payload = decode_token(credentials.credentials)
+    payload = decode_token(raw_token)
     if payload is None:
         raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED,
                             detail="Invalid or expired token. Please log in again.")
@@ -516,13 +518,111 @@ def require_roles(*roles: str):
     return _role_guard
 
 
-def public_user(
+async def public_user(
     credentials: Optional[HTTPAuthorizationCredentials] = Depends(_bearer),
+    token: Optional[str] = Query(None, alias="token"),
 ) -> Optional[dict]:
     """Optional auth — returns user dict or None (for mixed public/private endpoints)."""
-    if credentials is None:
+    raw_token = credentials.credentials if credentials else token
+    if not raw_token:
         return None
-    payload = decode_token(credentials.credentials)
+    payload = decode_token(raw_token)
     if payload is None:
         return None
-    return {"username": payload.get("sub", ""), "role": payload.get("role", "MERCHANT_PUBLIC")}
+    username = payload.get("sub", "")
+    user = await get_user_by_username(username)
+    if user:
+        return user
+    return {"username": username, "role": payload.get("role", "MERCHANT_PUBLIC"), "organization_id": ""}
+
+
+def check_tenant_access(user: Optional[dict], resource: Optional[dict], allow_public: bool = False, raise_exception: bool = False) -> bool:
+    """
+    Multi-tenant isolation security enforcement guard.
+    Rules:
+    1. If user is None or not authenticated:
+       - If allow_public is True, allows access; else False (or 401).
+    2. Admin (ROLE_ADMIN):
+       - System-wide statutory oversight permitted across all organizations.
+    3. Enforcement / Audit Officers (ROLE_ENFORCEMENT, ROLE_AUDIT):
+       - Scoped to their assigned organization_id.
+       - If resource has organization_id: user's organization_id must match resource's organization_id.
+       - If resource has NO organization_id (legacy unassigned data), access is allowed for backward compatibility.
+    4. Merchant / Public (ROLE_MERCHANT):
+       - Strictly scoped to their organization_id.
+       - Must match organization_id AND record ownership (owner_user_id == username or user.id).
+    
+    Returns True if permitted, False otherwise (or raises HTTPException if raise_exception is True).
+    """
+    if not user:
+        if allow_public:
+            return True
+        if raise_exception:
+            raise HTTPException(
+                status_code=status.HTTP_401_UNAUTHORIZED,
+                detail="Authentication required."
+            )
+        return False
+
+    if not resource:
+        if raise_exception:
+            raise HTTPException(
+                status_code=status.HTTP_404_NOT_FOUND,
+                detail="Resource not found."
+            )
+        return False
+
+    user_role = user.get("role")
+    if user_role == ROLE_ADMIN:
+        return True
+
+    user_org = (user.get("organization_id") or "").strip()
+    res_org = (resource.get("organization_id") or "").strip()
+    owner = (resource.get("owner_user_id") or "").strip()
+    username = (user.get("username") or "").strip()
+    uid = str(user.get("id", "")).strip() if user.get("id") is not None else ""
+
+    # Officers (ROLE_ENFORCEMENT, ROLE_AUDIT)
+    if user_role in (ROLE_ENFORCEMENT, ROLE_AUDIT):
+        if res_org:
+            if user_org and user_org != res_org:
+                if raise_exception:
+                    raise HTTPException(
+                        status_code=status.HTTP_403_FORBIDDEN,
+                        detail="Access denied: Resource belongs to a different organization."
+                    )
+                return False
+            return True
+        return True
+
+    # Merchants (ROLE_MERCHANT)
+    if user_role == ROLE_MERCHANT:
+        if res_org and user_org and user_org != res_org:
+            if raise_exception:
+                raise HTTPException(
+                    status_code=status.HTTP_403_FORBIDDEN,
+                    detail="Access denied: Resource does not belong to your organization."
+                )
+            return False
+        
+        is_owner = False
+        if owner:
+            is_owner = (owner.lower() == username.lower()) or (bool(uid) and owner == uid)
+        else:
+            is_owner = False
+
+        if not is_owner:
+            if raise_exception:
+                raise HTTPException(
+                    status_code=status.HTTP_403_FORBIDDEN,
+                    detail="Access denied: You do not have permission to access this resource."
+                )
+            return False
+        return True
+
+    if raise_exception:
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="Access denied: Insufficient privileges."
+        )
+    return False

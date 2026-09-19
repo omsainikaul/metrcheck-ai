@@ -17,7 +17,7 @@ from models.schemas import (
     ProductImageEvidence,
 )
 from models.verification_schemas import ExternalVerificationSummary
-from auth.security import public_user, ROLE_ADMIN, ROLE_ENFORCEMENT, ROLE_AUDIT, ROLE_MERCHANT
+from auth.security import get_current_user, check_tenant_access, ROLE_ADMIN, ROLE_ENFORCEMENT, ROLE_AUDIT, ROLE_MERCHANT
 from utils.datetime_utils import format_ist_datetime, get_current_ist_datetime
 from config import settings
 import json
@@ -45,24 +45,24 @@ def sanitize_spreadsheet_value(val: Any) -> Any:
     return s
 
 
-def _check_report_access(user: Optional[dict], data: Optional[dict]):
-    """IDOR & RBAC access control protection for report generation."""
-    if not user or not data:
-        return
-    if user.get("role") in (ROLE_ADMIN, ROLE_ENFORCEMENT, ROLE_AUDIT):
-        return
-    if user.get("role") == ROLE_MERCHANT:
-        owner = data.get("owner_user_id") or ""
-        username = user.get("username") or ""
-        uid = str(user.get("id", "")) if user.get("id") is not None else ""
-        if owner and owner != username and (not uid or owner != uid):
-            raise HTTPException(
-                status_code=403,
-                detail="Access denied to this report. Merchants can only access their own compliance reports."
-            )
+def _check_report_access(user: dict, data: dict):
+    """Tenant isolation & IDOR & RBAC access control protection for report generation."""
+    if not user:
+        raise HTTPException(
+            status_code=401,
+            detail="Authentication required to access compliance reports."
+        )
+    if not data:
+        raise HTTPException(status_code=404, detail="Analysis not found")
+
+    if not check_tenant_access(user, data, allow_public=False):
+        raise HTTPException(
+            status_code=403,
+            detail="Access denied to this report. Organization/ownership boundary violation."
+        )
 
 
-async def _get_full_analysis_object(id: str, user: Optional[dict] = None) -> AnalysisResponse:
+async def _get_full_analysis_object(id: str, user: dict) -> AnalysisResponse:
     """Helper to load or construct the AnalysisResponse for an ID, enriched with officer reviews and external verification."""
     data = await get_analysis(id)
     if not data and (id.startswith("demo-") or id in ("1", "2", "3")):
@@ -70,7 +70,8 @@ async def _get_full_analysis_object(id: str, user: Optional[dict] = None) -> Ana
         clean_id = id.replace("demo-", "") if id.startswith("demo-") else id
         try:
             demo_resp = await get_demo_case(clean_id)
-            return demo_resp
+            if demo_resp:
+                return demo_resp
         except Exception:
             pass
     if not data:
@@ -90,7 +91,7 @@ async def _get_full_analysis_object(id: str, user: Optional[dict] = None) -> Ana
         images_list = [
             ProductImageEvidence(
                 filename=data.get('image_filename', 'placeholder.png'),
-                image_url=f"/uploads/{data.get('image_filename', 'placeholder.png')}",
+                image_url=f"/api/images/{data.get('image_filename', 'placeholder.png')}",
                 label='Front',
                 ocr_text=data.get('ocr_text', '')
             )
@@ -152,7 +153,7 @@ async def _get_full_analysis_object(id: str, user: Optional[dict] = None) -> Ana
     return AnalysisResponse(
         id=data['id'],
         product_name=data['product_name'],
-        image_url=f"/uploads/{data['image_filename']}",
+        image_url=f"/api/images/{data['image_filename']}",
         images=images_list,
         ocr_result=OCRResult(
             full_text=data.get('ocr_text', '') or '',
@@ -176,7 +177,8 @@ async def _get_full_analysis_object(id: str, user: Optional[dict] = None) -> Ana
 
 
 @router.get("/report/{id}")
-async def get_report(id: str, lang: Optional[str] = "en", user: Optional[dict] = Depends(public_user)):
+@router.get("/report/{id}/pdf")
+async def get_report(id: str, lang: Optional[str] = "en", user: dict = Depends(get_current_user)):
     """Generate and return a professional PDF compliance dossier for the given analysis in the specified language."""
     analysis = await _get_full_analysis_object(id, user=user)
     report_lang = lang or "en"
@@ -196,7 +198,7 @@ async def get_report(id: str, lang: Optional[str] = "en", user: Optional[dict] =
 
 
 @router.get("/report/{id}/csv")
-async def get_report_csv(id: str, user: Optional[dict] = Depends(public_user)):
+async def get_report_csv(id: str, user: dict = Depends(get_current_user)):
     """Generate and return an editable, sanitized CSV spreadsheet report for the given analysis."""
     analysis = await _get_full_analysis_object(id, user=user)
     
@@ -326,7 +328,7 @@ async def get_report_csv(id: str, user: Optional[dict] = Depends(public_user)):
 
 
 @router.get("/report/{id}/json")
-async def get_report_json(id: str, user: Optional[dict] = Depends(public_user)):
+async def get_report_json(id: str, user: dict = Depends(get_current_user)):
     """Return the complete inspection record in JSON format for automated ingestion."""
     analysis = await _get_full_analysis_object(id, user=user)
     json_str = analysis.model_dump_json(indent=2)
@@ -341,7 +343,7 @@ async def get_report_json(id: str, user: Optional[dict] = Depends(public_user)):
 
 
 @router.get("/report/{id}/xlsx")
-async def get_report_xlsx(id: str, user: Optional[dict] = Depends(public_user)):
+async def get_report_xlsx(id: str, user: dict = Depends(get_current_user)):
     """Generate and return an editable, professional multi-sheet Excel (.xlsx) compliance inspection report with formula injection sanitization."""
     analysis = await _get_full_analysis_object(id, user=user)
 

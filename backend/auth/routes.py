@@ -50,7 +50,8 @@ from database.db import (
     create_password_reset_record, get_valid_password_reset, apply_password_reset,
     create_invited_user, get_valid_invitation, activate_user_account,
     resend_invitation_record, suspend_user, reactivate_user, change_user_role,
-    revoke_invitation, log_account_audit_event, get_account_audit_logs
+    revoke_invitation, log_account_audit_event, get_account_audit_logs,
+    create_organization, get_organization
 )
 
 router = APIRouter(prefix="/auth", tags=["Auth"])
@@ -76,6 +77,7 @@ class RegisterRequest(BaseModel):
     password: str = Field(min_length=8, max_length=128)
     full_name: str = ""
     jurisdiction: str = ""
+    organization_name: Optional[str] = ""
     role: Optional[str] = None  # Ignored by server for public registration
 
 
@@ -91,6 +93,7 @@ class CreateUserRequest(BaseModel):
     password: str = Field(min_length=8, max_length=128)
     full_name: str = ""
     jurisdiction: str = ""
+    organization_id: Optional[str] = ""
     role: str = ROLE_ENFORCEMENT
 
 
@@ -101,6 +104,8 @@ class AdminProvisionUserRequest(BaseModel):
     email: str = Field(min_length=5, max_length=100)
     role: str = Field(default=ROLE_AUDIT)
     jurisdiction: Optional[str] = ""
+    organization_id: Optional[str] = ""
+    organization_name: Optional[str] = ""
 
 
 class ChangeRoleRequest(BaseModel):
@@ -111,6 +116,7 @@ class UpdateUserRequest(BaseModel):
     full_name: Optional[str] = None
     jurisdiction: Optional[str] = None
     email: Optional[str] = None
+    organization_id: Optional[str] = None
     role: Optional[str] = None
     new_password: Optional[str] = Field(default=None, min_length=8, max_length=128)
 
@@ -126,6 +132,7 @@ class UserOut(BaseModel):
     full_name: str = ""
     jurisdiction: str = ""
     email: Optional[str] = ""
+    organization_id: Optional[str] = ""
     status: str = "ACTIVE"
     invited_at: Optional[str] = ""
     activated_at: Optional[str] = ""
@@ -202,6 +209,7 @@ def _to_user_out(u: dict) -> UserOut:
         full_name=u.get("full_name", "") or "",
         jurisdiction=u.get("jurisdiction", "") or "",
         email=u.get("email", "") or "",
+        organization_id=u.get("organization_id", "") or "",
         status=u.get("status", "ACTIVE") or "ACTIVE",
         invited_at=u.get("invited_at", "") or "",
         activated_at=u.get("activated_at", "") or "",
@@ -218,7 +226,7 @@ def _to_user_out(u: dict) -> UserOut:
 async def register(req: RegisterRequest, request: Request):
     """Public merchant self-registration.
     
-    Security: Strictly assigns role=MERCHANT_PUBLIC regardless of any client-supplied role.
+    Security: Strictly assigns role=MERCHANT_PUBLIC and provisions dedicated tenant organization.
     """
     client_ip = get_client_ip(request)
     username = req.username.strip()
@@ -246,6 +254,12 @@ async def register(req: RegisterRequest, request: Request):
                 detail="Only an administrator can create privileged accounts"
             )
         assigned_role = req.role
+
+    # Dedicated organization per merchant
+    org_id = f"org_{username.lower()}"
+    org_name = req.organization_name.strip() if req.organization_name else f"{username.capitalize()} Packagers Corp"
+    await create_organization(id=org_id, name=org_name, status="ACTIVE")
+
     pw_hash, salt = hash_password(req.password)
     ok = await create_user(
         username=username,
@@ -255,6 +269,7 @@ async def register(req: RegisterRequest, request: Request):
         full_name=req.full_name,
         jurisdiction=req.jurisdiction,
         email=norm_email,
+        organization_id=org_id,
     )
     if not ok:
         raise HTTPException(status_code=400, detail="Could not create user")
@@ -265,7 +280,7 @@ async def register(req: RegisterRequest, request: Request):
         actor_username=username,
         target_username=username,
         event_type="MERCHANT_REGISTERED",
-        details="Public self-registration as MERCHANT_PUBLIC",
+        details=f"Public self-registration as MERCHANT_PUBLIC under tenant '{org_id}'",
         ip_address=client_ip
     )
     return AuthResponse(token=token, user=_to_user_out(user))
@@ -694,6 +709,17 @@ async def admin_provision_user(
     if existing_email:
         raise HTTPException(status_code=409, detail="Email address is already registered")
 
+    # Determine tenant organization
+    if req.organization_id and req.organization_id.strip():
+        org_id = req.organization_id.strip()
+    elif target_role in (ROLE_AUDIT, ROLE_ENFORCEMENT):
+        org_id = "org_ministry"
+    else:
+        org_id = f"org_{username.lower()}"
+
+    if req.organization_name and req.organization_name.strip():
+        await create_organization(id=org_id, name=req.organization_name.strip(), status="ACTIVE")
+
     raw_token, token_hash, expires_at = generate_invitation_token(expire_hours=24)
     ok = await create_invited_user(
         username=username,
@@ -702,7 +728,8 @@ async def admin_provision_user(
         full_name=req.full_name,
         jurisdiction=req.jurisdiction or "",
         token_hash=token_hash,
-        expires_at=expires_at
+        expires_at=expires_at,
+        organization_id=org_id
     )
     if not ok:
         raise HTTPException(status_code=400, detail="Could not provision user account.")

@@ -33,6 +33,47 @@ async def get_db():
 async def init_db():
     db = await get_db()
     try:
+        # ── Organizations table (Tenant Isolation) ──
+        await db.execute('''
+            CREATE TABLE IF NOT EXISTS organizations (
+                id TEXT PRIMARY KEY,
+                name TEXT NOT NULL,
+                org_type TEXT NOT NULL DEFAULT 'MERCHANT',
+                jurisdiction TEXT DEFAULT '',
+                status TEXT NOT NULL DEFAULT 'ACTIVE',
+                created_at TEXT NOT NULL,
+                updated_at TEXT NOT NULL
+            )
+        ''')
+        await db.commit()
+        for col, typedef in [
+            ("org_type", "TEXT NOT NULL DEFAULT 'MERCHANT'"),
+            ("jurisdiction", "TEXT DEFAULT ''"),
+            ("status", "TEXT NOT NULL DEFAULT 'ACTIVE'"),
+        ]:
+            try:
+                await db.execute(f"ALTER TABLE organizations ADD COLUMN {col} {typedef}")
+                await db.commit()
+            except Exception:
+                pass
+
+        # Pre-seed canonical root organizations if not present
+        now_seed_iso = datetime.now(timezone.utc).isoformat()
+        try:
+            await db.execute('''
+                INSERT INTO organizations (id, name, org_type, jurisdiction, status, created_at, updated_at)
+                VALUES (?, ?, ?, ?, ?, ?, ?)
+                ON CONFLICT(id) DO UPDATE SET org_type=excluded.org_type, name=excluded.name, jurisdiction=excluded.jurisdiction
+            ''', ("org_ministry", "Ministry of Consumer Affairs & Legal Metrology Directorate", "REGULATOR", "National", "ACTIVE", now_seed_iso, now_seed_iso))
+            await db.execute('''
+                INSERT INTO organizations (id, name, org_type, jurisdiction, status, created_at, updated_at)
+                VALUES (?, ?, ?, ?, ?, ?, ?)
+                ON CONFLICT(id) DO UPDATE SET org_type=excluded.org_type, name=excluded.name, jurisdiction=excluded.jurisdiction
+            ''', ("org_merchant_demo", "Demo Merchant Brand Packaging Corp", "MERCHANT", "National", "ACTIVE", now_seed_iso, now_seed_iso))
+            await db.commit()
+        except Exception:
+            pass
+
         await db.execute('''
             CREATE TABLE IF NOT EXISTS analyses (
                 id TEXT PRIMARY KEY,
@@ -45,7 +86,8 @@ async def init_db():
                 status TEXT,
                 created_at TEXT,
                 images TEXT,
-                owner_user_id TEXT DEFAULT ''
+                owner_user_id TEXT DEFAULT '',
+                organization_id TEXT DEFAULT ''
             )
         ''')
         await db.commit()
@@ -53,6 +95,7 @@ async def init_db():
         for col, typedef in [
             ("images", "TEXT"),
             ("owner_user_id", "TEXT DEFAULT ''"),
+            ("organization_id", "TEXT DEFAULT ''"),
             ("integrity_hash", "TEXT DEFAULT ''"),
             ("system_version", "TEXT DEFAULT ''"),
             ("ocr_engine_version", "TEXT DEFAULT ''"),
@@ -63,8 +106,13 @@ async def init_db():
                 await db.commit()
             except Exception:
                 pass
+        try:
+            await db.execute("CREATE INDEX IF NOT EXISTS idx_analyses_org ON analyses(organization_id)")
+            await db.commit()
+        except Exception:
+            pass
 
-        # ── Users table (role-based access) ──
+        # ── Users table (role-based access & organization scoping) ──
         await db.execute('''
             CREATE TABLE IF NOT EXISTS users (
                 id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -75,6 +123,7 @@ async def init_db():
                 full_name TEXT DEFAULT '',
                 jurisdiction TEXT DEFAULT '',
                 email TEXT DEFAULT '',
+                organization_id TEXT DEFAULT '',
                 status TEXT NOT NULL DEFAULT 'ACTIVE',
                 invitation_token_hash TEXT DEFAULT '',
                 invitation_expires_at TEXT DEFAULT '',
@@ -86,9 +135,10 @@ async def init_db():
         ''')
         await db.commit()
 
-        # Idempotently ensure email and provisioning columns exist
+        # Idempotently ensure email, organization_id and provisioning columns exist
         for col, typedef in [
             ("email", "TEXT DEFAULT ''"),
+            ("organization_id", "TEXT DEFAULT ''"),
             ("status", "TEXT NOT NULL DEFAULT 'ACTIVE'"),
             ("invitation_token_hash", "TEXT DEFAULT ''"),
             ("invitation_expires_at", "TEXT DEFAULT ''"),
@@ -101,6 +151,12 @@ async def init_db():
                 await db.commit()
             except Exception:
                 pass
+
+        try:
+            await db.execute("CREATE INDEX IF NOT EXISTS idx_users_org ON users(organization_id)")
+            await db.commit()
+        except Exception:
+            pass
 
         # Ensure existing user records have status and token_version populated
         try:
@@ -158,10 +214,21 @@ async def init_db():
                 previous_value TEXT,
                 new_value TEXT,
                 comments TEXT,
+                organization_id TEXT DEFAULT '',
                 created_at TEXT NOT NULL
             )
         ''')
         await db.commit()
+        try:
+            await db.execute("ALTER TABLE evidence_audit_logs ADD COLUMN organization_id TEXT DEFAULT ''")
+            await db.commit()
+        except Exception:
+            pass
+        try:
+            await db.execute("CREATE INDEX IF NOT EXISTS idx_evidence_audit_org ON evidence_audit_logs(organization_id)")
+            await db.commit()
+        except Exception:
+            pass
 
         # ── Pre-Print Packaging Artworks table (Section 8) ──
         await db.execute('''
@@ -184,11 +251,22 @@ async def init_db():
                 analysis_result TEXT,
                 pages_data TEXT,
                 owner_user_id TEXT DEFAULT '',
+                organization_id TEXT DEFAULT '',
                 created_at TEXT NOT NULL,
                 updated_at TEXT NOT NULL
             )
         ''')
         await db.commit()
+        try:
+            await db.execute("ALTER TABLE artworks ADD COLUMN organization_id TEXT DEFAULT ''")
+            await db.commit()
+        except Exception:
+            pass
+        try:
+            await db.execute("CREATE INDEX IF NOT EXISTS idx_artworks_org ON artworks(organization_id)")
+            await db.commit()
+        except Exception:
+            pass
 
         # ── Version Comparisons table (Section 9) ──
         await db.execute('''
@@ -205,10 +283,22 @@ async def init_db():
                 risk_shift TEXT DEFAULT 'UNCHANGED',
                 comparison_result TEXT NOT NULL,
                 owner_user_id TEXT DEFAULT '',
+                organization_id TEXT DEFAULT '',
                 created_at TEXT NOT NULL
             )
         ''')
         await db.commit()
+        try:
+            await db.execute("ALTER TABLE version_comparisons ADD COLUMN organization_id TEXT DEFAULT ''")
+            await db.commit()
+        except Exception:
+            pass
+        try:
+            await db.execute("CREATE INDEX IF NOT EXISTS idx_version_comparisons_org ON version_comparisons(organization_id)")
+            await db.execute("CREATE INDEX IF NOT EXISTS idx_version_comp_org ON version_comparisons(organization_id)")
+            await db.commit()
+        except Exception:
+            pass
 
         # ── Officer Reviews table (Section 10) ──
         await db.execute('''
@@ -233,11 +323,23 @@ async def init_db():
                 evidence_modifications TEXT DEFAULT '[]',
                 comments TEXT DEFAULT '[]',
                 history TEXT DEFAULT '[]',
+                organization_id TEXT DEFAULT '',
                 created_at TEXT NOT NULL,
                 updated_at TEXT NOT NULL
             )
         ''')
         await db.commit()
+        try:
+            await db.execute("ALTER TABLE officer_reviews ADD COLUMN organization_id TEXT DEFAULT ''")
+            await db.commit()
+        except Exception:
+            pass
+        try:
+            await db.execute("CREATE INDEX IF NOT EXISTS idx_officer_reviews_org ON officer_reviews(organization_id)")
+            await db.execute("CREATE INDEX IF NOT EXISTS idx_reviews_org ON officer_reviews(organization_id)")
+            await db.commit()
+        except Exception:
+            pass
 
         # ── Verification Cache table (Section 13) ──
         await db.execute('''
@@ -279,7 +381,94 @@ async def init_db():
         await db.close()
 
 
-async def save_analysis(data: dict):
+# ═══════════════════════════════════════════════════════════════════════
+# ORGANIZATIONS (Multi-Tenant Isolation)
+# ═══════════════════════════════════════════════════════════════════════
+
+async def create_organization(id_or_data=None, name: str = "", org_type: str = "MERCHANT", jurisdiction: str = "", status: str = "ACTIVE", **kwargs) -> Dict[str, Any]:
+    """Create or update an organization. Accepts dict, positional, or keyword arguments."""
+    if isinstance(id_or_data, dict):
+        d = dict(id_or_data)
+        d.update(kwargs)
+    elif id_or_data is not None:
+        d = {"id": str(id_or_data), "name": name, "org_type": org_type, "jurisdiction": jurisdiction, "status": status}
+        d.update(kwargs)
+    else:
+        d = dict(kwargs)
+        if name:
+            d.setdefault("name", name)
+        if org_type:
+            d.setdefault("org_type", org_type)
+        if jurisdiction:
+            d.setdefault("jurisdiction", jurisdiction)
+        if status:
+            d.setdefault("status", status)
+
+    org_id = str(d.get("id") or d.get("org_id") or "").strip()
+    org_name = str(d.get("name") or "").strip()
+    org_t = str(d.get("org_type") or "MERCHANT").strip()
+    org_j = str(d.get("jurisdiction") or "").strip()
+    org_s = str(d.get("status") or "ACTIVE").strip()
+
+    now_iso = datetime.now(timezone.utc).isoformat()
+    db = await get_db()
+    try:
+        await db.execute('''
+            INSERT OR REPLACE INTO organizations (id, name, org_type, jurisdiction, status, created_at, updated_at)
+            VALUES (?, ?, ?, ?, ?, ?, ?)
+        ''', (org_id, org_name, org_t, org_j, org_s, now_iso, now_iso))
+        await db.commit()
+        return {
+            "id": org_id,
+            "name": org_name,
+            "org_type": org_t,
+            "jurisdiction": org_j,
+            "status": org_s,
+            "created_at": now_iso,
+            "updated_at": now_iso,
+        }
+    finally:
+        await db.close()
+
+
+async def get_organization(org_id: str) -> Optional[Dict[str, Any]]:
+    """Retrieve organization record by ID."""
+    if not org_id:
+        return None
+    db = await get_db()
+    try:
+        async with db.execute('SELECT * FROM organizations WHERE id = ?', (org_id.strip(),)) as cursor:
+            row = await cursor.fetchone()
+            return dict(row) if row else None
+    finally:
+        await db.close()
+
+
+async def list_organizations() -> List[Dict[str, Any]]:
+    """List all organizations."""
+    db = await get_db()
+    try:
+        async with db.execute('SELECT * FROM organizations ORDER BY name ASC') as cursor:
+            rows = await cursor.fetchall()
+            return [dict(row) for row in rows]
+    finally:
+        await db.close()
+
+
+async def save_analysis(data_or_id=None, **kwargs):
+    """Save an analysis record. Accepts a dict, an ID string, or keyword arguments."""
+    if isinstance(data_or_id, dict):
+        data = dict(data_or_id)
+        data.update(kwargs)
+    elif isinstance(data_or_id, str):
+        data = {"id": data_or_id}
+        data.update(kwargs)
+    else:
+        data = dict(kwargs)
+
+    if "analysis_id" in data and "id" not in data:
+        data["id"] = data["analysis_id"]
+
     db = await get_db()
     try:
         ext_data = data.get('extracted_data', {})
@@ -297,12 +486,12 @@ async def save_analysis(data: dict):
             INSERT OR REPLACE INTO analyses (
                 id, product_name, image_filename, ocr_text, extracted_data,
                 compliance_result, score, status, created_at, images,
-                owner_user_id, integrity_hash, system_version, ocr_engine_version, ruleset_version
+                owner_user_id, organization_id, integrity_hash, system_version, ocr_engine_version, ruleset_version
             )
-            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
         ''', (
-            data['id'],
-            data['product_name'],
+            data.get('id', ''),
+            data.get('product_name', ''),
             data.get('image_filename', ''),
             data.get('ocr_text', ''),
             ext_data,
@@ -312,6 +501,7 @@ async def save_analysis(data: dict):
             created_at_val,
             images_val,
             data.get('owner_user_id', '') or '',
+            data.get('organization_id', '') or '',
             data.get('integrity_hash', '') or '',
             data.get('system_version', '') or '',
             data.get('ocr_engine_version', '') or '',
@@ -322,15 +512,23 @@ async def save_analysis(data: dict):
         await db.close()
 
 
-async def get_analyses():
-    """Retrieve all real user screening analyses, excluding synthetic demo fixtures."""
+async def get_analyses(organization_id: Optional[str] = None):
+    """Retrieve user screening analyses, optionally filtered by organization_id."""
     db = await get_db()
     try:
-        async with db.execute(
-            "SELECT * FROM analyses WHERE id NOT LIKE 'demo-%' AND id NOT IN ('1', '2', '3') ORDER BY created_at DESC"
-        ) as cursor:
-            rows = await cursor.fetchall()
-            return [dict(row) for row in rows]
+        if organization_id:
+            async with db.execute(
+                "SELECT * FROM analyses WHERE id NOT LIKE 'demo-%' AND id NOT IN ('1', '2', '3') AND organization_id = ? ORDER BY created_at DESC",
+                (organization_id,)
+            ) as cursor:
+                rows = await cursor.fetchall()
+                return [dict(row) for row in rows]
+        else:
+            async with db.execute(
+                "SELECT * FROM analyses WHERE id NOT LIKE 'demo-%' AND id NOT IN ('1', '2', '3') ORDER BY created_at DESC"
+            ) as cursor:
+                rows = await cursor.fetchall()
+                return [dict(row) for row in rows]
     finally:
         await db.close()
 
@@ -406,19 +604,28 @@ def classify_analysis_outcome(analysis: dict) -> str:
 
 
 async def get_stats(user: Optional[dict] = None):
-    analyses = await get_analyses()
+    org_id = user.get("organization_id") if user else None
+    role = user.get("role") if user else None
 
-    # Workspace/Role filtering for merchant accounts
-    if user and user.get("role") == "MERCHANT_PUBLIC":
+    if role == "ADMIN":
+        analyses = await get_analyses()
+    elif role in ("ENFORCEMENT_OFFICER", "AUDIT_OFFICER"):
+        analyses = await get_analyses(organization_id=org_id)
+    elif role == "MERCHANT_PUBLIC":
+        analyses = await get_analyses(organization_id=org_id)
         username = (user.get("username") or "").lower()
         user_id_str = str(user.get("id", "")) if user.get("id") is not None else ""
         analyses = [
             a for a in analyses
             if a.get("owner_user_id") and (
                 a.get("owner_user_id", "").lower() == username or
-                (user_id_str and a.get("owner_user_id", "") == user_id_str)
+                (user_id_str and str(a.get("owner_user_id", "")) == user_id_str)
             )
         ]
+    elif org_id:
+        analyses = await get_analyses(organization_id=org_id)
+    else:
+        analyses = await get_analyses()
 
     packages_screened = len(analyses)
     compliant_packages = 0
@@ -494,15 +701,17 @@ async def delete_all_user_analyses() -> int:
 # ═══════════════════════════════════════════════════════════════════════
 
 async def create_user(username: str, password_hash: str, salt: str, role: str,
-                      full_name: str = "", jurisdiction: str = "", email: str = "") -> bool:
+                      full_name: str = "", jurisdiction: str = "", email: str = "",
+                      organization_id: str = "") -> bool:
     """Insert a user. Returns False if username or email already exists."""
     import datetime
     db = await get_db()
     try:
         await db.execute('''
-            INSERT INTO users (username, password_hash, salt, role, full_name, jurisdiction, email, created_at)
-            VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+            INSERT INTO users (username, password_hash, salt, role, full_name, jurisdiction, email, organization_id, created_at)
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
         ''', (username, password_hash, salt, role, full_name, jurisdiction, email.strip().lower() if email else "",
+              organization_id.strip() if organization_id else "",
               datetime.datetime.now().isoformat(timespec="seconds")))
         await db.commit()
         return True
@@ -576,7 +785,7 @@ get_all_users = list_users
 
 async def update_user(username: str, full_name: str = None, jurisdiction: str = None,
                       role: str = None, password_hash: str = None, salt: str = None,
-                      email: str = None) -> bool:
+                      email: str = None, organization_id: str = None) -> bool:
     """Update user by username. Only set columns that are not None. Returns True if affected."""
     fields = []
     params = []
@@ -598,6 +807,9 @@ async def update_user(username: str, full_name: str = None, jurisdiction: str = 
     if email is not None:
         fields.append("email = ?")
         params.append(email.strip().lower() if email else "")
+    if organization_id is not None:
+        fields.append("organization_id = ?")
+        params.append(organization_id.strip() if organization_id else "")
 
     if not fields:
         return False
@@ -616,7 +828,8 @@ async def update_user(username: str, full_name: str = None, jurisdiction: str = 
 
 
 async def create_invited_user(username: str, email: str, role: str, full_name: str = "",
-                              jurisdiction: str = "", token_hash: str = "", expires_at: str = "") -> bool:
+                              jurisdiction: str = "", token_hash: str = "", expires_at: str = "",
+                              organization_id: str = "") -> bool:
     """Insert a provisioned user in INVITED status."""
     import datetime
     now_iso = datetime.datetime.now(datetime.timezone.utc).isoformat()
@@ -625,9 +838,9 @@ async def create_invited_user(username: str, email: str, role: str, full_name: s
         await db.execute('''
             INSERT INTO users (
                 username, password_hash, salt, role, full_name, jurisdiction, email,
-                status, invitation_token_hash, invitation_expires_at, invited_at, token_version, created_at
+                organization_id, status, invitation_token_hash, invitation_expires_at, invited_at, token_version, created_at
             )
-            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
         ''', (
             username.strip(),
             "",  # Unset password until activation
@@ -636,6 +849,7 @@ async def create_invited_user(username: str, email: str, role: str, full_name: s
             full_name.strip(),
             jurisdiction.strip(),
             email.strip().lower() if email else "",
+            organization_id.strip() if organization_id else "",
             "INVITED",
             token_hash,
             expires_at,
@@ -810,9 +1024,9 @@ async def delete_user(username: str) -> bool:
 
 async def seed_default_users():
     """Create operational demo accounts on first run (idempotent, demo mode only):
-       officer / officer123 (ENFORCEMENT_OFFICER)
-       audit / audit123   (AUDIT_OFFICER)
-       merchant / merchant123 (MERCHANT_PUBLIC)
+       officer / officer123 (ENFORCEMENT_OFFICER, org_ministry)
+       audit / audit123   (AUDIT_OFFICER, org_ministry)
+       merchant / merchant123 (MERCHANT_PUBLIC, org_merchant_demo)
 
        NOTE: Admin accounts are NEVER seeded automatically. System administrators
        must be provisioned explicitly via CLI bootstrap (bootstrap_admin.py).
@@ -831,17 +1045,21 @@ async def seed_default_users():
 
     from auth.security import hash_password, ROLE_ENFORCEMENT, ROLE_AUDIT, ROLE_MERCHANT
 
+    # Ensure default organizations exist
+    await create_organization("org_ministry", "Ministry of Consumer Affairs & Legal Metrology Directorate", org_type="REGULATOR", jurisdiction="National")
+    await create_organization("org_merchant_demo", "Demo Merchant Brand Packaging Corp", org_type="MERCHANT", jurisdiction="National")
+
     defaults = [
-        ("officer", "officer123", ROLE_ENFORCEMENT, "Demo Enforcement Officer", "Consumer Affairs & Legal Metrology Directorate"),
-        ("audit", "audit123", ROLE_AUDIT, "Demo Audit Inspector", "Quality & Compliance Verification Directorate"),
-        ("merchant", "merchant123", ROLE_MERCHANT, "Demo Merchant Brand", "Commercial Packager"),
+        ("officer", "officer123", ROLE_ENFORCEMENT, "Demo Enforcement Officer", "Consumer Affairs & Legal Metrology Directorate", "org_ministry"),
+        ("audit", "audit123", ROLE_AUDIT, "Demo Audit Inspector", "Quality & Compliance Verification Directorate", "org_ministry"),
+        ("merchant", "merchant123", ROLE_MERCHANT, "Demo Merchant Brand", "Commercial Packager", "org_merchant_demo"),
     ]
-    for username, password, role, full_name, jurisdiction in defaults:
+    for username, password, role, full_name, jurisdiction, org_id in defaults:
         existing = await get_user_by_username(username)
         if existing:
             continue
         pw_hash, salt = hash_password(password)
-        await create_user(username, pw_hash, salt, role, full_name, jurisdiction)
+        await create_user(username, pw_hash, salt, role, full_name, jurisdiction, organization_id=org_id)
 
 
 # ═══════════════════════════════════════════════════════════════════════
@@ -921,13 +1139,16 @@ async def apply_password_reset(username: str, reset_id: int, new_pw_hash: str, n
 # SEARCH + TRENDS (for retrieval facility & dashboard)
 # ═══════════════════════════════════════════════════════════════════════
 
-async def search_analyses(query: str = "", status: str = "", limit: int = 50):
+async def search_analyses(query: str = "", status: str = "", organization_id: Optional[str] = None, limit: int = 50):
     """Case-insensitive search over product name / product id / extracted data.
     Returns newest-first, excluding synthetic demo fixtures."""
     db = await get_db()
     try:
         sql = "SELECT * FROM analyses WHERE id NOT LIKE 'demo-%' AND id NOT IN ('1','2','3')"
         params: list = []
+        if organization_id:
+            sql += " AND organization_id = ?"
+            params.append(organization_id)
         q = (query or "").strip()
         if q:
             sql += " AND (LOWER(product_name) LIKE ? OR LOWER(id) LIKE ? OR LOWER(extracted_data) LIKE ?)"
@@ -945,21 +1166,37 @@ async def search_analyses(query: str = "", status: str = "", limit: int = 50):
         await db.close()
 
 
-async def get_trend_stats(days: int = 14):
-    """Daily counts (total / compliant / violations) over the last N days."""
+async def get_trend_stats(
+    days: int = 14,
+    organization_id: Optional[str] = None,
+    owner_user_id: Optional[str] = None,
+    user_role: Optional[str] = None
+):
+    """Daily counts (total / compliant / violations) over the last N days with tenant scoping."""
     import datetime
     db = await get_db()
     try:
         since = (datetime.datetime.now() - datetime.timedelta(days=days)).isoformat()
-        async with db.execute(
+        sql = (
             "SELECT date(created_at) AS d, "
             "COUNT(*) AS total, "
             "SUM(CASE WHEN status = 'COMPLIANT' THEN 1 ELSE 0 END) AS compliant "
             "FROM analyses "
-            "WHERE id NOT LIKE 'demo-%' AND id NOT IN ('1','2','3') AND created_at >= ? "
-            "GROUP BY d ORDER BY d",
-            (since,),
-        ) as cursor:
+            "WHERE id NOT LIKE 'demo-%' AND id NOT IN ('1','2','3') AND created_at >= ?"
+        )
+        params: List[Any] = [since]
+
+        if user_role != "ADMIN":
+            if organization_id:
+                sql += " AND organization_id = ?"
+                params.append(organization_id)
+            if user_role == "MERCHANT_PUBLIC" and owner_user_id:
+                sql += " AND LOWER(owner_user_id) = LOWER(?)"
+                params.append(owner_user_id)
+
+        sql += " GROUP BY d ORDER BY d"
+
+        async with db.execute(sql, tuple(params)) as cursor:
             rows = await cursor.fetchall()
 
         by_date = {dict(r)["d"]: dict(r) for r in rows if dict(r)["d"]}
@@ -988,15 +1225,16 @@ async def save_evidence_audit_log(
     action_type: str,
     previous_value: Optional[str] = None,
     new_value: Optional[str] = None,
-    comments: Optional[str] = None
+    comments: Optional[str] = None,
+    organization_id: Optional[str] = ""
 ) -> int:
     import datetime
     db = await get_db()
     try:
         now_iso = datetime.datetime.now().isoformat()
         cursor = await db.execute('''
-            INSERT INTO evidence_audit_logs (analysis_id, evidence_id, rule_id, actor_username, action_type, previous_value, new_value, comments, created_at)
-            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+            INSERT INTO evidence_audit_logs (analysis_id, evidence_id, rule_id, actor_username, action_type, previous_value, new_value, comments, organization_id, created_at)
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
         ''', (
             analysis_id,
             evidence_id,
@@ -1006,6 +1244,7 @@ async def save_evidence_audit_log(
             previous_value,
             new_value,
             comments or "",
+            organization_id or "",
             now_iso
         ))
         await db.commit()
@@ -1100,23 +1339,47 @@ def _extract_analysis_risk_info(analysis_row: dict) -> dict:
     }
 
 
-async def get_product_risk_history(product_name: str) -> Dict[str, Any]:
-    """Retrieve compliance score and risk trajectory over time for a given product."""
+async def get_product_risk_history(
+    product_name: str,
+    organization_id: Optional[str] = None,
+    owner_user_id: Optional[str] = None,
+    user_role: Optional[str] = None
+) -> Dict[str, Any]:
+    """Retrieve compliance score and risk trajectory over time for a given product with tenant scoping."""
     db = await get_db()
     try:
         norm_name = product_name.strip().lower()
-        async with db.execute(
-            "SELECT * FROM analyses WHERE LOWER(product_name) = ? AND id NOT LIKE 'demo-%' AND id NOT IN ('1','2','3') ORDER BY created_at ASC",
-            (norm_name,)
-        ) as cursor:
+        sql = "SELECT * FROM analyses WHERE LOWER(product_name) = ? AND id NOT LIKE 'demo-%' AND id NOT IN ('1','2','3')"
+        params: List[Any] = [norm_name]
+
+        if user_role != "ADMIN":
+            if organization_id:
+                sql += " AND organization_id = ?"
+                params.append(organization_id)
+            if user_role == "MERCHANT_PUBLIC" and owner_user_id:
+                sql += " AND LOWER(owner_user_id) = LOWER(?)"
+                params.append(owner_user_id)
+
+        sql += " ORDER BY created_at ASC"
+
+        async with db.execute(sql, tuple(params)) as cursor:
             rows = await cursor.fetchall()
             
         if not rows:
             # Try LIKE matching if exact match yields 0
-            async with db.execute(
-                "SELECT * FROM analyses WHERE LOWER(product_name) LIKE ? AND id NOT LIKE 'demo-%' AND id NOT IN ('1','2','3') ORDER BY created_at ASC",
-                (f"%{norm_name}%",)
-            ) as cursor:
+            sql_like = "SELECT * FROM analyses WHERE LOWER(product_name) LIKE ? AND id NOT LIKE 'demo-%' AND id NOT IN ('1','2','3')"
+            params_like: List[Any] = [f"%{norm_name}%"]
+
+            if user_role != "ADMIN":
+                if organization_id:
+                    sql_like += " AND organization_id = ?"
+                    params_like.append(organization_id)
+                if user_role == "MERCHANT_PUBLIC" and owner_user_id:
+                    sql_like += " AND LOWER(owner_user_id) = LOWER(?)"
+                    params_like.append(owner_user_id)
+
+            sql_like += " ORDER BY created_at ASC"
+            async with db.execute(sql_like, tuple(params_like)) as cursor:
                 rows = await cursor.fetchall()
 
         entries = [_extract_analysis_risk_info(dict(r)) for r in rows]
@@ -1144,15 +1407,44 @@ async def get_product_risk_history(product_name: str) -> Dict[str, Any]:
         await db.close()
 
 
-async def get_batch_risk_distribution(owner_user_id: Optional[str] = None) -> Dict[str, Any]:
-    """Aggregate risk level distribution across screened packages."""
-    analyses = await get_analyses()
-    if owner_user_id:
-        norm_owner = owner_user_id.lower()
-        analyses = [
-            a for a in analyses 
-            if a.get("owner_user_id") and a.get("owner_user_id", "").lower() == norm_owner
-        ]
+async def get_batch_risk_distribution(
+    organization_id: Optional[str] = None,
+    owner_user_id: Optional[str] = None,
+    user_role: Optional[str] = None
+) -> Dict[str, Any]:
+    """Aggregate risk level distribution across screened packages with tenant scoping."""
+    if user_role == "ADMIN":
+        analyses = await get_analyses(organization_id=organization_id)
+        if owner_user_id:
+            norm_owner = owner_user_id.lower()
+            analyses = [
+                a for a in analyses 
+                if a.get("owner_user_id") and a.get("owner_user_id", "").lower() == norm_owner
+            ]
+    elif user_role == "MERCHANT_PUBLIC":
+        analyses = await get_analyses(organization_id=organization_id)
+        if owner_user_id:
+            norm_owner = owner_user_id.lower()
+            analyses = [
+                a for a in analyses 
+                if a.get("owner_user_id") and a.get("owner_user_id", "").lower() == norm_owner
+            ]
+    elif organization_id:
+        analyses = await get_analyses(organization_id=organization_id)
+        if owner_user_id:
+            norm_owner = owner_user_id.lower()
+            analyses = [
+                a for a in analyses 
+                if a.get("owner_user_id") and a.get("owner_user_id", "").lower() == norm_owner
+            ]
+    else:
+        analyses = await get_analyses()
+        if owner_user_id:
+            norm_owner = owner_user_id.lower()
+            analyses = [
+                a for a in analyses 
+                if a.get("owner_user_id") and a.get("owner_user_id", "").lower() == norm_owner
+            ]
 
     total = len(analyses)
     counts = {"CRITICAL": 0, "HIGH": 0, "MEDIUM": 0, "LOW": 0}
@@ -1211,9 +1503,9 @@ async def save_artwork(artwork_data: Dict[str, Any]) -> None:
                 page_count, dimensions, dpi, source_identity,
                 compliance_ruleset, parent_artwork_id, iteration_number,
                 workflow_status, approval_status, approval_record,
-                analysis_result, pages_data, owner_user_id,
+                analysis_result, pages_data, owner_user_id, organization_id,
                 created_at, updated_at
-            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
         ''', (
             artwork_data['id'],
             artwork_data['filename'],
@@ -1233,6 +1525,7 @@ async def save_artwork(artwork_data: Dict[str, Any]) -> None:
             json.dumps(artwork_data.get('analysis_result')) if artwork_data.get('analysis_result') else None,
             json.dumps(artwork_data.get('pages_data', [])),
             artwork_data.get('owner_user_id', '') or '',
+            artwork_data.get('organization_id', '') or '',
             artwork_data['created_at'],
             artwork_data.get('updated_at', artwork_data['created_at'])
         ))
@@ -1275,17 +1568,25 @@ async def get_artwork(artwork_id: str) -> Optional[Dict[str, Any]]:
         await db.close()
 
 
-async def list_artworks(owner_user_id: Optional[str] = None) -> List[Dict[str, Any]]:
-    """List all artworks, optionally filtered by owner."""
+async def list_artworks(owner_user_id: Optional[str] = None, organization_id: Optional[str] = None) -> List[Dict[str, Any]]:
+    """List all artworks, optionally filtered by owner and/or organization."""
     db = await get_db()
     try:
+        conditions = []
+        params = []
+        if organization_id:
+            conditions.append("organization_id = ?")
+            params.append(organization_id)
         if owner_user_id:
-            query = "SELECT * FROM artworks WHERE LOWER(owner_user_id) = LOWER(?) ORDER BY created_at DESC"
-            params = (owner_user_id,)
+            conditions.append("LOWER(owner_user_id) = LOWER(?)")
+            params.append(owner_user_id)
+
+        if conditions:
+            query = f"SELECT * FROM artworks WHERE {' AND '.join(conditions)} ORDER BY created_at DESC"
         else:
             query = "SELECT * FROM artworks ORDER BY created_at DESC"
-            params = ()
-        async with db.execute(query, params) as cursor:
+
+        async with db.execute(query, tuple(params)) as cursor:
             rows = await cursor.fetchall()
             results = []
             for row in rows:
@@ -1390,8 +1691,8 @@ async def save_version_comparison(comp_data: Dict[str, Any]) -> None:
             INSERT OR REPLACE INTO version_comparisons (
                 id, version_a_id, version_b_id, version_type_a, version_type_b,
                 product_name, score_a, score_b, score_delta, risk_shift,
-                comparison_result, owner_user_id, created_at
-            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                comparison_result, owner_user_id, organization_id, created_at
+            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
         ''', (
             comp_id,
             v_a_id,
@@ -1405,6 +1706,7 @@ async def save_version_comparison(comp_data: Dict[str, Any]) -> None:
             comp_data.get('risk_shift', 'UNCHANGED'),
             json.dumps(comp_data),
             comp_data.get('owner_user_id', '') or '',
+            comp_data.get('organization_id', '') or '',
             created_at
         ))
         await db.commit()
@@ -1431,17 +1733,26 @@ async def get_version_comparison(comp_id: str) -> Optional[Dict[str, Any]]:
         await db.close()
 
 
-async def list_version_comparisons(owner_user_id: Optional[str] = None, limit: int = 50) -> List[Dict[str, Any]]:
+async def list_version_comparisons(owner_user_id: Optional[str] = None, organization_id: Optional[str] = None, limit: int = 50) -> List[Dict[str, Any]]:
     """List recent version comparisons."""
     db = await get_db()
     try:
+        conditions = []
+        params = []
+        if organization_id:
+            conditions.append("organization_id = ?")
+            params.append(organization_id)
         if owner_user_id:
-            query = "SELECT * FROM version_comparisons WHERE LOWER(owner_user_id) = LOWER(?) ORDER BY created_at DESC LIMIT ?"
-            params = (owner_user_id, limit)
+            conditions.append("LOWER(owner_user_id) = LOWER(?)")
+            params.append(owner_user_id)
+
+        if conditions:
+            query = f"SELECT * FROM version_comparisons WHERE {' AND '.join(conditions)} ORDER BY created_at DESC LIMIT ?"
         else:
             query = "SELECT * FROM version_comparisons ORDER BY created_at DESC LIMIT ?"
-            params = (limit,)
-        async with db.execute(query, params) as cursor:
+        params.append(limit)
+
+        async with db.execute(query, tuple(params)) as cursor:
             rows = await cursor.fetchall()
             results = []
             for row in rows:
@@ -1458,9 +1769,26 @@ async def list_version_comparisons(owner_user_id: Optional[str] = None, limit: i
         await db.close()
 
 
-async def get_version_timeline(entity_id: str) -> List[Dict[str, Any]]:
+async def delete_version_comparison(comp_id: str) -> bool:
+    """Delete a version comparison record by ID."""
+    db = await get_db()
+    try:
+        cursor = await db.execute("DELETE FROM version_comparisons WHERE id = ?", (comp_id.strip(),))
+        await db.commit()
+        return cursor.rowcount > 0
+    finally:
+        await db.close()
+
+
+async def get_version_timeline(
+    entity_id: str,
+    organization_id: Optional[str] = None,
+    owner_user_id: Optional[str] = None,
+    user_role: Optional[str] = None
+) -> List[Dict[str, Any]]:
     """
-    Builds a chronological timeline of version events for a product name or artwork chain.
+    Builds a chronological timeline of version events for a product name or artwork chain,
+    scoped strictly to the authorized tenant and user ownership.
     """
     db = await get_db()
     timeline_events: List[Dict[str, Any]] = []
@@ -1468,10 +1796,17 @@ async def get_version_timeline(entity_id: str) -> List[Dict[str, Any]]:
         norm_id = entity_id.strip()
 
         # 1. Search in analyses table (Physical package screenings)
-        async with db.execute(
-            "SELECT * FROM analyses WHERE LOWER(product_name) = LOWER(?) OR id = ? ORDER BY created_at ASC",
-            (norm_id, norm_id)
-        ) as cursor:
+        ana_query = "SELECT * FROM analyses WHERE (LOWER(product_name) = LOWER(?) OR id = ?)"
+        ana_params: List[Any] = [norm_id, norm_id]
+        if user_role != "ADMIN" and organization_id:
+            ana_query += " AND (organization_id = ? OR organization_id = '' OR organization_id IS NULL)"
+            ana_params.append(organization_id)
+        if user_role == "MERCHANT_PUBLIC" and owner_user_id:
+            ana_query += " AND LOWER(owner_user_id) = LOWER(?)"
+            ana_params.append(owner_user_id)
+        ana_query += " ORDER BY created_at ASC"
+
+        async with db.execute(ana_query, tuple(ana_params)) as cursor:
             analysis_rows = await cursor.fetchall()
             for r in analysis_rows:
                 a_dict = dict(r)
@@ -1484,16 +1819,24 @@ async def get_version_timeline(entity_id: str) -> List[Dict[str, Any]]:
                     "timestamp": a_dict.get("created_at", ""),
                     "version_id": a_dict["id"],
                     "actor_username": a_dict.get("owner_user_id", ""),
+                    "organization_id": a_dict.get("organization_id", ""),
                     "score": info["score"],
                     "risk_level": info["risk_level"],
                     "metadata": {"type": "PHYSICAL_PACKAGE_SCREENING"}
                 })
 
         # 2. Search in artworks table (Pre-print artwork revisions)
-        async with db.execute(
-            "SELECT * FROM artworks WHERE id = ? OR parent_artwork_id = ? OR LOWER(filename) LIKE LOWER(?) ORDER BY created_at ASC",
-            (norm_id, norm_id, f"%{norm_id}%")
-        ) as cursor:
+        art_query = "SELECT * FROM artworks WHERE (id = ? OR parent_artwork_id = ? OR LOWER(filename) LIKE LOWER(?))"
+        art_params: List[Any] = [norm_id, norm_id, f"%{norm_id}%"]
+        if user_role != "ADMIN" and organization_id:
+            art_query += " AND (organization_id = ? OR organization_id = '' OR organization_id IS NULL)"
+            art_params.append(organization_id)
+        if user_role == "MERCHANT_PUBLIC" and owner_user_id:
+            art_query += " AND LOWER(owner_user_id) = LOWER(?)"
+            art_params.append(owner_user_id)
+        art_query += " ORDER BY created_at ASC"
+
+        async with db.execute(art_query, tuple(art_params)) as cursor:
             artwork_rows = await cursor.fetchall()
             for r in artwork_rows:
                 art_dict = dict(r)
@@ -1515,6 +1858,7 @@ async def get_version_timeline(entity_id: str) -> List[Dict[str, Any]]:
                     "timestamp": art_dict.get("created_at", ""),
                     "version_id": art_dict["id"],
                     "actor_username": art_dict.get("owner_user_id", ""),
+                    "organization_id": art_dict.get("organization_id", ""),
                     "score": score,
                     "risk_level": "LOW" if score >= 90 else "MEDIUM",
                     "metadata": {
@@ -1525,10 +1869,17 @@ async def get_version_timeline(entity_id: str) -> List[Dict[str, Any]]:
                 })
 
         # 3. Search in version_comparisons table
-        async with db.execute(
-            "SELECT * FROM version_comparisons WHERE LOWER(product_name) LIKE LOWER(?) OR version_a_id = ? OR version_b_id = ? OR id = ? ORDER BY created_at ASC",
-            (f"%{norm_id}%", norm_id, norm_id, norm_id)
-        ) as cursor:
+        comp_query = "SELECT * FROM version_comparisons WHERE (LOWER(product_name) LIKE LOWER(?) OR version_a_id = ? OR version_b_id = ? OR id = ?)"
+        comp_params: List[Any] = [f"%{norm_id}%", norm_id, norm_id, norm_id]
+        if user_role != "ADMIN" and organization_id:
+            comp_query += " AND (organization_id = ? OR organization_id = '' OR organization_id IS NULL)"
+            comp_params.append(organization_id)
+        if user_role == "MERCHANT_PUBLIC" and owner_user_id:
+            comp_query += " AND LOWER(owner_user_id) = LOWER(?)"
+            comp_params.append(owner_user_id)
+        comp_query += " ORDER BY created_at ASC"
+
+        async with db.execute(comp_query, tuple(comp_params)) as cursor:
             comp_rows = await cursor.fetchall()
             for r in comp_rows:
                 c_dict = dict(r)
@@ -1540,6 +1891,7 @@ async def get_version_timeline(entity_id: str) -> List[Dict[str, Any]]:
                     "timestamp": c_dict.get("created_at", ""),
                     "version_id": c_dict.get("version_b_id", "") or c_dict["id"],
                     "actor_username": c_dict.get("owner_user_id", ""),
+                    "organization_id": c_dict.get("organization_id", ""),
                     "score": c_dict.get("score_b"),
                     "risk_level": "LOW" if (c_dict.get("score_b") or 0) >= 90 else "MEDIUM",
                     "metadata": {
@@ -1612,8 +1964,8 @@ async def save_review(review_dict: Dict[str, Any]) -> None:
                 ai_score, ai_risk_level, ai_status,
                 ai_snapshot, human_verified_result, field_corrections,
                 evidence_modifications, comments, history,
-                created_at, updated_at
-            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                organization_id, created_at, updated_at
+            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
         ''', (
             rev_id, ana_id, target_type, prod_name, status,
             assigned_officer, assigned_by, assigned_at,
@@ -1621,6 +1973,7 @@ async def save_review(review_dict: Dict[str, Any]) -> None:
             ai_score, ai_risk_level, ai_status,
             ai_snap, human_res, field_corr,
             ev_mods, comments, history,
+            review_dict.get("organization_id", "") or "",
             created_at, updated_at
         ))
         await db.commit()
@@ -1658,6 +2011,7 @@ async def list_reviews(
     status: Optional[str] = None,
     assigned_officer: Optional[str] = None,
     risk_level: Optional[str] = None,
+    organization_id: Optional[str] = None,
     limit: int = 100
 ) -> List[Dict[str, Any]]:
     """List officer reviews with optional filtering."""
@@ -1665,6 +2019,10 @@ async def list_reviews(
     try:
         query = 'SELECT * FROM officer_reviews WHERE 1=1'
         params: List[Any] = []
+
+        if organization_id:
+            query += ' AND organization_id = ?'
+            params.append(organization_id)
 
         if status:
             if status == "PENDING":

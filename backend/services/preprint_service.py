@@ -8,7 +8,10 @@ from typing import List, Dict, Any, Optional, Tuple
 from PIL import Image
 import numpy as np
 
-import pypdfium2 as pdfium
+try:
+    import pypdfium2 as pdfium
+except ImportError:
+    pdfium = None
 from config import settings
 from ocr.factory import get_ocr_engine
 from extraction.extractor import LocalExtractor
@@ -137,7 +140,7 @@ def render_artwork_pages(file_path: str, file_type: str, output_dir: str) -> Lis
                     width=pil_img.width,
                     height=pil_img.height,
                     dpi=150.0,
-                    preview_image_path=f"/uploads/{preview_filename}",
+                    preview_image_path=f"/api/images/{preview_filename}",
                     extracted_text=vector_text,
                     text_source="PDF_VECTOR" if vector_text else "OCR",
                     layout_regions=layout_regions,
@@ -174,7 +177,7 @@ def render_artwork_pages(file_path: str, file_type: str, output_dir: str) -> Lis
                     width=pil_img.width,
                     height=pil_img.height,
                     dpi=150.0,
-                    preview_image_path=f"/uploads/{preview_filename}",
+                    preview_image_path=f"/api/images/{preview_filename}",
                     extracted_text="",
                     text_source="OCR",
                     layout_regions=[],

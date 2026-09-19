@@ -299,7 +299,7 @@ export default function History() {
                         <div className="w-10 h-12 bg-slate-100 dark:bg-slate-800 rounded-lg border border-slate-200 dark:border-slate-700/80 overflow-hidden flex items-center justify-center shrink-0 shadow-2xs">
                           {item.image_url && item.image_url !== '/placeholder.png' ? (
                             <img
-                              src={item.image_url}
+                              src={api.getAssetUrl(item.image_url)}
                               alt={item.product_name || 'Product'}
                               className="w-full h-full object-contain p-0.5"
                               loading="lazy"

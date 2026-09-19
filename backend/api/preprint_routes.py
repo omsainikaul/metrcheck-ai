@@ -26,8 +26,101 @@ from database.db import (
     update_artwork_approval,
     delete_artwork,
 )
+from auth.security import (
+    get_current_user,
+    check_tenant_access,
+    ROLE_ADMIN,
+    ROLE_ENFORCEMENT,
+    ROLE_AUDIT,
+    ROLE_MERCHANT,
+)
 
 router = APIRouter(prefix="/api/preprint", tags=["preprint"])
+
+
+def _user_owns_artwork(user: dict, owner_user_id: Optional[str]) -> bool:
+    """Check if authenticated user owns the artwork record."""
+    if not owner_user_id:
+        return True
+    username = user.get("username") or ""
+    uid = str(user.get("id", "")) if user.get("id") is not None else ""
+    return (owner_user_id == username) or (bool(uid) and owner_user_id == uid)
+
+
+def _check_artwork_access(user: dict, artwork: dict, require_delete: bool = False):
+    """Strict IDOR, RBAC, and Tenant Isolation access control for pre-print packaging artworks."""
+    if not user:
+        raise HTTPException(
+            status_code=401,
+            detail="Authentication required to access pre-print artworks."
+        )
+    if not artwork:
+        raise HTTPException(status_code=404, detail="Artwork not found")
+
+    user_role = user.get("role")
+
+    if require_delete:
+        if user_role in (ROLE_ADMIN, ROLE_ENFORCEMENT):
+            if not check_tenant_access(user, artwork):
+                raise HTTPException(
+                    status_code=403,
+                    detail="Access denied. Cross-organization deletion prohibited."
+                )
+            return
+        if user_role == ROLE_MERCHANT:
+            if not check_tenant_access(user, artwork):
+                raise HTTPException(
+                    status_code=403,
+                    detail="Access denied. Merchants can only delete their own artworks within their organization."
+                )
+            return
+        raise HTTPException(
+            status_code=403,
+            detail="Insufficient permissions to delete pre-print artworks."
+        )
+
+    # Read / Analyze / Approve access
+    if not check_tenant_access(user, artwork):
+        raise HTTPException(
+            status_code=403,
+            detail="Access denied. Organization or ownership boundary violation."
+        )
+
+
+def _cleanup_artwork_files(artwork: dict):
+    """Safely remove uploaded artwork PDF and rendered page previews."""
+    import json
+    upload_dir_abs = os.path.abspath(settings.UPLOAD_DIR)
+    paths_to_delete = []
+
+    if artwork.get("file_path"):
+        paths_to_delete.append(artwork["file_path"])
+
+    if artwork.get("pages_data"):
+        pages = artwork["pages_data"]
+        if isinstance(pages, str):
+            try:
+                pages = json.loads(pages)
+            except Exception:
+                pages = []
+        if isinstance(pages, list):
+            for p in pages:
+                if isinstance(p, dict):
+                    if p.get("image_path"):
+                        paths_to_delete.append(p["image_path"])
+                    if p.get("image_url") and str(p["image_url"]).startswith("/api/images/"):
+                        fn = str(p["image_url"]).replace("/api/images/", "")
+                        paths_to_delete.append(os.path.join(upload_dir_abs, fn))
+
+    for p in set(paths_to_delete):
+        if not p:
+            continue
+        target_path = os.path.abspath(p)
+        if target_path.startswith(upload_dir_abs) and os.path.isfile(target_path):
+            try:
+                os.remove(target_path)
+            except OSError:
+                pass
 
 
 @router.post("/upload", response_model=PreprintUploadResponse)
@@ -36,6 +129,7 @@ async def upload_artwork(
     parent_artwork_id: Optional[str] = Form(None),
     iteration_number: int = Form(1),
     owner_user_id: Optional[str] = Form(None),
+    user: dict = Depends(get_current_user),
 ):
     """
     Upload a pre-print packaging artwork (PDF, PNG, JPG, WEBP).
@@ -62,7 +156,14 @@ async def upload_artwork(
     first_page_dims = {"width": pages[0].width, "height": pages[0].height} if pages else {"width": 800, "height": 600}
     first_page_dpi = pages[0].dpi if pages else 72.0
 
+    effective_owner = user.get("username", "")
+    if user.get("role") in (ROLE_ADMIN, ROLE_ENFORCEMENT, ROLE_AUDIT) and owner_user_id:
+        effective_owner = owner_user_id
+    elif user.get("role") == ROLE_MERCHANT:
+        effective_owner = user.get("username", "") or owner_user_id or ""
+
     now_iso = datetime.now(timezone.utc).isoformat()
+    org_id = user.get("organization_id", "")
     artwork_doc = {
         "id": artwork_id,
         "filename": filename,
@@ -81,7 +182,8 @@ async def upload_artwork(
         "approval_record": None,
         "analysis_result": None,
         "pages_data": [p.model_dump() for p in pages],
-        "owner_user_id": owner_user_id or "",
+        "owner_user_id": effective_owner,
+        "organization_id": org_id,
         "created_at": now_iso,
         "updated_at": now_iso,
     }
@@ -107,6 +209,7 @@ async def analyze_preprint_artwork(
     artwork_id: str,
     product_name: Optional[str] = Query(None, description="Optional product name hint"),
     category: Optional[str] = Query(None, description="Optional commodity category"),
+    user: dict = Depends(get_current_user),
 ):
     """
     Run the comprehensive pre-print compliance engine on an uploaded artwork.
@@ -116,6 +219,8 @@ async def analyze_preprint_artwork(
     artwork = await get_artwork(artwork_id)
     if not artwork:
         raise HTTPException(status_code=404, detail=f"Artwork '{artwork_id}' not found.")
+
+    _check_artwork_access(user, artwork)
 
     analysis_res = analyze_artwork(
         artwork_dict=artwork,
@@ -135,11 +240,16 @@ async def analyze_preprint_artwork(
 
 
 @router.get("/{artwork_id}")
-async def get_preprint_artwork_details(artwork_id: str):
-    """Retrieve details and analysis report for a pre-print artwork."""
+async def get_preprint_artwork_details(
+    artwork_id: str,
+    user: dict = Depends(get_current_user),
+):
+    """Retrieve details and analysis report for a pre-print artwork with ownership authorization."""
     artwork = await get_artwork(artwork_id)
     if not artwork:
         raise HTTPException(status_code=404, detail=f"Artwork '{artwork_id}' not found.")
+
+    _check_artwork_access(user, artwork)
     return artwork
 
 
@@ -148,6 +258,7 @@ async def upload_corrected_artwork(
     artwork_id: str,
     file: UploadFile = File(...),
     owner_user_id: Optional[str] = Form(None),
+    user: dict = Depends(get_current_user),
 ):
     """
     Re-upload corrected packaging artwork as a new iteration linked to the parent artwork.
@@ -156,6 +267,8 @@ async def upload_corrected_artwork(
     parent = await get_artwork(artwork_id)
     if not parent:
         raise HTTPException(status_code=404, detail=f"Parent artwork '{artwork_id}' not found.")
+
+    _check_artwork_access(user, parent)
 
     new_iteration = parent.get("iteration_number", 1) + 1
     content = await file.read()
@@ -177,7 +290,12 @@ async def upload_corrected_artwork(
     first_page_dims = {"width": pages[0].width, "height": pages[0].height} if pages else {"width": 800, "height": 600}
     first_page_dpi = pages[0].dpi if pages else 72.0
 
+    effective_owner = parent.get("owner_user_id", "") or user.get("username", "")
+    if user.get("role") in (ROLE_ADMIN, ROLE_ENFORCEMENT, ROLE_AUDIT) and owner_user_id:
+        effective_owner = owner_user_id
+
     now_iso = datetime.now(timezone.utc).isoformat()
+    org_id = parent.get("organization_id") or user.get("organization_id", "")
     new_artwork_doc = {
         "id": new_artwork_id,
         "filename": filename,
@@ -196,7 +314,8 @@ async def upload_corrected_artwork(
         "approval_record": None,
         "analysis_result": None,
         "pages_data": [p.model_dump() for p in pages],
-        "owner_user_id": owner_user_id or parent.get("owner_user_id", ""),
+        "owner_user_id": effective_owner,
+        "organization_id": org_id,
         "created_at": now_iso,
         "updated_at": now_iso,
     }
@@ -219,6 +338,7 @@ async def upload_corrected_artwork(
 async def submit_artwork_approval(
     artwork_id: str,
     approval_req: PreprintApprovalRequest,
+    user: dict = Depends(get_current_user),
 ):
     """
     Compliance approval workflow (Approve / Reject / Request Changes).
@@ -229,6 +349,8 @@ async def submit_artwork_approval(
     artwork = await get_artwork(artwork_id)
     if not artwork:
         raise HTTPException(status_code=404, detail=f"Artwork '{artwork_id}' not found.")
+
+    _check_artwork_access(user, artwork)
 
     if not approval_req.legal_disclaimer_acknowledged:
         raise HTTPException(
@@ -256,9 +378,9 @@ async def submit_artwork_approval(
     record = {
         "approval_id": f"appr-{uuid.uuid4().hex[:8]}",
         "artwork_id": artwork_id,
-        "reviewer_id": approval_req.reviewer_id or "usr-current",
-        "reviewer_name": approval_req.reviewer_name,
-        "reviewer_role": approval_req.reviewer_role,
+        "reviewer_id": approval_req.reviewer_id or user.get("username", "usr-current"),
+        "reviewer_name": approval_req.reviewer_name or user.get("full_name", user.get("username", "")),
+        "reviewer_role": approval_req.reviewer_role or user.get("role", ROLE_MERCHANT),
         "decision": approval_req.decision,
         "comments": approval_req.comments,
         "timestamp": now_iso,
@@ -287,18 +409,39 @@ async def submit_artwork_approval(
 
 @router.get("")
 async def list_preprint_artworks(
-    owner_user_id: Optional[str] = Query(None, description="Optional filter by user ID")
+    owner_user_id: Optional[str] = Query(None, description="Optional filter by user ID"),
+    user: dict = Depends(get_current_user),
 ):
-    """List all pre-print artworks."""
-    artworks = await list_artworks(owner_user_id=owner_user_id)
+    """List all pre-print artworks with tenant and IDOR filtering."""
+    user_role = user.get("role")
+    effective_owner = owner_user_id
+    effective_org = user.get("organization_id")
+
+    if user_role == ROLE_ADMIN:
+        effective_org = None  # Admins have statutory cross-tenant visibility
+    elif user_role in (ROLE_ENFORCEMENT, ROLE_AUDIT):
+        # Officers scoped to department org
+        pass
+    elif user_role == ROLE_MERCHANT:
+        # Merchants scoped to username and org
+        effective_owner = user.get("username")
+
+    artworks = await list_artworks(owner_user_id=effective_owner, organization_id=effective_org)
     return {"artworks": artworks, "total": len(artworks)}
 
 
 @router.delete("/{artwork_id}")
-async def delete_preprint_artwork(artwork_id: str):
-    """Delete a pre-print artwork record."""
+async def delete_preprint_artwork(
+    artwork_id: str,
+    user: dict = Depends(get_current_user),
+):
+    """Delete a pre-print artwork record with ownership verification."""
     artwork = await get_artwork(artwork_id)
     if not artwork:
         raise HTTPException(status_code=404, detail=f"Artwork '{artwork_id}' not found.")
+
+    _check_artwork_access(user, artwork, require_delete=True)
+
+    _cleanup_artwork_files(artwork)
     await delete_artwork(artwork_id)
     return {"success": True, "message": f"Artwork '{artwork_id}' deleted successfully."}

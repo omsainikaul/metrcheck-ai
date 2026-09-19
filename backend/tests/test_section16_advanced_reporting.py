@@ -156,11 +156,11 @@ def _make_sample_analysis():
     return AnalysisResponse(
         id="test-analysis-sec16",
         product_name="Organic Honey",
-        image_url="/uploads/honey_sample.jpg",
+        image_url="/api/images/honey_sample.jpg",
         images=[
             ProductImageEvidence(
                 filename="honey_sample.jpg",
-                image_url="/uploads/honey_sample.jpg",
+                image_url="/api/images/honey_sample.jpg",
                 label="Front",
                 word_count=42
             )
@@ -374,6 +374,18 @@ async def test_officer_review_included_in_reports(client):
 @pytest.mark.asyncio
 async def test_idor_and_role_access_control(client):
     """Verify merchants cannot access other merchants' reports while admins/officers can access any."""
+    salt, pwh = hash_password("pass123")
+    for uname, role in [
+        ("merchant_alice", ROLE_MERCHANT),
+        ("merchant_bob", ROLE_MERCHANT),
+        ("officer_test", ROLE_ENFORCEMENT),
+        ("auditor_test", ROLE_AUDIT),
+    ]:
+        try:
+            await create_user(uname, pwh, salt, role, uname)
+        except Exception:
+            pass
+
     analysis = _make_sample_analysis()
     analysis.owner_user_id = "merchant_alice"
     
@@ -446,15 +458,18 @@ async def test_version_comparison_report_exports(client):
     }
     await save_version_comparison(comp_data)
 
+    admin_token = create_token("admin", ROLE_ADMIN)
+    headers = {"Authorization": f"Bearer {admin_token}"}
+
     # Test JSON export
-    resp_json = client.get(f"/api/versions/comparisons/{comp_data['id']}/json")
+    resp_json = client.get(f"/api/versions/comparisons/{comp_data['id']}/json", headers=headers)
     assert resp_json.status_code == 200
     data = resp_json.json()
     assert data["id"] == comp_data["id"]
     assert data["score_delta"] == 15.0
 
     # Test CSV export with formula sanitization
-    resp_csv = client.get(f"/api/versions/comparisons/{comp_data['id']}/csv")
+    resp_csv = client.get(f"/api/versions/comparisons/{comp_data['id']}/csv", headers=headers)
     assert resp_csv.status_code == 200
     csv_text = resp_csv.content.decode("utf-8-sig")
     assert "VERSION COMPARISON AUDIT REPORT" in csv_text

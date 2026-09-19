@@ -2,11 +2,9 @@ import os
 from contextlib import asynccontextmanager
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
-from fastapi.staticfiles import StaticFiles
-
 from config import settings
 from database.db import init_db
-from api import analyze, ocr, extract, compliance_routes, history, demo, health, report, enforcement, integrations, vision, evidence, scoring_routes, preprint_routes, version_routes, review_routes
+from api import analyze, ocr, extract, compliance_routes, history, demo, health, report, enforcement, integrations, vision, evidence, scoring_routes, preprint_routes, version_routes, review_routes, images
 from auth.routes import router as auth_router, admin_router
 
 from version import get_version_metadata
@@ -44,8 +42,7 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
-app.mount("/uploads", StaticFiles(directory=settings.UPLOAD_DIR), name="uploads")
-
+app.include_router(images.router, prefix="/api", tags=["Images"])
 app.include_router(analyze.router, prefix="/api", tags=["Analyze"])
 app.include_router(ocr.router, prefix="/api", tags=["OCR"])
 app.include_router(extract.router, prefix="/api", tags=["Extract"])

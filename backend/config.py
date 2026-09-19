@@ -6,6 +6,21 @@ _BACKEND_DIR = os.path.dirname(os.path.abspath(__file__))
 PROD_DATABASE_PATH = os.path.abspath(os.path.join(_BACKEND_DIR, 'metrc_check.db'))
 PROD_UPLOAD_DIR = os.path.abspath(os.path.join(_BACKEND_DIR, 'uploads'))
 
+KNOWN_INSECURE_SECRETS = {
+    "metrcheck-dev-secret-change-in-prod",
+    "change-me-in-production-secure-key",
+    "CHANGE_ME_USE_A_LONG_RANDOM_SECRET",
+    "CHANGE_ME_USE_A_LONG_RANDOM_SECRET_MIN_32_CHARS",
+    "your-secure-random-secret-key-here",
+    "secret",
+    "secret_key",
+    "changeme",
+    "password",
+    "admin",
+    "12345678",
+}
+
+
 class Settings(BaseSettings):
     OCR_ENGINE: str = 'paddleocr'
     UPLOAD_DIR: str = PROD_UPLOAD_DIR
@@ -49,6 +64,10 @@ class Settings(BaseSettings):
         "localhost",
     ]
 
+    def __init__(self, **values):
+        super().__init__(**values)
+        self.validate_production_secrets()
+
     @field_validator('TRUSTED_PROXIES', mode='before')
     @classmethod
     def parse_trusted_proxies(cls, v):
@@ -69,6 +88,24 @@ class Settings(BaseSettings):
         if not os.path.isabs(v):
             return os.path.abspath(os.path.join(_BACKEND_DIR, v))
         return os.path.abspath(v)
+
+    def validate_production_secrets(self) -> None:
+        """Validates that cryptographic secrets are properly configured for production environments."""
+        is_prod = (
+            os.environ.get("METRCHECK_ENV") == "production"
+            or os.environ.get("ENVIRONMENT") == "production"
+            or (self.ENVIRONMENT or "").lower() == "production"
+        )
+        is_test = bool(self.TEST_MODE)
+
+        if is_prod and not is_test:
+            secret = (self.SECRET_KEY or "").strip()
+            if not secret:
+                raise ValueError("CRITICAL SECURITY ERROR: SECRET_KEY must be configured in production environments.")
+            if secret in KNOWN_INSECURE_SECRETS or secret.lower() in {s.lower() for s in KNOWN_INSECURE_SECRETS}:
+                raise ValueError("CRITICAL SECURITY ERROR: Default or known placeholder SECRET_KEY cannot be used in production.")
+            if len(secret) < 32:
+                raise ValueError("CRITICAL SECURITY ERROR: Production SECRET_KEY must be at least 32 characters long for cryptographic security.")
 
     def verify_test_isolation(self) -> None:
         """Enforces that if TEST_MODE is True, storage paths MUST be isolated from production/development files."""

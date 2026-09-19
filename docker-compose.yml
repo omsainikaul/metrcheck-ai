@@ -10,7 +10,7 @@ services:
     volumes:
       - ./data:/data
     environment:
-      - SECRET_KEY=change-me-in-production-secure-key
+      - SECRET_KEY=${SECRET_KEY:-CHANGE_ME_USE_A_LONG_RANDOM_SECRET}
       - LLM_API_KEY=${LLM_API_KEY:-}
       - OCR_ENGINE=paddleocr
       - UPLOAD_DIR=/data/uploads

@@ -4,6 +4,7 @@ from models.schemas import ProductInfo, ComplianceResult, RuleTestRequest, RuleT
 from compliance.engine import engine
 from compliance.rules.registry import registry
 from database.db import get_analysis
+from auth.security import get_current_user, check_tenant_access
 
 router = APIRouter()
 
@@ -63,14 +64,32 @@ async def test_rule(req: RuleTestRequest):
         raise HTTPException(status_code=500, detail=f"Simulation error: {str(e)}")
 
 @router.get("/compliance/conflicts/{analysis_id}")
-async def get_analysis_conflicts(analysis_id: str):
+async def get_analysis_conflicts(
+    analysis_id: str,
+    user: dict = Depends(get_current_user),
+):
+    import json
     analysis_data = await get_analysis(analysis_id)
     if not analysis_data:
         raise HTTPException(status_code=404, detail=f"Analysis with ID '{analysis_id}' not found")
     
-    result = analysis_data.get("result", {})
-    compliance = result.get("compliance", {})
-    conflicts = compliance.get("conflicts", [])
+    check_tenant_access(user, analysis_data, raise_exception=True)
+    
+    compliance_raw = analysis_data.get("compliance_result") or analysis_data.get("result") or {}
+    if isinstance(compliance_raw, str):
+        try:
+            compliance_raw = json.loads(compliance_raw)
+        except Exception:
+            compliance_raw = {}
+    
+    conflicts = []
+    if isinstance(compliance_raw, dict):
+        if "conflicts" in compliance_raw and isinstance(compliance_raw["conflicts"], list):
+            conflicts = compliance_raw["conflicts"]
+        elif "compliance" in compliance_raw and isinstance(compliance_raw["compliance"], dict):
+            conflicts = compliance_raw["compliance"].get("conflicts", [])
+
     return {"analysis_id": analysis_id, "conflicts": conflicts}
+
 
 

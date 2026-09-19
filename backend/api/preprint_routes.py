@@ -414,19 +414,17 @@ async def list_preprint_artworks(
 ):
     """List all pre-print artworks with tenant and IDOR filtering."""
     user_role = user.get("role")
-    effective_owner = owner_user_id
-    effective_org = user.get("organization_id")
+    user_org = (user.get("organization_id") or "").strip()
 
     if user_role == ROLE_ADMIN:
-        effective_org = None  # Admins have statutory cross-tenant visibility
-    elif user_role in (ROLE_ENFORCEMENT, ROLE_AUDIT):
-        # Officers scoped to department org
-        pass
-    elif user_role == ROLE_MERCHANT:
-        # Merchants scoped to username and org
-        effective_owner = user.get("username")
+        artworks = await list_artworks(owner_user_id=owner_user_id, organization_id=None)
+    else:
+        if not user_org:
+            return {"artworks": [], "total": 0}
+        effective_owner = user.get("username") if user_role == ROLE_MERCHANT else owner_user_id
+        raw_artworks = await list_artworks(owner_user_id=effective_owner, organization_id=user_org)
+        artworks = [a for a in raw_artworks if check_tenant_access(user, a)]
 
-    artworks = await list_artworks(owner_user_id=effective_owner, organization_id=effective_org)
     return {"artworks": artworks, "total": len(artworks)}
 
 

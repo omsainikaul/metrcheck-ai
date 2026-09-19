@@ -257,7 +257,7 @@ def test_08_check_tenant_access_admin_supervision():
 
 
 def test_09_check_tenant_access_officer_scoped():
-    """Officers can only access data within their organization or legacy unassigned data."""
+    """Officers can only access data within their organization. Unassigned legacy data is ADMIN-only."""
     officer_dept_a = {"username": "officer_a", "role": ROLE_ENFORCEMENT, "organization_id": "org_dept_a"}
     record_same_org = {"organization_id": "org_dept_a", "owner_user_id": "merchant_a"}
     record_other_org = {"organization_id": "org_dept_b", "owner_user_id": "merchant_b"}
@@ -265,7 +265,7 @@ def test_09_check_tenant_access_officer_scoped():
 
     assert check_tenant_access(officer_dept_a, record_same_org) is True
     assert check_tenant_access(officer_dept_a, record_other_org) is False
-    assert check_tenant_access(officer_dept_a, record_legacy_unassigned) is True
+    assert check_tenant_access(officer_dept_a, record_legacy_unassigned) is False
 
 
 def test_10_check_tenant_access_merchant_strict_ownership():

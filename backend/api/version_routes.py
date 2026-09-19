@@ -175,17 +175,18 @@ async def list_recent_comparisons(
     user: dict = Depends(get_current_user),
 ):
     """List saved version comparisons scoped to tenant."""
-    effective_owner = owner_user_id
-    effective_org = user.get("organization_id")
-
     user_role = user.get("role")
-    if user_role == ROLE_ADMIN:
-        effective_org = None
-    elif user_role == ROLE_MERCHANT:
-        effective_owner = user.get("username")
-        effective_org = user.get("organization_id")
+    user_org = (user.get("organization_id") or "").strip()
 
-    comps = await list_version_comparisons(owner_user_id=effective_owner, organization_id=effective_org, limit=limit)
+    if user_role == ROLE_ADMIN:
+        comps = await list_version_comparisons(owner_user_id=owner_user_id, organization_id=None, limit=limit)
+    else:
+        if not user_org:
+            return {"comparisons": [], "total": 0}
+        effective_owner = user.get("username") if user_role == ROLE_MERCHANT else owner_user_id
+        raw_comps = await list_version_comparisons(owner_user_id=effective_owner, organization_id=user_org, limit=limit)
+        comps = [c for c in raw_comps if check_tenant_access(user, c)]
+
     return {"comparisons": comps, "total": len(comps)}
 
 

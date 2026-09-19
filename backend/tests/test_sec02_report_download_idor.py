@@ -42,15 +42,15 @@ async def _create_test_environment():
     salt_aud, pwh_aud = hash_password("pass_aud_123")
     salt_adm, pwh_adm = hash_password("pass_adm_123")
 
-    for u, p, s, r, f in [
-        ("sec02_merchant_a", pwh_a, salt_a, ROLE_MERCHANT, "Merchant Alice"),
-        ("sec02_merchant_b", pwh_b, salt_b, ROLE_MERCHANT, "Merchant Bob"),
-        ("sec02_officer", pwh_off, salt_off, ROLE_ENFORCEMENT, "Officer Charlie"),
-        ("sec02_auditor", pwh_aud, salt_aud, ROLE_AUDIT, "Auditor Dave"),
-        ("sec02_admin", pwh_adm, salt_adm, ROLE_ADMIN, "Admin Eve"),
+    for u, p, s, r, f, org in [
+        ("sec02_merchant_a", pwh_a, salt_a, ROLE_MERCHANT, "Merchant Alice", "org_sec02_merchant_a"),
+        ("sec02_merchant_b", pwh_b, salt_b, ROLE_MERCHANT, "Merchant Bob", "org_sec02_merchant_b"),
+        ("sec02_officer", pwh_off, salt_off, ROLE_ENFORCEMENT, "Officer Charlie", "org_sec02_merchant_b"),
+        ("sec02_auditor", pwh_aud, salt_aud, ROLE_AUDIT, "Auditor Dave", "org_sec02_merchant_b"),
+        ("sec02_admin", pwh_adm, salt_adm, ROLE_ADMIN, "Admin Eve", "org_ministry"),
     ]:
         try:
-            await create_user(u, p, s, r, f)
+            await create_user(u, p, s, r, f, organization_id=org)
         except Exception:
             pass
 

@@ -307,11 +307,11 @@ async def test_08_officer_and_admin_authorized_access():
     except Exception:
         pass
     try:
-        await create_user("sec01_enf_off", pwh, salt, ROLE_ENFORCEMENT, "Enforcement Officer")
+        await create_user("sec01_enf_off", pwh, salt, ROLE_ENFORCEMENT, "Enforcement Officer", organization_id="org_merchant_john")
     except Exception:
         pass
     try:
-        await create_user("sec01_aud_off", pwh, salt, ROLE_AUDIT, "Audit Officer")
+        await create_user("sec01_aud_off", pwh, salt, ROLE_AUDIT, "Audit Officer", organization_id="org_merchant_john")
     except Exception:
         pass
 

@@ -134,7 +134,7 @@ async def test_privileged_officer_and_admin_deletion():
 
     pwh, salt = hash_password("pass123")
     await create_user("admin_del", pwh, salt, ROLE_ADMIN, "Admin User")
-    await create_user("officer_del", pwh, salt, ROLE_ENFORCEMENT, "Officer User")
+    await create_user("officer_del", pwh, salt, ROLE_ENFORCEMENT, "Officer User", organization_id="org_merchant_owner")
     await create_user("merchant_owner", pwh, salt, ROLE_MERCHANT, "Merchant User")
 
     token_admin = create_token("admin_del", ROLE_ADMIN)
@@ -185,7 +185,7 @@ async def test_audit_officer_cannot_delete():
     client = TestClient(app)
 
     pwh, salt = hash_password("pass123")
-    await create_user("audit_inspector", pwh, salt, ROLE_AUDIT, "Audit Inspector")
+    await create_user("audit_inspector", pwh, salt, ROLE_AUDIT, "Audit Inspector", organization_id="org_ministry")
     token_audit = create_token("audit_inspector", ROLE_AUDIT)
 
     aid = "item-audit-test"
@@ -200,7 +200,8 @@ async def test_audit_officer_cannot_delete():
         "status": "COMPLIANT",
         "created_at": "2026-09-12T12:00:00Z",
         "images": [],
-        "owner_user_id": "audit_inspector"
+        "owner_user_id": "audit_inspector",
+        "organization_id": "org_ministry",
     })
 
     resp = client.delete(f"/api/history/{aid}", headers={"Authorization": f"Bearer {token_audit}"})
@@ -238,8 +239,8 @@ async def test_clear_all_history_admin_only():
 
     pwh, salt = hash_password("pass123")
     await create_user("admin_clear", pwh, salt, ROLE_ADMIN, "Admin User")
-    await create_user("officer_clear", pwh, salt, ROLE_ENFORCEMENT, "Officer User")
-    await create_user("audit_clear", pwh, salt, ROLE_AUDIT, "Audit User")
+    await create_user("officer_clear", pwh, salt, ROLE_ENFORCEMENT, "Officer User", organization_id="org_ministry")
+    await create_user("audit_clear", pwh, salt, ROLE_AUDIT, "Audit User", organization_id="org_ministry")
     await create_user("merchant_clear", pwh, salt, ROLE_MERCHANT, "Merchant User")
 
     token_admin = create_token("admin_clear", ROLE_ADMIN)

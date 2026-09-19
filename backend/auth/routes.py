@@ -571,9 +571,47 @@ async def create_user_admin_legacy(
         )
 
     username = req.username.strip()
+    if not username:
+        raise HTTPException(status_code=400, detail="Username is required")
+
     existing = await get_user_by_username(username)
     if existing:
         raise HTTPException(status_code=409, detail="Username already exists")
+
+    org_id = (req.organization_id or "").strip()
+    if req.role in (ROLE_ENFORCEMENT, ROLE_AUDIT):
+        if not org_id:
+            raise HTTPException(
+                status_code=400,
+                detail="Explicit organization_id is required for enforcement and audit officer provisioning."
+            )
+        org = await get_organization(org_id)
+        if not org:
+            raise HTTPException(
+                status_code=400,
+                detail=f"Organization '{org_id}' does not exist.",
+            )
+        if org.get("status") != "ACTIVE":
+            raise HTTPException(
+                status_code=400,
+                detail=f"Organization '{org_id}' is inactive.",
+            )
+    elif req.role == ROLE_MERCHANT:
+        if not org_id:
+            org_id = f"org_{username.lower()}"
+            await create_organization(id=org_id, name=f"{username.capitalize()} Merchant Org", status="ACTIVE")
+        else:
+            org = await get_organization(org_id)
+            if not org:
+                raise HTTPException(
+                    status_code=400,
+                    detail=f"Organization '{org_id}' does not exist.",
+                )
+            if org.get("status") != "ACTIVE":
+                raise HTTPException(
+                    status_code=400,
+                    detail=f"Organization '{org_id}' is inactive.",
+                )
 
     norm_email = normalize_email(req.email)
     if norm_email:
@@ -592,6 +630,7 @@ async def create_user_admin_legacy(
         full_name=req.full_name,
         jurisdiction=req.jurisdiction,
         email=norm_email,
+        organization_id=org_id,
     )
     if not ok:
         raise HTTPException(status_code=400, detail="Could not create user")
@@ -620,6 +659,31 @@ async def update_user_admin_legacy(
             detail="Role must be ENFORCEMENT_OFFICER, AUDIT_OFFICER, or MERCHANT_PUBLIC",
         )
 
+    target_org = None
+    if req.organization_id is not None:
+        raw_org = req.organization_id.strip()
+        effective_role = req.role if req.role is not None else target["role"]
+        if not raw_org:
+            if effective_role in (ROLE_ENFORCEMENT, ROLE_AUDIT, ROLE_MERCHANT):
+                raise HTTPException(
+                    status_code=400,
+                    detail="Cannot remove organization from a tenant-scoped user.",
+                )
+            target_org = ""
+        else:
+            org = await get_organization(raw_org)
+            if not org:
+                raise HTTPException(
+                    status_code=400,
+                    detail=f"Organization '{raw_org}' does not exist.",
+                )
+            if org.get("status") != "ACTIVE":
+                raise HTTPException(
+                    status_code=400,
+                    detail=f"Organization '{raw_org}' is inactive.",
+                )
+            target_org = raw_org
+
     norm_email = None
     if req.email is not None:
         raw_email = req.email.strip()
@@ -645,6 +709,7 @@ async def update_user_admin_legacy(
         password_hash=pw_hash,
         salt=salt,
         email=norm_email,
+        organization_id=target_org,
     )
 
     refreshed = await get_user_by_username(target["username"])
@@ -720,15 +785,37 @@ async def admin_provision_user(
         raise HTTPException(status_code=409, detail="Email address is already registered")
 
     # Determine tenant organization
-    if req.organization_id and req.organization_id.strip():
+    if target_role in (ROLE_AUDIT, ROLE_ENFORCEMENT):
+        if not req.organization_id or not req.organization_id.strip():
+            raise HTTPException(
+                status_code=400,
+                detail="Explicit organization_id is required for enforcement and audit officer provisioning."
+            )
         org_id = req.organization_id.strip()
-    elif target_role in (ROLE_AUDIT, ROLE_ENFORCEMENT):
-        org_id = "org_ministry"
+        if req.organization_name and req.organization_name.strip():
+            await create_organization(id=org_id, name=req.organization_name.strip(), status="ACTIVE")
     else:
-        org_id = f"org_{username.lower()}"
+        if req.organization_id and req.organization_id.strip():
+            org_id = req.organization_id.strip()
+            if req.organization_name and req.organization_name.strip():
+                await create_organization(id=org_id, name=req.organization_name.strip(), status="ACTIVE")
+        else:
+            org_id = f"org_{username.lower()}"
+            org_name = req.organization_name.strip() if req.organization_name else f"{username.capitalize()} Packagers Corp"
+            await create_organization(id=org_id, name=org_name, status="ACTIVE")
 
-    if req.organization_name and req.organization_name.strip():
-        await create_organization(id=org_id, name=req.organization_name.strip(), status="ACTIVE")
+    # Strict active organization check
+    org = await get_organization(org_id)
+    if not org:
+        raise HTTPException(
+            status_code=400,
+            detail=f"Organization '{org_id}' does not exist.",
+        )
+    if org.get("status") != "ACTIVE":
+        raise HTTPException(
+            status_code=400,
+            detail=f"Organization '{org_id}' is inactive.",
+        )
 
     raw_token, token_hash, expires_at = generate_invitation_token(expire_hours=24)
     ok = await create_invited_user(

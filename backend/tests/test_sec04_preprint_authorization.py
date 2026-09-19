@@ -66,15 +66,15 @@ async def _setup_sec04_test_data():
     salt_aud, pwh_aud = hash_password("pass_aud_123")
     salt_adm, pwh_adm = hash_password("pass_adm_123")
 
-    for u, p, s, r, f in [
-        ("sec04_merchant_a", pwh_a, salt_a, ROLE_MERCHANT, "Merchant Alice"),
-        ("sec04_merchant_b", pwh_b, salt_b, ROLE_MERCHANT, "Merchant Bob"),
-        ("sec04_officer", pwh_off, salt_off, ROLE_ENFORCEMENT, "Officer Charlie"),
-        ("sec04_auditor", pwh_aud, salt_aud, ROLE_AUDIT, "Auditor Dave"),
-        ("sec04_admin", pwh_adm, salt_adm, ROLE_ADMIN, "Admin Eve"),
+    for u, p, s, r, f, org in [
+        ("sec04_merchant_a", pwh_a, salt_a, ROLE_MERCHANT, "Merchant Alice", "org_sec04_merchant_a"),
+        ("sec04_merchant_b", pwh_b, salt_b, ROLE_MERCHANT, "Merchant Bob", "org_sec04_merchant_b"),
+        ("sec04_officer", pwh_off, salt_off, ROLE_ENFORCEMENT, "Officer Charlie", "org_sec04_merchant_a"),
+        ("sec04_auditor", pwh_aud, salt_aud, ROLE_AUDIT, "Auditor Dave", "org_sec04_merchant_a"),
+        ("sec04_admin", pwh_adm, salt_adm, ROLE_ADMIN, "Admin Eve", "org_ministry"),
     ]:
         try:
-            await create_user(u, p, s, r, f)
+            await create_user(u, p, s, r, f, organization_id=org)
         except Exception:
             pass
 

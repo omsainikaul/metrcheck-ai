@@ -93,25 +93,19 @@ async def list_history(user: dict = Depends(get_current_user)):
 
     if user_role == ROLE_ADMIN:
         analyses = await get_analyses()
-    elif user_role in (ROLE_ENFORCEMENT, ROLE_AUDIT):
-        analyses = await get_analyses(organization_id=user_org if user_org else None)
-    else:  # ROLE_MERCHANT
-        analyses = await get_analyses(organization_id=user_org if user_org else None)
+    else:
+        if not user_org:
+            return []
+        analyses = await get_analyses(organization_id=user_org)
 
     history = []
     for a in analyses:
         if _is_demo_id(a.get('id', '')):
             continue
         
-        # Verify tenant boundary
-        res_org = (a.get("organization_id") or "").strip()
-        if user_role != ROLE_ADMIN and res_org and user_org and res_org != user_org:
+        # Verify tenant boundary via fail-closed guard
+        if not check_tenant_access(user, a):
             continue
-
-        # IDOR check: Merchant users can only list their own screening records
-        if user_role == ROLE_MERCHANT:
-            if not _user_owns_record(user, a.get("owner_user_id")):
-                continue
 
         img_fn = a.get('image_filename') or ''
         image_url = f"/api/images/{img_fn}" if img_fn else "/placeholder.png"
@@ -139,18 +133,17 @@ async def search_history(
     """Search & filter analysed products — requires authentication with tenant and IDOR protection."""
     user_role = user.get("role")
     user_org = (user.get("organization_id") or "").strip()
+
+    if user_role != ROLE_ADMIN and not user_org:
+        return []
+
     org_filter = user_org if (user_role != ROLE_ADMIN and user_org) else None
 
     rows = await search_analyses(query=q, status=status, organization_id=org_filter, limit=limit)
     res = []
     for a in rows:
-        res_org = (a.get("organization_id") or "").strip()
-        if user_role != ROLE_ADMIN and res_org and user_org and res_org != user_org:
+        if not check_tenant_access(user, a):
             continue
-
-        if user_role == ROLE_MERCHANT:
-            if not _user_owns_record(user, a.get("owner_user_id")):
-                continue
 
         img_fn = a.get('image_filename') or ''
         image_url = f"/api/images/{img_fn}" if img_fn else "/placeholder.png"

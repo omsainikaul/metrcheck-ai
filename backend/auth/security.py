@@ -538,19 +538,22 @@ async def public_user(
 
 def check_tenant_access(user: Optional[dict], resource: Optional[dict], allow_public: bool = False, raise_exception: bool = False) -> bool:
     """
-    Multi-tenant isolation security enforcement guard.
+    Multi-tenant isolation security enforcement guard (Strictly Fail-Closed).
     Rules:
     1. If user is None or not authenticated:
        - If allow_public is True, allows access; else False (or 401).
     2. Admin (ROLE_ADMIN):
        - System-wide statutory oversight permitted across all organizations.
     3. Enforcement / Audit Officers (ROLE_ENFORCEMENT, ROLE_AUDIT):
-       - Scoped to their assigned organization_id.
-       - If resource has organization_id: user's organization_id must match resource's organization_id.
-       - If resource has NO organization_id (legacy unassigned data), access is allowed for backward compatibility.
+       - Strictly scoped to their assigned organization_id.
+       - Both user.organization_id and resource.organization_id must be non-empty and match.
+       - Unassigned legacy resources (resource.organization_id == "") are ADMIN-only.
     4. Merchant / Public (ROLE_MERCHANT):
        - Strictly scoped to their organization_id.
-       - Must match organization_id AND record ownership (owner_user_id == username or user.id).
+       - Both user.organization_id and resource.organization_id must be non-empty and match.
+       - Must ALSO match record ownership (owner_user_id == username or user.id).
+    5. Unknown / Missing roles:
+       - Deny access (403 Forbidden).
     
     Returns True if permitted, False otherwise (or raises HTTPException if raise_exception is True).
     """
@@ -582,26 +585,24 @@ def check_tenant_access(user: Optional[dict], resource: Optional[dict], allow_pu
     username = (user.get("username") or "").strip()
     uid = str(user.get("id", "")).strip() if user.get("id") is not None else ""
 
-    # Officers (ROLE_ENFORCEMENT, ROLE_AUDIT)
+    # Officers (ROLE_ENFORCEMENT, ROLE_AUDIT) - strictly fail-closed
     if user_role in (ROLE_ENFORCEMENT, ROLE_AUDIT):
-        if res_org:
-            if user_org and user_org != res_org:
-                if raise_exception:
-                    raise HTTPException(
-                        status_code=status.HTTP_403_FORBIDDEN,
-                        detail="Access denied: Resource belongs to a different organization."
-                    )
-                return False
-            return True
-        return True
-
-    # Merchants (ROLE_MERCHANT)
-    if user_role == ROLE_MERCHANT:
-        if res_org and user_org and user_org != res_org:
+        if not user_org or not res_org or user_org != res_org:
             if raise_exception:
                 raise HTTPException(
                     status_code=status.HTTP_403_FORBIDDEN,
-                    detail="Access denied: Resource does not belong to your organization."
+                    detail="Access denied: Resource does not belong to your organization or organization is not assigned."
+                )
+            return False
+        return True
+
+    # Merchants (ROLE_MERCHANT) - strictly fail-closed (org match + ownership)
+    if user_role == ROLE_MERCHANT:
+        if not user_org or not res_org or user_org != res_org:
+            if raise_exception:
+                raise HTTPException(
+                    status_code=status.HTTP_403_FORBIDDEN,
+                    detail="Access denied: Resource does not belong to your organization or organization is not assigned."
                 )
             return False
         

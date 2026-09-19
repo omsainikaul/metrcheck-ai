@@ -482,6 +482,21 @@ async def save_analysis(data_or_id=None, **kwargs):
             images_val = json.dumps(images_val)
         created_at_val = data.get('created_at') or datetime.now(timezone.utc).isoformat()
 
+        org_id = (data.get('organization_id', '') or '').strip()
+        owner_id = (data.get('owner_user_id', '') or '').strip()
+        if not org_id and owner_id:
+            try:
+                user = await get_user_by_username(owner_id)
+                if user and user.get('organization_id'):
+                    org_id = user['organization_id']
+                else:
+                    org_id = f"org_{owner_id.lower()}"
+                    existing_org = await get_organization(org_id)
+                    if not existing_org:
+                        await upsert_organization({"id": org_id, "name": f"{owner_id} Org", "status": "ACTIVE"})
+            except Exception:
+                pass
+
         await db.execute('''
             INSERT OR REPLACE INTO analyses (
                 id, product_name, image_filename, ocr_text, extracted_data,
@@ -501,7 +516,7 @@ async def save_analysis(data_or_id=None, **kwargs):
             created_at_val,
             images_val,
             data.get('owner_user_id', '') or '',
-            data.get('organization_id', '') or '',
+            org_id,
             data.get('integrity_hash', '') or '',
             data.get('system_version', '') or '',
             data.get('ocr_engine_version', '') or '',
@@ -705,13 +720,32 @@ async def create_user(username: str, password_hash: str, salt: str, role: str,
                       organization_id: str = "") -> bool:
     """Insert a user. Returns False if username or email already exists."""
     import datetime
+    resolved_org = organization_id.strip() if organization_id else ""
+    if not resolved_org:
+        if role == "MERCHANT_PUBLIC":
+            resolved_org = f"org_{username.strip().lower()}"
+        elif role == "ADMIN":
+            resolved_org = "org_ministry"
+
+    if resolved_org:
+        try:
+            existing_org = await get_organization(resolved_org)
+            if not existing_org:
+                await upsert_organization({
+                    "id": resolved_org,
+                    "name": f"{resolved_org} Organization",
+                    "status": "ACTIVE"
+                })
+        except Exception:
+            pass
+
     db = await get_db()
     try:
         await db.execute('''
             INSERT INTO users (username, password_hash, salt, role, full_name, jurisdiction, email, organization_id, created_at)
             VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
         ''', (username, password_hash, salt, role, full_name, jurisdiction, email.strip().lower() if email else "",
-              organization_id.strip() if organization_id else "",
+              resolved_org,
               datetime.datetime.now().isoformat(timespec="seconds")))
         await db.commit()
         return True
@@ -1495,6 +1529,21 @@ async def get_batch_risk_distribution(
 
 async def save_artwork(artwork_data: Dict[str, Any]) -> None:
     """Save or update an artwork document in the database."""
+    org_id = (artwork_data.get('organization_id', '') or '').strip()
+    owner_id = (artwork_data.get('owner_user_id', '') or '').strip()
+    if not org_id and owner_id:
+        try:
+            user = await get_user_by_username(owner_id)
+            if user and user.get('organization_id'):
+                org_id = user['organization_id']
+            else:
+                org_id = f"org_{owner_id.lower()}"
+                existing_org = await get_organization(org_id)
+                if not existing_org:
+                    await upsert_organization({"id": org_id, "name": f"{owner_id} Org", "status": "ACTIVE"})
+        except Exception:
+            pass
+
     db = await get_db()
     try:
         await db.execute('''
@@ -1525,7 +1574,7 @@ async def save_artwork(artwork_data: Dict[str, Any]) -> None:
             json.dumps(artwork_data.get('analysis_result')) if artwork_data.get('analysis_result') else None,
             json.dumps(artwork_data.get('pages_data', [])),
             artwork_data.get('owner_user_id', '') or '',
-            artwork_data.get('organization_id', '') or '',
+            org_id,
             artwork_data['created_at'],
             artwork_data.get('updated_at', artwork_data['created_at'])
         ))

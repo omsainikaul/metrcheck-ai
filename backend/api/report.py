@@ -97,10 +97,18 @@ async def _get_full_analysis_object(id: str, user: dict) -> AnalysisResponse:
             )
         ]
 
-    comp_dict = json.loads(data['compliance_result'])
+    comp_dict = json.loads(data['compliance_result']) if isinstance(data['compliance_result'], str) else (data['compliance_result'] or {})
+    checks_raw = comp_dict.get('checks', [])
+    if 'total_rules' not in comp_dict:
+        comp_dict['total_rules'] = len(checks_raw)
+    if 'passed_rules' not in comp_dict:
+        comp_dict['passed_rules'] = sum(1 for c in checks_raw if (c.get('status') if isinstance(c, dict) else getattr(c, 'status', '')) in ('PASS', 'COMPLIANT'))
+    if 'failed_rules' not in comp_dict:
+        comp_dict['failed_rules'] = sum(1 for c in checks_raw if (c.get('status') if isinstance(c, dict) else getattr(c, 'status', '')) in ('FAIL', 'NON_COMPLIANT'))
+
     if 'recommendations' not in comp_dict or not comp_dict['recommendations']:
         from compliance.recommendations import generate_recommendations
-        checks = [ComplianceCheck(**c) for c in comp_dict.get('checks', [])]
+        checks = [ComplianceCheck(**c) if isinstance(c, dict) else c for c in checks_raw]
         comp_dict['recommendations'] = [r.model_dump() for r in generate_recommendations(checks)]
 
     compliance_res = ComplianceResult(**comp_dict)

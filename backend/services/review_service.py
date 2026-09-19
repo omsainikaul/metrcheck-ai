@@ -941,7 +941,7 @@ async def get_officer_dashboard_summary(
     elif organization_id:
         reviews = await list_reviews(organization_id=organization_id, limit=500)
     else:
-        reviews = await list_reviews(limit=500)
+        reviews = []
 
     users = await get_all_users()
     
@@ -949,13 +949,15 @@ async def get_officer_dashboard_summary(
         officer_users = [
             u for u in users 
             if u.get("role") in ("ADMIN", "ENFORCEMENT_OFFICER", "AUDIT_OFFICER")
-            and (u.get("organization_id") == organization_id or not u.get("organization_id"))
+            and u.get("organization_id") == organization_id
         ]
-    else:
+    elif user_role == "ADMIN":
         officer_users = [
             u for u in users 
             if u.get("role") in ("ADMIN", "ENFORCEMENT_OFFICER", "AUDIT_OFFICER")
         ]
+    else:
+        officer_users = []
 
     total_q = len(reviews)
     pending_cnt = sum(1 for r in reviews if r.get("status") == ReviewStatus.PENDING_REVIEW)

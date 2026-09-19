@@ -375,14 +375,14 @@ async def test_officer_review_included_in_reports(client):
 async def test_idor_and_role_access_control(client):
     """Verify merchants cannot access other merchants' reports while admins/officers can access any."""
     salt, pwh = hash_password("pass123")
-    for uname, role in [
-        ("merchant_alice", ROLE_MERCHANT),
-        ("merchant_bob", ROLE_MERCHANT),
-        ("officer_test", ROLE_ENFORCEMENT),
-        ("auditor_test", ROLE_AUDIT),
+    for uname, role, org in [
+        ("merchant_alice", ROLE_MERCHANT, "org_merchant_alice"),
+        ("merchant_bob", ROLE_MERCHANT, "org_merchant_bob"),
+        ("officer_test", ROLE_ENFORCEMENT, "org_merchant_alice"),
+        ("auditor_test", ROLE_AUDIT, "org_merchant_alice"),
     ]:
         try:
-            await create_user(uname, pwh, salt, role, uname)
+            await create_user(uname, pwh, salt, role, uname, organization_id=org)
         except Exception:
             pass
 

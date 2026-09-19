@@ -106,23 +106,35 @@ async def get_review_queue(
     Returns filterable review queue with deterministic priority ordering
     (CRITICAL > HIGH > MEDIUM > LOW, followed by oldest age) scoped to tenant.
     """
-    org_id = current_user.get("organization_id")
-    if current_user.get("role") == ROLE_ADMIN:
-        org_id = None
+    user_role = current_user.get("role")
+    user_org = (current_user.get("organization_id") or "").strip()
 
-    raw_reviews = await list_reviews(
-        status=status,
-        assigned_officer=assigned_officer,
-        risk_level=risk_level,
-        organization_id=org_id,
-        limit=limit
-    )
+    if user_role == ROLE_ADMIN:
+        raw_reviews = await list_reviews(
+            status=status,
+            assigned_officer=assigned_officer,
+            risk_level=risk_level,
+            organization_id=None,
+            limit=limit
+        )
+    else:
+        if not user_org:
+            return []
+        raw_reviews = await list_reviews(
+            status=status,
+            assigned_officer=assigned_officer,
+            risk_level=risk_level,
+            organization_id=user_org,
+            limit=limit
+        )
 
     items: List[ReviewItem] = []
     now = datetime.now(timezone.utc)
 
     for r in raw_reviews:
         rev = parse_review_db_record(r)
+        if not check_tenant_access(current_user, rev):
+            continue
         
         # Calculate age in hours
         created_str = rev.get("created_at") or now.isoformat()

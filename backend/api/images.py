@@ -123,8 +123,8 @@ async def get_secure_file(
                         is_authorized = True
                         break
 
-            # If both tables were checked and neither granted access
-            if not is_authorized and (analysis_rows or artwork_rows):
+            # If access is not authorized via linked analysis or artwork records
+            if not is_authorized:
                 client_ip = request.client.host if request.client else ""
                 try:
                     await log_security_event(
@@ -132,7 +132,7 @@ async def get_secure_file(
                         actor_username=username,
                         ip_address=client_ip,
                         resource_id=filename,
-                        details=f"User '{username}' attempted unauthorized access across tenant or ownership boundary."
+                        details=f"User '{username}' attempted unauthorized access to file '{filename}' (cross-tenant or unlinked orphan)."
                     )
                 except Exception as log_err:
                     logger.warning(f"Failed to record security audit log: {log_err}")
@@ -141,16 +141,6 @@ async def get_secure_file(
                     status_code=status.HTTP_403_FORBIDDEN,
                     detail="Access denied. You do not have permission to access this file."
                 )
-
-            # If the file exists in uploads but is not linked to any DB record
-            if not is_authorized and not analysis_rows and not artwork_rows:
-                if user_role in (ROLE_ENFORCEMENT, ROLE_AUDIT):
-                    is_authorized = True
-                else:
-                    raise HTTPException(
-                        status_code=status.HTTP_403_FORBIDDEN,
-                        detail="Access denied. File is not associated with your account or organization."
-                    )
 
         finally:
             await db.close()

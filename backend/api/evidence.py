@@ -184,8 +184,10 @@ async def get_evidence_history(
     current_user: dict = Depends(get_current_user),
 ):
     analysis_data = await get_analysis(analysis_id)
-    if analysis_data and not check_tenant_access(current_user, analysis_data):
-        raise HTTPException(status_code=403, detail="Access denied. Cross-organization evidence history prohibited.")
+    if not analysis_data:
+        raise HTTPException(status_code=404, detail="Analysis not found")
+
+    check_tenant_access(current_user, analysis_data, raise_exception=True)
 
     logs = await get_evidence_audit_logs(analysis_id)
     return EvidenceHistoryResponse(
@@ -230,4 +232,4 @@ async def get_panel_summary(
     images = analysis_res.get("images", [])
     compliance_checks = analysis_res.get("compliance_checks", [])
 
-    return get_panel_compliance_summary(compliance_checks, images, analysis_id=analysis_id)
+    return get_panel_compliance_summary(compliance_checks, images, analysis_id=analysis_id)

@@ -269,22 +269,55 @@ async def test_07_admin_access_200():
 
 @pytest.mark.asyncio
 async def test_08_query_param_token_authentication():
-    """Test 8: Query param ?token= authenticates direct browser downloads / window.open()."""
+    """Test 8: Query param ?ticket= authenticates direct browser downloads / window.open() via signed download tickets."""
     env = await _create_test_environment()
     client = TestClient(app)
     analysis_id = env["analysis_id"]
     token_b = env["token_b"]
+    headers_b = {"Authorization": f"Bearer {token_b}"}
 
-    resp_pdf = client.get(f"/api/report/{analysis_id}?token={token_b}")
+    # Request download ticket for PDF
+    ticket_res_pdf = client.post(
+        "/api/auth/download-ticket",
+        headers=headers_b,
+        json={"resource_type": "report", "resource_id": analysis_id}
+    )
+    assert ticket_res_pdf.status_code == 200
+    ticket_pdf = ticket_res_pdf.json()["ticket"]
+
+    resp_pdf = client.get(f"/api/report/{analysis_id}?ticket={ticket_pdf}")
     assert resp_pdf.status_code == 200
     assert resp_pdf.headers["content-type"] == "application/pdf"
 
-    resp_csv = client.get(f"/api/report/{analysis_id}/csv?token={token_b}")
+    # Request download ticket for CSV
+    ticket_res_csv = client.post(
+        "/api/auth/download-ticket",
+        headers=headers_b,
+        json={"resource_type": "report", "resource_id": analysis_id}
+    )
+    assert ticket_res_csv.status_code == 200
+    ticket_csv = ticket_res_csv.json()["ticket"]
+
+    resp_csv = client.get(f"/api/report/{analysis_id}/csv?ticket={ticket_csv}")
     assert resp_csv.status_code == 200
     assert "Bob's Organic Honey" in resp_csv.text
 
-    resp_xlsx = client.get(f"/api/report/{analysis_id}/xlsx?token={token_b}")
+    # Request download ticket for XLSX
+    ticket_res_xlsx = client.post(
+        "/api/auth/download-ticket",
+        headers=headers_b,
+        json={"resource_type": "report", "resource_id": analysis_id}
+    )
+    assert ticket_res_xlsx.status_code == 200
+    ticket_xlsx = ticket_res_xlsx.json()["ticket"]
+
+    resp_xlsx = client.get(f"/api/report/{analysis_id}/xlsx?ticket={ticket_xlsx}")
     assert resp_xlsx.status_code == 200
+
+    # Raw session JWT in ?token= is strictly rejected
+    resp_raw_jwt = client.get(f"/api/report/{analysis_id}?token={token_b}")
+    assert resp_raw_jwt.status_code == 401
+
 
 
 @pytest.mark.asyncio

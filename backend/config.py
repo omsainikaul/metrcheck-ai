@@ -63,10 +63,28 @@ class Settings(BaseSettings):
         "::1",
         "localhost",
     ]
+    # SEC-AUD-12: Distributed Rate Limiting Backend
+    RATE_LIMIT_BACKEND: str = "sqlite"  # 'sqlite', 'redis', or 'memory' (testing only)
+    RATE_LIMIT_REDIS_URL: str = ""
+    RATE_LIMIT_FAIL_CLOSED: bool = True
 
     def __init__(self, **values):
         super().__init__(**values)
         self.validate_production_secrets()
+
+    @field_validator('CORS_ORIGINS', mode='before')
+    @classmethod
+    def parse_cors_origins(cls, v):
+        if isinstance(v, str):
+            v = v.strip()
+            if v.startswith('[') and v.endswith(']'):
+                import json
+                try:
+                    return json.loads(v)
+                except Exception:
+                    pass
+            return [p.strip() for p in v.split(',') if p.strip()]
+        return v
 
     @field_validator('TRUSTED_PROXIES', mode='before')
     @classmethod
@@ -90,7 +108,7 @@ class Settings(BaseSettings):
         return os.path.abspath(v)
 
     def validate_production_secrets(self) -> None:
-        """Validates that cryptographic secrets are properly configured for production environments."""
+        """Validates that cryptographic secrets and CORS configurations are properly configured for production environments."""
         is_prod = (
             os.environ.get("METRCHECK_ENV") == "production"
             or os.environ.get("ENVIRONMENT") == "production"
@@ -106,6 +124,14 @@ class Settings(BaseSettings):
                 raise ValueError("CRITICAL SECURITY ERROR: Default or known placeholder SECRET_KEY cannot be used in production.")
             if len(secret) < 32:
                 raise ValueError("CRITICAL SECURITY ERROR: Production SECRET_KEY must be at least 32 characters long for cryptographic security.")
+
+            # SEC-AUD-10: Production CORS Wildcard Hardening
+            cors_origins = self.CORS_ORIGINS if isinstance(self.CORS_ORIGINS, (list, tuple, set)) else [self.CORS_ORIGINS]
+            if "*" in cors_origins or any(str(o).strip() == "*" for o in cors_origins):
+                raise ValueError(
+                    "CRITICAL SECURITY ERROR: Wildcard CORS ('*') is prohibited in production environments when credentials are enabled. "
+                    "Configure explicit trusted domain origins in CORS_ORIGINS."
+                )
 
     def verify_test_isolation(self) -> None:
         """Enforces that if TEST_MODE is True, storage paths MUST be isolated from production/development files."""

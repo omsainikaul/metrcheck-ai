@@ -371,6 +371,44 @@ async def init_db():
         ''')
         await db.commit()
 
+        # ── Download Tickets table (SEC-AUD-11: Short-Lived Single-Use Download Tickets) ──
+        await db.execute('''
+            CREATE TABLE IF NOT EXISTS download_tickets (
+                id TEXT PRIMARY KEY,
+                user_id TEXT NOT NULL,
+                username TEXT NOT NULL,
+                role TEXT NOT NULL,
+                organization_id TEXT NOT NULL,
+                resource_type TEXT NOT NULL,
+                resource_id TEXT NOT NULL,
+                action TEXT NOT NULL DEFAULT 'download',
+                expires_at REAL NOT NULL,
+                redeemed_at REAL DEFAULT NULL,
+                created_at TEXT NOT NULL
+            )
+        ''')
+        await db.commit()
+        try:
+            await db.execute("CREATE INDEX IF NOT EXISTS idx_download_tickets_exp ON download_tickets(expires_at)")
+            await db.commit()
+        except Exception:
+            pass
+
+        # ── Rate Limit Events table (SEC-AUD-12: Multi-Worker Distributed Rate Limiting) ──
+        await db.execute('''
+            CREATE TABLE IF NOT EXISTS rate_limit_events (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                key TEXT NOT NULL,
+                timestamp REAL NOT NULL
+            )
+        ''')
+        await db.commit()
+        try:
+            await db.execute("CREATE INDEX IF NOT EXISTS idx_rate_limit_events_key_ts ON rate_limit_events(key, timestamp)")
+            await db.commit()
+        except Exception:
+            pass
+
         # Idempotently clean up any legacy demo and synthetic test fixtures from SQLite table
         await db.execute("DELETE FROM analyses WHERE id LIKE 'demo-%' OR id LIKE 'test-%' OR id IN ('1', '2', '3')")
         await db.commit()
@@ -2424,8 +2462,98 @@ async def verify_security_audit_chain() -> Dict[str, Any]:
         await db.close()
 
 
+# ═══════════════════════════════════════════════════════════════════════
+# DOWNLOAD TICKETS (SEC-AUD-11: Short-Lived Single-Use Tickets)
+# ═══════════════════════════════════════════════════════════════════════
+
+async def save_download_ticket(
+    ticket_id: str,
+    user_id: str,
+    username: str,
+    role: str,
+    organization_id: str,
+    resource_type: str,
+    resource_id: str,
+    action: str,
+    expires_at: float,
+) -> Dict[str, Any]:
+    """Persists a new short-lived single-use download ticket in SQLite."""
+    import time
+    from datetime import datetime, timezone
+    db = await get_db()
+    try:
+        now_iso = datetime.now(timezone.utc).isoformat()
+        await db.execute(
+            """
+            INSERT INTO download_tickets (id, user_id, username, role, organization_id, resource_type, resource_id, action, expires_at, created_at)
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+            """,
+            (ticket_id, str(user_id or ""), username, role, organization_id, resource_type, resource_id, action, expires_at, now_iso)
+        )
+        await db.commit()
+        return {
+            "id": ticket_id,
+            "username": username,
+            "role": role,
+            "organization_id": organization_id,
+            "resource_type": resource_type,
+            "resource_id": resource_id,
+            "action": action,
+            "expires_at": expires_at,
+        }
+    finally:
+        await db.close()
 
 
+async def redeem_download_ticket_in_db(
+    ticket_id: str,
+    resource_type: str,
+    resource_id: str,
+) -> Optional[Dict[str, Any]]:
+    """
+    Atomically validates and marks a single-use download ticket as redeemed.
+    Returns ticket record dict if valid, or None if expired, already redeemed, or mismatched.
+    """
+    import time
+    db = await get_db()
+    try:
+        now = time.time()
+        cursor = await db.execute(
+            """
+            SELECT id, user_id, username, role, organization_id, resource_type, resource_id, action, expires_at, redeemed_at
+            FROM download_tickets
+            WHERE id = ?
+            """,
+            (ticket_id,)
+        )
+        row = await cursor.fetchone()
+        if not row:
+            return None
+        row_dict = dict(row)
 
+        # 1. Check already redeemed (single-use)
+        if row_dict.get("redeemed_at") is not None:
+            return None
 
+        # 2. Check expiration
+        if row_dict.get("expires_at", 0) < now:
+            return None
 
+        # 3. Check resource_type match
+        if row_dict.get("resource_type") != resource_type:
+            return None
+
+        # 4. Check resource_id match
+        if row_dict.get("resource_id") != resource_id:
+            return None
+
+        # 5. Atomically mark redeemed
+        await db.execute(
+            "UPDATE download_tickets SET redeemed_at = ? WHERE id = ? AND redeemed_at IS NULL",
+            (now, ticket_id)
+        )
+        await db.commit()
+
+        return row_dict
+    finally:
+        await db.close()

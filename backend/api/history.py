@@ -13,7 +13,7 @@ from compliance.rules.legal_metrology import compute_font_size_and_readability
 from integrations.fssai.verifier import fssai_verifier
 from integrations.gs1.verifier import gs1_verifier
 from api.demo import build_demo_response
-from auth.security import get_current_user, check_tenant_access, ROLE_ADMIN, ROLE_ENFORCEMENT, ROLE_AUDIT, ROLE_MERCHANT
+from auth.security import get_current_user, public_user, check_tenant_access, ROLE_ADMIN, ROLE_ENFORCEMENT, ROLE_AUDIT, ROLE_MERCHANT
 from services.integrity_service import verify_analysis_integrity
 
 router = APIRouter()
@@ -162,7 +162,10 @@ async def search_history(
 
 
 @router.get("/history/{id}/integrity")
-async def check_analysis_integrity_endpoint(id: str):
+async def check_analysis_integrity_endpoint(
+    id: str,
+    user: Optional[dict] = Depends(public_user),
+):
     """
     Verify the tamper-evident cryptographic hash of a stored screening analysis.
     Recalculates SHA-256 canonical hash across all static fields and compares with stored digest.
@@ -175,9 +178,29 @@ async def check_analysis_integrity_endpoint(id: str):
             "message": "Demo benchmark fixtures are static immutable references."
         }
 
+    if not user:
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="Authentication required. Please log in."
+        )
+
+    user_status = user.get("status", "ACTIVE") or "ACTIVE"
+    if user_status == "SUSPENDED":
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="Account has been suspended. Please contact system administrator."
+        )
+    if user_status == "INVITED":
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="Account invitation has not been activated yet."
+        )
+
     data = await get_analysis(id)
     if not data:
         raise HTTPException(status_code=404, detail="Analysis not found")
+
+    check_tenant_access(user, data, raise_exception=True)
 
     stored_hash = data.get("integrity_hash") or ""
     extracted_data = json.loads(data['extracted_data']) if isinstance(data['extracted_data'], str) else (data['extracted_data'] or {})

@@ -463,15 +463,72 @@ def decode_token(token: str) -> Optional[dict]:
 _bearer = HTTPBearer(auto_error=False)
 
 
+def generate_download_ticket_string(ticket_id: str) -> str:
+    """Signs a ticket ID with the server's cryptographic secret to prevent tampering."""
+    secret = _secret_key()
+    sig = hmac.new(secret, f"dt:{ticket_id}".encode("utf-8"), hashlib.sha256).hexdigest()[:32]
+    return f"dt_{ticket_id}_{sig}"
+
+
+def parse_and_verify_ticket_string(ticket_str: str) -> Optional[str]:
+    """Validates signature on ticket string and extracts ticket_id."""
+    if not ticket_str or not ticket_str.startswith("dt_"):
+        return None
+    content = ticket_str[3:]
+    if "_" not in content:
+        return None
+    ticket_id, sig = content.rsplit("_", 1)
+    if not ticket_id or not sig:
+        return None
+    secret = _secret_key()
+    expected_sig = hmac.new(secret, f"dt:{ticket_id}".encode("utf-8"), hashlib.sha256).hexdigest()[:32]
+    if not hmac.compare_digest(sig, expected_sig):
+        return None
+    return ticket_id
+
+
+async def validate_ticket_and_get_user(
+    ticket_str: Optional[str],
+    resource_type: str,
+    resource_id: str,
+) -> Optional[dict]:
+    """
+    Validates cryptographic signature, single-use redemption, expiry, and resource match.
+    Returns the authenticated user dict or None.
+    """
+    from database.db import redeem_download_ticket_in_db
+    if not ticket_str:
+        return None
+    ticket_id = parse_and_verify_ticket_string(ticket_str)
+    if not ticket_id:
+        return None
+    ticket_data = await redeem_download_ticket_in_db(ticket_id, resource_type, resource_id)
+    if not ticket_data:
+        return None
+
+    username = ticket_data.get("username", "")
+    user = await get_user_by_username(username)
+    if user:
+        return user
+    return {
+        "id": ticket_data.get("user_id"),
+        "username": username,
+        "role": ticket_data.get("role", ROLE_MERCHANT),
+        "organization_id": ticket_data.get("organization_id", ""),
+        "status": "ACTIVE"
+    }
+
+
 async def get_current_user(
     credentials: Optional[HTTPAuthorizationCredentials] = Depends(_bearer),
-    token: Optional[str] = Query(None, alias="token"),
 ) -> dict:
-    """Authenticate request via Bearer token or token query parameter. 401/403 when missing/invalid/expired/suspended."""
-    raw_token = credentials.credentials if credentials else token
-    if not raw_token:
-        raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED,
-                            detail="Authentication required. Please log in.")
+    """Authenticate request strictly via Bearer token in Authorization header. 401/403 when missing/invalid/expired/suspended."""
+    if not credentials or not credentials.credentials:
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="Authentication required. Please log in."
+        )
+    raw_token = credentials.credentials
     payload = decode_token(raw_token)
     if payload is None:
         raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED,
@@ -520,12 +577,11 @@ def require_roles(*roles: str):
 
 async def public_user(
     credentials: Optional[HTTPAuthorizationCredentials] = Depends(_bearer),
-    token: Optional[str] = Query(None, alias="token"),
 ) -> Optional[dict]:
-    """Optional auth — returns user dict or None (for mixed public/private endpoints)."""
-    raw_token = credentials.credentials if credentials else token
-    if not raw_token:
+    """Optional auth via Authorization header — returns user dict or None (for mixed public/private endpoints)."""
+    if not credentials or not credentials.credentials:
         return None
+    raw_token = credentials.credentials
     payload = decode_token(raw_token)
     if payload is None:
         return None

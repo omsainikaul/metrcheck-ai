@@ -357,14 +357,15 @@ async def test_08_officer_and_admin_authorized_access():
 
 @pytest.mark.asyncio
 async def test_09_query_param_token_authentication():
-    """Test 9: Browser <img> tags authenticate seamlessly via ?token=<token> query parameter."""
+    """Test 9: Browser <img> tags authenticate via signed download tickets and reject raw session JWTs in query params."""
     client = TestClient(app)
     pwh, salt = hash_password("pass123")
     try:
-        await create_user("sec01_alice_qp", pwh, salt, ROLE_MERCHANT, "Alice QP")
+        await create_user("sec01_alice_qp", pwh, salt, ROLE_MERCHANT, "Alice QP", organization_id="org_sec01_alice_qp")
     except Exception:
         pass
     token_alice = create_token("sec01_alice_qp", ROLE_MERCHANT)
+    headers_alice = {"Authorization": f"Bearer {token_alice}"}
 
     file_alice = "analysis_alice_query_param.jpg"
     filepath = os.path.join(settings.UPLOAD_DIR, file_alice)
@@ -382,17 +383,31 @@ async def test_09_query_param_token_authentication():
         "status": "COMPLIANT",
         "created_at": "2026-09-18T10:00:00Z",
         "images": [{"filename": file_alice, "image_url": f"/api/images/{file_alice}"}],
-        "owner_user_id": "sec01_alice_qp"
+        "owner_user_id": "sec01_alice_qp",
+        "organization_id": "org_sec01_alice_qp"
     })
 
     try:
-        # Request with ?token=... and NO Authorization header
-        resp = client.get(f"/api/images/{file_alice}?token={token_alice}")
+        # Request a short-lived download ticket for image
+        ticket_res = client.post(
+            "/api/auth/download-ticket",
+            headers=headers_alice,
+            json={"resource_type": "image", "resource_id": file_alice}
+        )
+        assert ticket_res.status_code == 200
+        ticket = ticket_res.json()["ticket"]
+
+        # Request with valid ?ticket=... and NO Authorization header
+        resp = client.get(f"/api/images/{file_alice}?ticket={ticket}")
         assert resp.status_code == 200
         assert resp.content == b"IMAGE_SERVED_VIA_QUERY_TOKEN"
 
-        # Request with invalid token parameter
-        resp_invalid = client.get(f"/api/images/{file_alice}?token=invalid-junk-token")
+        # Request with raw session JWT in ?token= is strictly rejected
+        resp_jwt = client.get(f"/api/images/{file_alice}?token={token_alice}")
+        assert resp_jwt.status_code == 401
+
+        # Request with invalid ticket parameter
+        resp_invalid = client.get(f"/api/images/{file_alice}?ticket=invalid-junk-ticket")
         assert resp_invalid.status_code == 401
     finally:
         if os.path.exists(filepath):

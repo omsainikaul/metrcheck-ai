@@ -358,41 +358,44 @@ export const api = {
   getHealth: (): Promise<any> => {
     return fetchJSON<any>(`${BASE_URL}/health`);
   },
-  getReportUrl: (id: string, lang?: string): string => {
+  requestDownloadTicket: async (resourceType: string, resourceId: string): Promise<string> => {
+    const res = await fetchJSON<{ ticket: string }>(`${BASE_URL}/auth/download-ticket`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ resource_type: resourceType, resource_id: resourceId }),
+    });
+    return res.ticket;
+  },
+  getReportUrl: (id: string, lang?: string, ticket?: string): string => {
     const params = new URLSearchParams();
     if (lang && lang !== 'en') {
       params.append('lang', lang);
     }
-    const token = tokenStore.get();
-    if (token) {
-      params.append('token', token);
+    if (ticket) {
+      params.append('ticket', ticket);
     }
     const qs = params.toString();
-    return `${BASE_URL}/report/${id}${qs ? `?${qs}` : ''}`;
+    return `${BASE_URL}/report/${encodeURIComponent(id)}${qs ? `?${qs}` : ''}`;
   },
-  getCsvReportUrl: (id: string): string => {
-    const token = tokenStore.get();
-    return `${BASE_URL}/report/${id}/csv${token ? `?token=${encodeURIComponent(token)}` : ''}`;
+  getCsvReportUrl: (id: string, ticket?: string): string => {
+    return `${BASE_URL}/report/${encodeURIComponent(id)}/csv${ticket ? `?ticket=${encodeURIComponent(ticket)}` : ''}`;
   },
-  getXlsxReportUrl: (id: string): string => {
-    const token = tokenStore.get();
-    return `${BASE_URL}/report/${id}/xlsx${token ? `?token=${encodeURIComponent(token)}` : ''}`;
+  getXlsxReportUrl: (id: string, ticket?: string): string => {
+    return `${BASE_URL}/report/${encodeURIComponent(id)}/xlsx${ticket ? `?ticket=${encodeURIComponent(ticket)}` : ''}`;
   },
-  getJsonReportUrl: (id: string): string => {
-    const token = tokenStore.get();
-    return `${BASE_URL}/report/${id}/json${token ? `?token=${encodeURIComponent(token)}` : ''}`;
+  getJsonReportUrl: (id: string, ticket?: string): string => {
+    return `${BASE_URL}/report/${encodeURIComponent(id)}/json${ticket ? `?ticket=${encodeURIComponent(ticket)}` : ''}`;
   },
-  getAssetUrl: (url: string): string => {
+  getAssetUrl: (url: string, ticket?: string): string => {
     if (!url) return '';
     if (url.startsWith('data:')) return url;
     let cleanUrl = url.startsWith('/uploads/') ? url.replace('/uploads/', '/api/images/') : url;
     let fullUrl = (cleanUrl.startsWith('http://') || cleanUrl.startsWith('https://'))
       ? cleanUrl
       : (API_HOST ? `${API_HOST}${cleanUrl}` : cleanUrl);
-    const token = tokenStore.get();
-    if (token && !fullUrl.includes('token=')) {
+    if (ticket) {
       const sep = fullUrl.includes('?') ? '&' : '?';
-      return `${fullUrl}${sep}token=${encodeURIComponent(token)}`;
+      return `${fullUrl}${sep}ticket=${encodeURIComponent(ticket)}`;
     }
     return fullUrl;
   },

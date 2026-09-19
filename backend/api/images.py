@@ -13,20 +13,23 @@ Enforces:
 import os
 import mimetypes
 import logging
-from typing import Optional, Dict, Any
-from fastapi import APIRouter, Depends, HTTPException, Request, status
+from typing import Optional, List, Dict, Any
+from fastapi import APIRouter, Depends, HTTPException, Request, status, Query
 from fastapi.responses import FileResponse
+from fastapi.security import HTTPAuthorizationCredentials
 
 from config import settings
 from auth.security import (
-    get_current_user,
+    _bearer,
+    decode_token,
+    validate_ticket_and_get_user,
     check_tenant_access,
     ROLE_ADMIN,
     ROLE_ENFORCEMENT,
     ROLE_AUDIT,
     ROLE_MERCHANT,
 )
-from database.db import get_db, log_security_event
+from database.db import get_db, get_user_by_username, log_security_event
 from services.image_service import ensure_path_contained
 
 logger = logging.getLogger(__name__)
@@ -47,12 +50,42 @@ def _user_owns_record(user: dict, owner_user_id: Optional[str]) -> bool:
 async def get_secure_file(
     filename: str,
     request: Request,
-    current_user: dict = Depends(get_current_user),
+    credentials: Optional[HTTPAuthorizationCredentials] = Depends(_bearer),
+    ticket: Optional[str] = Query(None, alias="ticket"),
 ):
     """
     Secure, authenticated file retrieval endpoint for uploaded product images and artworks.
     Guarantees strict containment within UPLOAD_DIR and verifies resource ownership and tenant isolation.
     """
+    current_user = None
+    if credentials and credentials.credentials:
+        payload = decode_token(credentials.credentials)
+        if payload:
+            user = await get_user_by_username(payload.get("sub", ""))
+            if user:
+                current_user = user
+            elif payload.get("sub"):
+                current_user = {"username": payload.get("sub"), "role": payload.get("role", ROLE_MERCHANT), "organization_id": payload.get("organization_id", "")}
+    elif ticket:
+        current_user = await validate_ticket_and_get_user(ticket, resource_type="image", resource_id=filename)
+
+    if not current_user:
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="Authentication required. Please provide a valid Bearer token or download ticket."
+        )
+
+    user_status = current_user.get("status", "ACTIVE") or "ACTIVE"
+    if user_status == "SUSPENDED":
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="Account has been suspended. Please contact system administrator."
+        )
+    if user_status == "INVITED":
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="Account invitation has not been activated yet."
+        )
     # ── Step 1 & 2: Filename validation and Path traversal check ──
     if not filename or ".." in filename or "/" in filename or "\\" in filename or "\x00" in filename:
         raise HTTPException(

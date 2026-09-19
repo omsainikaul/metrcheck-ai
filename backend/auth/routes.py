@@ -202,6 +202,20 @@ class AdminProvisionResponse(BaseModel):
     dev_invitation_token: Optional[str] = None
 
 
+class DownloadTicketRequest(BaseModel):
+    resource_type: str  # "report" or "image"
+    resource_id: str
+    action: Optional[str] = "download"
+
+
+class DownloadTicketResponse(BaseModel):
+    ticket: str
+    resource_type: str
+    resource_id: str
+    expires_in_seconds: int = 60
+    download_url: str
+
+
 def _to_user_out(u: dict) -> UserOut:
     return UserOut(
         username=u["username"],
@@ -525,6 +539,126 @@ async def activate_account(req: ActivateAccountRequest, request: Request):
 @router.get("/me", response_model=UserOut)
 async def me(user: dict = Depends(get_current_user)):
     return _to_user_out(user)
+
+
+@router.post("/download-ticket", response_model=DownloadTicketResponse)
+async def create_download_ticket_endpoint(
+    req: DownloadTicketRequest,
+    current_user: dict = Depends(get_current_user),
+):
+    """
+    Issues a short-lived (60s), single-use cryptographically signed download ticket.
+    Validates user authentication and resource authorization (tenant/ownership) before issuance.
+    """
+    import secrets
+    import time
+    from database.db import save_download_ticket, get_analysis, get_db
+    from auth.security import generate_download_ticket_string, check_tenant_access
+    from services.image_service import ensure_path_contained
+
+    res_type = (req.resource_type or "").strip().lower()
+    res_id = (req.resource_id or "").strip()
+
+    if not res_type or not res_id:
+        raise HTTPException(status_code=400, detail="resource_type and resource_id are required.")
+
+    if res_type not in ("report", "image"):
+        raise HTTPException(status_code=400, detail="Invalid resource_type. Must be 'report' or 'image'.")
+
+    # Authorize access before issuing ticket
+    if res_type == "report":
+        if res_id.startswith("demo-") or res_id in ("1", "2", "3"):
+            pass
+        else:
+            analysis = await get_analysis(res_id)
+            if not analysis:
+                raise HTTPException(status_code=404, detail="Analysis not found")
+            check_tenant_access(current_user, analysis, raise_exception=True)
+    elif res_type == "image":
+        if not res_id or ".." in res_id or "/" in res_id or "\\" in res_id or "\x00" in res_id:
+            raise HTTPException(status_code=400, detail="Invalid filename format.")
+        target_path = os.path.abspath(os.path.join(settings.UPLOAD_DIR, res_id))
+        ensure_path_contained(target_path, settings.UPLOAD_DIR)
+        if not os.path.exists(target_path) or not os.path.isfile(target_path):
+            raise HTTPException(status_code=404, detail="Requested file not found.")
+
+        user_role = current_user.get("role", ROLE_MERCHANT)
+        if user_role != ROLE_ADMIN:
+            is_authorized = False
+            db = await get_db()
+            cursor = await db.execute(
+                """
+                SELECT id, owner_user_id, organization_id, image_filename, images
+                FROM analyses
+                WHERE image_filename = ?
+                   OR images LIKE ?
+                   OR id = ?
+                   OR ? LIKE id || '%'
+                """,
+                (res_id, f'%{res_id}%', res_id, res_id)
+            )
+            analysis_rows = await cursor.fetchall()
+            for row in analysis_rows:
+                if check_tenant_access(current_user, dict(row)):
+                    is_authorized = True
+                    break
+
+            if not is_authorized:
+                cursor = await db.execute(
+                    """
+                    SELECT id, owner_user_id, organization_id, file_path, filename, pages_data
+                    FROM artworks
+                    WHERE file_path LIKE ?
+                       OR filename = ?
+                       OR pages_data LIKE ?
+                       OR id = ?
+                       OR ? LIKE id || '%'
+                       OR ? LIKE 'preprint_' || id || '%'
+                    """,
+                    (f"%{res_id}", res_id, f"%{res_id}%", res_id, res_id, res_id)
+                )
+                artwork_rows = await cursor.fetchall()
+                for row in artwork_rows:
+                    if check_tenant_access(current_user, dict(row)):
+                        is_authorized = True
+                        break
+
+            if not is_authorized:
+                raise HTTPException(status_code=403, detail="Access denied. Cross-tenant or unauthorized image file.")
+
+    ticket_id = secrets.token_hex(20)
+    expires_at = time.time() + 60.0
+    username = current_user.get("username", "")
+    role = current_user.get("role", ROLE_MERCHANT)
+    org_id = current_user.get("organization_id", "")
+    user_id = str(current_user.get("id", ""))
+
+    await save_download_ticket(
+        ticket_id=ticket_id,
+        user_id=user_id,
+        username=username,
+        role=role,
+        organization_id=org_id,
+        resource_type=res_type,
+        resource_id=res_id,
+        action=req.action or "download",
+        expires_at=expires_at,
+    )
+
+    ticket_str = generate_download_ticket_string(ticket_id)
+    if res_type == "report":
+        download_url = f"/api/report/{res_id}?ticket={ticket_str}"
+    else:
+        download_url = f"/api/images/{res_id}?ticket={ticket_str}"
+
+    return DownloadTicketResponse(
+        ticket=ticket_str,
+        resource_type=res_type,
+        resource_id=res_id,
+        expires_in_seconds=60,
+        download_url=download_url,
+    )
+
 
 
 @router.patch("/me/email", response_model=UserOut)

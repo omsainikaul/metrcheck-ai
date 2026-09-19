@@ -10,11 +10,16 @@ services:
     volumes:
       - ./data:/data
     environment:
-      - SECRET_KEY=${SECRET_KEY:-CHANGE_ME_USE_A_LONG_RANDOM_SECRET}
+      - ENVIRONMENT=${ENVIRONMENT:-development}
+      - SECRET_KEY=${SECRET_KEY}
+      - CORS_ORIGINS=${CORS_ORIGINS:-}
+      - TRUSTED_PROXIES=${TRUSTED_PROXIES:-}
+      - METRCHECK_DEMO_MODE=${METRCHECK_DEMO_MODE:-}
+      - DATABASE_PATH=${DATABASE_PATH:-/data/metrc_check.db}
+      - UPLOAD_DIR=${UPLOAD_DIR:-/data/uploads}
+      - OCR_ENGINE=${OCR_ENGINE:-paddleocr}
+      - RATE_LIMIT_BACKEND=${RATE_LIMIT_BACKEND:-sqlite}
       - LLM_API_KEY=${LLM_API_KEY:-}
-      - OCR_ENGINE=paddleocr
-      - UPLOAD_DIR=/data/uploads
-      - DATABASE_PATH=/data/metrc_check.db
       - PYTHONUNBUFFERED=1
     healthcheck:
       test: ["CMD", "curl", "-f", "http://localhost:8000/api/health"]

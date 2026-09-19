@@ -212,12 +212,15 @@ def clear_rate_limits() -> None:
     _rate_limiter.clear_all()
 
 
-# ── Analysis & Expensive Operations Rate Limiting (Section 15) ────────────
+# ── Analysis & Expensive Operations Rate Limiting (Section 15 & SEC-AUD-06) ──
 ANALYSIS_IP_MAX = 60
 ANALYSIS_WINDOW_SEC = 60
 
 OCR_IP_MAX = 40
 OCR_WINDOW_SEC = 60
+
+REGISTER_IP_MAX = 10
+REGISTER_WINDOW_SEC = 300
 
 
 def check_analysis_rate_limit(client_ip: str) -> Tuple[bool, str]:
@@ -235,5 +238,14 @@ def check_ocr_rate_limit(client_ip: str) -> Tuple[bool, str]:
     if not _rate_limiter.is_allowed(key, OCR_IP_MAX, OCR_WINDOW_SEC):
         return False, "Rate limit exceeded for OCR extraction. Please wait a minute."
     _rate_limiter.record_attempt(key, OCR_WINDOW_SEC)
+    return True, ""
+
+
+def check_register_rate_limit(client_ip: str) -> Tuple[bool, str]:
+    """Protects registration endpoint from automated abuse and PBKDF2 compute exhaustion."""
+    key = f"register_ip:{client_ip}"
+    if not _rate_limiter.is_allowed(key, REGISTER_IP_MAX, REGISTER_WINDOW_SEC):
+        return False, "Too many registration attempts from this IP address. Please wait 5 minutes before trying again."
+    _rate_limiter.record_attempt(key, REGISTER_WINDOW_SEC)
     return True, ""
 

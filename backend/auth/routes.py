@@ -42,7 +42,8 @@ from auth.ratelimit import (
     record_login_failure,
     record_login_success,
     check_forgot_password_rate_limit,
-    record_forgot_password_attempt
+    record_forgot_password_attempt,
+    check_register_rate_limit,
 )
 from database.db import (
     create_user, get_user_by_username, get_user_by_email, get_user_by_identifier,
@@ -229,6 +230,15 @@ async def register(req: RegisterRequest, request: Request):
     Security: Strictly assigns role=MERCHANT_PUBLIC and provisions dedicated tenant organization.
     """
     client_ip = get_client_ip(request)
+    
+    # ── Rate limiting guard (SEC-AUD-06) ──
+    allowed, rate_msg = check_register_rate_limit(client_ip)
+    if not allowed:
+        raise HTTPException(
+            status_code=status.HTTP_429_TOO_MANY_REQUESTS,
+            detail=rate_msg,
+        )
+
     username = req.username.strip()
     norm_email = normalize_email(req.email)
     

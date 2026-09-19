@@ -543,7 +543,7 @@ async def update_my_email(
 
 # Backward-compatible auth routes for user management (ADMIN only)
 @router.get("/users", response_model=List[UserOut])
-async def auth_users(user: dict = Depends(require_roles(ROLE_ADMIN, ROLE_ENFORCEMENT))):
+async def auth_users(user: dict = Depends(require_roles(ROLE_ADMIN))):
     rows = await list_users()
     return [_to_user_out(u) for u in rows]
 

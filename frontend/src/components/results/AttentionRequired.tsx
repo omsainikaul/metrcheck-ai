@@ -1,6 +1,7 @@
 import React from 'react';
 import { AlertTriangle, AlertCircle, Search } from 'lucide-react';
 import { type ComplianceCheck } from '../../types';
+import { useLanguage } from '../../context/LanguageContext';
 
 interface AttentionRequiredProps {
   failedChecks: ComplianceCheck[];
@@ -13,6 +14,8 @@ const AttentionRequired: React.FC<AttentionRequiredProps> = ({
   reviewChecks,
   onViewEvidence,
 }) => {
+  const { t } = useLanguage();
+
   if (failedChecks.length === 0 && reviewChecks.length === 0) {
     return null;
   }
@@ -25,12 +28,12 @@ const AttentionRequired: React.FC<AttentionRequiredProps> = ({
   return (
     <div className="bg-white dark:bg-slate-900 rounded-xl border border-slate-200 dark:border-slate-800 shadow-2xs mb-6 overflow-hidden">
       <div className="bg-slate-50 dark:bg-slate-800/50 p-4 border-b border-slate-200 dark:border-slate-800 flex items-center justify-between">
-        <div className="flex items-center gap-2 text-slate-900 dark:text-slate-100 font-semibold">
+        <div className="flex items-center gap-2 text-slate-900 dark:text-slate-100 font-semibold uppercase tracking-wider text-xs sm:text-sm">
           <AlertTriangle className="w-5 h-5 text-amber-500" />
-          ATTENTION REQUIRED
+          {t('results.attention_required')}
         </div>
         <div className="px-2.5 py-0.5 rounded-full text-xs font-medium bg-red-100 text-red-800 dark:bg-red-900/30 dark:text-red-400">
-          {items.length} Issue{items.length !== 1 ? 's' : ''}
+          {items.length === 1 ? t('results.issues_count_single', { count: 1 }) : t('results.issues_count_multiple', { count: items.length })}
         </div>
       </div>
       
@@ -57,7 +60,7 @@ const AttentionRequired: React.FC<AttentionRequiredProps> = ({
                   </span>
                   {check.detected_value && (
                     <span className="text-xs text-slate-500">
-                      Detected: <strong className="text-slate-700 dark:text-slate-300">{check.detected_value}</strong>
+                      {t('results.detected_value')}: <strong className="text-slate-700 dark:text-slate-300">{check.detected_value}</strong>
                     </span>
                   )}
                 </div>
@@ -72,7 +75,7 @@ const AttentionRequired: React.FC<AttentionRequiredProps> = ({
               className="self-start sm:self-center shrink-0 flex items-center gap-1.5 text-xs font-semibold text-indigo-600 dark:text-indigo-400 hover:text-indigo-800 dark:hover:text-indigo-300 bg-indigo-50 dark:bg-indigo-950/50 hover:bg-indigo-100 dark:hover:bg-indigo-900/50 px-3 py-1.5 rounded-lg border border-indigo-200/50 dark:border-indigo-800/50 transition-colors cursor-pointer"
             >
               <Search className="w-3.5 h-3.5" />
-              Inspect Evidence
+              {t('results.inspect_evidence')}
             </button>
           </div>
         ))}

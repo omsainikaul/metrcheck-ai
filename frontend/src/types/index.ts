@@ -754,9 +754,9 @@ export interface DemoCaseMeta {
   tags?: string[];
 }
 
-export type WorkspaceType = 'MERCHANT' | 'AUDIT' | 'ENFORCEMENT';
+export type WorkspaceType = 'USER' | 'MERCHANT' | 'AUDIT' | 'ENFORCEMENT';
 
-export type WorkspaceCoreAction = 'PREVENT' | 'VERIFY' | 'INVESTIGATE';
+export type WorkspaceCoreAction = 'CHECK' | 'PREVENT' | 'VERIFY' | 'INVESTIGATE';
 
 export interface WorkspaceDefinition {
   id: WorkspaceType;
@@ -765,13 +765,13 @@ export interface WorkspaceDefinition {
   tagline: string;
   coreAction: WorkspaceCoreAction;
   badge: string;
-  iconName: 'Store' | 'SearchCheck' | 'ShieldAlert';
+  iconName: 'User' | 'Store' | 'SearchCheck' | 'ShieldAlert';
   description: string;
   capabilities: string[];
   allowedRoles: BackendRole[];
 }
 
-export type UserRole = 'ENFORCEMENT_OFFICER' | 'COMPLIANCE_INSPECTOR' | 'MERCHANT_PUBLIC';
+export type UserRole = 'ENFORCEMENT_OFFICER' | 'COMPLIANCE_INSPECTOR' | 'MERCHANT_PUBLIC' | 'PUBLIC_USER';
 
 export interface RoleInfo {
   role: UserRole;
@@ -783,7 +783,36 @@ export interface RoleInfo {
 }
 
 // ── Auth (backend /api/auth & /api/admin) ──────────────────────────────
-export type BackendRole = 'ADMIN' | 'ENFORCEMENT_OFFICER' | 'AUDIT_OFFICER' | 'MERCHANT_PUBLIC';
+export type BackendRole = 'ADMIN' | 'ENFORCEMENT_OFFICER' | 'AUDIT_OFFICER' | 'MERCHANT_PUBLIC' | 'PUBLIC_USER' | 'NORMAL_USER';
+
+export interface RegisterUserPayload {
+  full_name: string;
+  username: string;
+  email: string;
+  password: string;
+  mobile_number?: string;
+}
+
+export interface RegisterMerchantPayload {
+  full_name: string;
+  username: string;
+  email: string;
+  mobile_number?: string;
+  password: string;
+  business_name: string;
+  business_type: string;
+  trade_name?: string;
+  address_line1: string;
+  address_line2?: string;
+  city: string;
+  state: string;
+  pincode: string;
+  country?: string;
+  gstin?: string;
+  fssai_license?: string;
+  legal_metrology_license?: string;
+  other_identifier?: string;
+}
 
 export interface AuthUser {
   username: string;
@@ -793,6 +822,9 @@ export interface AuthUser {
   role_label?: string;
   jurisdiction?: string;
   email?: string | null;
+  organization_id?: string | null;
+  business_name?: string | null;
+  phone_number?: string | null;
   status?: 'ACTIVE' | 'INVITED' | 'SUSPENDED';
   invited_at?: string;
   activated_at?: string;
@@ -817,6 +849,65 @@ export interface InvitationVerification {
   email?: string;
   role?: BackendRole;
   role_label?: string;
+}
+
+export interface OfficerAccessRequestPayload {
+  requested_role: 'AUDIT_OFFICER' | 'ENFORCEMENT_OFFICER';
+  full_name: string;
+  official_email: string;
+  mobile_number: string;
+  employee_officer_id: string;
+  designation: string;
+  department_organization: string;
+  state: string;
+  district_jurisdiction: string;
+  reason: string;
+  office_address?: string;
+  additional_information?: string;
+}
+
+export interface OfficerAccessRequestItem {
+  id: number;
+  request_id: string;
+  requested_role: 'AUDIT_OFFICER' | 'ENFORCEMENT_OFFICER';
+  role_label: string;
+  full_name: string;
+  official_email: string;
+  mobile_number: string;
+  employee_officer_id: string;
+  designation: string;
+  department_organization: string;
+  state: string;
+  district_jurisdiction: string;
+  office_address?: string;
+  reason: string;
+  additional_information?: string;
+  status: 'PENDING' | 'APPROVED' | 'REJECTED' | 'CANCELLED';
+  submitted_at: string;
+  reviewed_at?: string | null;
+  reviewed_by?: string;
+  rejection_reason?: string;
+  created_user_id?: string;
+}
+
+export interface OfficerAccessRequestPublicStatus {
+  request_id: string;
+  requested_role: 'AUDIT_OFFICER' | 'ENFORCEMENT_OFFICER';
+  role_label: string;
+  status: 'PENDING' | 'APPROVED' | 'REJECTED' | 'CANCELLED';
+  submitted_at: string;
+  reviewed_at?: string | null;
+  rejection_reason?: string | null;
+  message: string;
+}
+
+export interface AdminApproveOfficerResponse {
+  message: string;
+  request_id: string;
+  username: string;
+  user: AuthUser;
+  dev_invitation_token?: string;
+  activation_url?: string;
 }
 
 // ── Dashboard trends / status breakdown ─────────────────────────────────
@@ -1384,4 +1475,395 @@ export interface ExternalVerificationSummary {
   summary_verdict: string;
 }
 
+// ── Section 14: Merchant Product Catalog & Workspace Types ──
 
+export interface Product {
+  id: string;
+  organization_id: string;
+  owner_user_id: string;
+  product_name: string;
+  brand_name: string;
+  category: string;
+  gtin_barcode: string;
+  fssai_license: string;
+  legal_metrology_license: string;
+  net_quantity_declared: string;
+  mrp_declared: number;
+  unit_sale_price_declared: string;
+  manufacturer_name: string;
+  country_of_origin: string;
+  status: 'ACTIVE' | 'ARCHIVED' | 'DRAFT';
+  created_at: string;
+  updated_at: string;
+}
+
+export interface ProductCreateInput {
+  product_name: string;
+  brand_name?: string;
+  category?: string;
+  gtin_barcode?: string;
+  fssai_license?: string;
+  legal_metrology_license?: string;
+  net_quantity_declared?: string;
+  mrp_declared?: number;
+  unit_sale_price_declared?: string;
+  manufacturer_name?: string;
+  country_of_origin?: string;
+}
+
+export interface ProductUpdateInput {
+  product_name?: string;
+  brand_name?: string;
+  category?: string;
+  gtin_barcode?: string;
+  fssai_license?: string;
+  legal_metrology_license?: string;
+  net_quantity_declared?: string;
+  mrp_declared?: number;
+  unit_sale_price_declared?: string;
+  manufacturer_name?: string;
+  country_of_origin?: string;
+  status?: string;
+}
+
+export interface ProductListResponse {
+  products: Product[];
+  total: number;
+}
+
+export interface ProductHistoryItem {
+  id: string;
+  product_name: string;
+  image_filename?: string | null;
+  image_url?: string | null;
+  score: number;
+  status: string;
+  created_at: string;
+  owner_user_id?: string | null;
+  organization_id?: string | null;
+  product_id?: string | null;
+  integrity_hash?: string | null;
+}
+
+export interface ProductArtworkSummary {
+  id: string;
+  filename: string;
+  file_type: string;
+  file_size: number;
+  page_count: number;
+  iteration_number: number;
+  workflow_status: string;
+  approval_status: string;
+  created_at: string;
+  updated_at: string;
+  product_id?: string | null;
+  overall_score?: number | null;
+  overall_risk?: string | null;
+}
+
+export interface ProductComplianceSummary {
+  product: Product;
+  total_scans: number;
+  total_artworks: number;
+  latest_score: number;
+  latest_status: string;
+  critical_findings_count: number;
+  pending_review: number;
+  assigned: number;
+  in_review: number;
+  verified: number;
+  rejected: number;
+  escalated: number;
+  reopened: number;
+  workload: OfficerWorkloadItem[];
+}
+
+export interface AIvsHumanDiffItem {
+  field_name: string;
+  field_label: string;
+  ai_value?: string | null;
+  human_value?: string | null;
+  is_changed: boolean;
+  change_type: 'UNCHANGED' | 'CORRECTED' | 'ADDED' | 'REMOVED';
+  officer_username?: string | null;
+  timestamp?: string | null;
+  reason?: string | null;
+}
+
+export interface AIvsHumanComparison {
+  analysis_id: string;
+  review_id: string;
+  ai_score: number;
+  human_score: number;
+  score_delta: number;
+  ai_risk_level: string;
+  human_risk_level: string;
+  ai_status: string;
+  human_status: string;
+  total_fields_evaluated: number;
+  corrected_fields_count: number;
+  field_diffs: AIvsHumanDiffItem[];
+  summary: string;
+}
+
+// ── Section 14: Merchant Product Catalog & Workspace Types ──
+
+export interface Product {
+  id: string;
+  organization_id: string;
+  owner_user_id: string;
+  product_name: string;
+  brand_name: string;
+  category: string;
+  gtin_barcode: string;
+  fssai_license: string;
+  legal_metrology_license: string;
+  net_quantity_declared: string;
+  mrp_declared: number;
+  unit_sale_price_declared: string;
+  manufacturer_name: string;
+  country_of_origin: string;
+  status: 'ACTIVE' | 'ARCHIVED' | 'DRAFT';
+  created_at: string;
+  updated_at: string;
+}
+
+export interface ProductCreateInput {
+  product_name: string;
+  brand_name?: string;
+  category?: string;
+  gtin_barcode?: string;
+  fssai_license?: string;
+  legal_metrology_license?: string;
+  net_quantity_declared?: string;
+  mrp_declared?: number;
+  unit_sale_price_declared?: string;
+  manufacturer_name?: string;
+  country_of_origin?: string;
+}
+
+export interface ProductUpdateInput {
+  product_name?: string;
+  brand_name?: string;
+  category?: string;
+  gtin_barcode?: string;
+  fssai_license?: string;
+  legal_metrology_license?: string;
+  net_quantity_declared?: string;
+  mrp_declared?: number;
+  unit_sale_price_declared?: string;
+  manufacturer_name?: string;
+  country_of_origin?: string;
+  status?: string;
+}
+
+export interface ProductListResponse {
+  products: Product[];
+  total: number;
+}
+
+export interface ProductHistoryItem {
+  id: string;
+  product_name: string;
+  image_filename?: string | null;
+  image_url?: string | null;
+  score: number;
+  status: string;
+  created_at: string;
+  owner_user_id?: string | null;
+  organization_id?: string | null;
+  product_id?: string | null;
+  integrity_hash?: string | null;
+}
+
+export interface ProductArtworkSummary {
+  id: string;
+  filename: string;
+  file_type: string;
+  file_size: number;
+  page_count: number;
+  iteration_number: number;
+  workflow_status: string;
+  approval_status: string;
+  created_at: string;
+  updated_at: string;
+  product_id?: string | null;
+  overall_score?: number | null;
+  overall_risk?: string | null;
+}
+
+export interface ProductComplianceSummary {
+  product: Product;
+  total_scans: number;
+  total_artworks: number;
+  latest_score: number;
+  latest_status: string;
+  critical_findings_count: number;
+  review_findings_count: number;
+  latest_scan?: ProductHistoryItem | null;
+  latest_artwork?: ProductArtworkSummary | null;
+}
+
+export interface MerchantDashboardStats {
+  active_products: number;
+  products_checked: number;
+  attention_required: number;
+  critical_findings: number;
+  packaging_artworks: number;
+}
+
+// ── Phase 4B: Enforcement Case Management & Statutory Notices ─────────────
+export type EnforcementCaseStatus =
+  | 'OPEN'
+  | 'INVESTIGATION'
+  | 'PENALTY_REVIEW'
+  | 'NOTICE_ISSUED'
+  | 'HEARING'
+  | 'RESOLVED'
+  | 'CLOSED';
+
+export type EnforcementCaseSeverity = 'CRITICAL' | 'HIGH' | 'MEDIUM' | 'LOW';
+
+export interface EnforcementTimelineEvent {
+  event_id: string;
+  action: string;
+  actor_username: string;
+  actor_role: string;
+  details: string;
+  previous_state?: string | null;
+  new_state?: string | null;
+  timestamp: string;
+  metadata?: Record<string, any>;
+}
+
+export interface PenaltyCalculationRecord {
+  id: string;
+  case_id: string;
+  applicable: boolean;
+  estimated_fine_inr: number;
+  fine_range_min_inr: number;
+  fine_range_max_inr: number;
+  basis: string;
+  sections: string[];
+  repeat_offence: boolean;
+  prior_notices: number;
+  violation_count: number;
+  calculated_by: string;
+  calculated_at: string;
+  reason?: string | null;
+}
+
+export interface EnforcementNotice {
+  id: string;
+  notice_reference: string;
+  case_id: string;
+  notice_type: string;
+  status: string;
+  issued_by: string;
+  issued_at: string;
+  recipient_organization_id: string;
+  recipient_name: string;
+  subject: string;
+  content: string;
+  deadline_days: number;
+  created_at: string;
+  updated_at: string;
+}
+
+export interface EnforcementCaseSummary {
+  id: string;
+  case_reference: string;
+  analysis_id: string;
+  review_id?: string | null;
+  product_id?: string | null;
+  organization_id: string;
+  merchant_organization_id: string;
+  product_name: string;
+  status: EnforcementCaseStatus;
+  severity: EnforcementCaseSeverity;
+  jurisdiction_state: string;
+  jurisdiction_district: string;
+  assigned_officer: string;
+  created_by: string;
+  opened_at: string;
+  updated_at: string;
+  closed_at?: string | null;
+  violation_count: number;
+  notice_count: number;
+}
+
+export interface EnforcementCaseDetail {
+  id: string;
+  case_reference: string;
+  analysis_id: string;
+  review_id?: string | null;
+  product_id?: string | null;
+  organization_id: string;
+  merchant_organization_id: string;
+  product_name: string;
+  status: EnforcementCaseStatus;
+  severity: EnforcementCaseSeverity;
+  jurisdiction_state: string;
+  jurisdiction_district: string;
+  violation_summary: string;
+  created_by: string;
+  assigned_officer: string;
+  opened_at: string;
+  updated_at: string;
+  closed_at?: string | null;
+  closure_reason?: string | null;
+  source_analysis?: any | null;
+  source_review?: any | null;
+  violations: Array<{
+    severity: string;
+    rule_id?: string;
+    what: string;
+    why: string;
+    source_reference: string;
+  }>;
+  penalties: PenaltyCalculationRecord[];
+  notices: EnforcementNotice[];
+  timeline: EnforcementTimelineEvent[];
+}
+
+export interface EnforcementDashboardMetrics {
+  open_cases: number;
+  investigation_cases: number;
+  penalty_review_cases: number;
+  notices_issued_cases: number;
+  hearing_cases: number;
+  resolved_cases: number;
+  closed_cases: number;
+  total_active_cases: number;
+  assigned_to_me: number;
+  total_penalties_estimated_inr: number;
+  total_notices_served: number;
+}
+
+// ── NU-06 Consumer Manual Product Check ─────────────────────────────────
+export interface ManualProductCheckPayload {
+  product_type: 'FOOD' | 'NON_FOOD';
+  product_name: string;
+  brand?: string;
+  generic_name?: string;
+  category?: string;
+  net_quantity?: string;
+  mrp?: string;
+  unit_sale_price?: string;
+  manufacture_date?: string;
+  expiry_date?: string;
+  best_before?: string;
+  batch_number?: string;
+  country_of_origin?: string;
+  manufacturer_name?: string;
+  manufacturer_address?: string;
+  packer_name?: string;
+  packer_address?: string;
+  consumer_care_phone?: string;
+  consumer_care_email?: string;
+  consumer_care_address?: string;
+  fssai_license?: string;
+  ingredients?: string;
+  allergen_info?: string;
+  nutritional_info?: string;
+}

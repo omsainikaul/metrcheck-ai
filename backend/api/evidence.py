@@ -1,11 +1,17 @@
 """
 API router for Explainable AI / Evidence System endpoints.
 Provides evidence correction, review actions, audit history, spatial heatmaps, and panel compliance summaries.
+
+AI Snapshot Integrity (Phase 4 remediation — F-EVID-01):
+  The original AI evidence text is preserved in an immutable ai_original_text field.
+  Human corrections are stored as a separate human_correction field alongside the evidence entry.
+  The evidence audit log records both previous (AI) and new (human) values.
+  This brings the direct correction endpoint into the same integrity model as review_service.py.
 """
 
+import logging
 from typing import List, Optional
 from fastapi import APIRouter, Depends, HTTPException, Query
-from pydantic import BaseModel
 
 from models.schemas import (
     EvidenceCorrectionRequest,
@@ -25,6 +31,8 @@ from database.db import (
 )
 from auth.security import get_current_user, require_roles, check_tenant_access, ROLE_ADMIN, ROLE_ENFORCEMENT, ROLE_AUDIT
 
+logger = logging.getLogger(__name__)
+
 router = APIRouter(prefix="/api/evidence", tags=["evidence"])
 
 
@@ -34,6 +42,16 @@ async def correct_evidence(
     req: EvidenceCorrectionRequest,
     current_user: dict = Depends(require_roles(ROLE_ADMIN, ROLE_ENFORCEMENT, ROLE_AUDIT)),
 ):
+    """
+    Correct a specific evidence field for an analysis.
+
+    AI Snapshot Integrity:
+    - The original AI-extracted text is preserved in ev['ai_original_text'] (immutable).
+    - The human correction is stored in ev['human_correction'] as a separate field.
+    - ev['text'] is updated to the corrected value so downstream rendering uses the
+      corrected text, but the AI source is always recoverable from 'ai_original_text'.
+    - An audit log entry records actor, timestamp, old (AI) value, and new (human) value.
+    """
     analysis_data = await get_analysis(analysis_id)
     if not analysis_data:
         raise HTTPException(status_code=404, detail=f"Analysis with ID {analysis_id} not found")
@@ -52,15 +70,32 @@ async def correct_evidence(
             matched_ev = ev
             break
 
-    old_val = str(matched_ev.get("text") or matched_ev.get("extracted_text")) if matched_ev else "None"
+    # Capture the original AI value BEFORE any mutation.
+    # If ai_original_text was already set from a prior correction, preserve that
+    # original — only the first AI-extracted value should be the canonical snapshot.
+    if matched_ev:
+        current_text = str(matched_ev.get("text") or matched_ev.get("extracted_text") or "")
+        if "ai_original_text" not in matched_ev:
+            # First correction — preserve the AI result as the immutable snapshot
+            matched_ev["ai_original_text"] = current_text
+        old_val = matched_ev["ai_original_text"]  # Always report original AI value
+    else:
+        old_val = "None"
+
     new_val = req.corrected_value
 
     if matched_ev:
+        # Store human correction separately — do NOT lose the AI original
+        matched_ev["human_correction"] = req.corrected_value
+        matched_ev["human_corrected_by"] = str(
+            current_user.get("username") or current_user.get("sub") or "officer"
+        )
+        # Update displayed text to corrected value (for compliance re-evaluation)
         matched_ev["text"] = req.corrected_value
         matched_ev["confidence"] = 100.0
         matched_ev["reliability_score"] = 100.0
         matched_ev["reliability_tier"] = "HIGH"
-        matched_ev["match_method"] = "DIRECT_OCR"
+        matched_ev["match_method"] = "HUMAN_CORRECTION"
         matched_ev["evidence_status"] = "VERIFIED"
         if req.corrected_bbox:
             matched_ev["bbox"] = req.corrected_bbox
@@ -69,11 +104,16 @@ async def correct_evidence(
             "id": req.evidence_id or f"{req.rule_id}-ev-corrected",
             "image_index": 0,
             "image_label": "Front",
+            "ai_original_text": None,  # No prior AI value — this is a new addition by officer
+            "human_correction": req.corrected_value,
+            "human_corrected_by": str(
+                current_user.get("username") or current_user.get("sub") or "officer"
+            ),
             "text": req.corrected_value,
             "confidence": 100.0,
             "reliability_score": 100.0,
             "reliability_tier": "HIGH",
-            "match_method": "DIRECT_OCR",
+            "match_method": "HUMAN_CORRECTION",
             "evidence_status": "VERIFIED",
             "bbox": req.corrected_bbox,
             "linked_rule_id": req.rule_id,
@@ -106,6 +146,11 @@ async def correct_evidence(
         new_value=new_val,
         comments=req.comments or "Officer manual evidence correction",
         organization_id=org_id,
+    )
+
+    logger.info(
+        "Evidence corrected: analysis=%s rule=%s actor=%s old=%r new=%r",
+        analysis_id, req.rule_id, user_name, old_val, new_val
     )
 
     return AnalysisResponse(**analysis_res)

@@ -2,6 +2,7 @@ import React from 'react';
 import StatusBadge from '../ui/StatusBadge';
 import ScoreCircle from '../ui/ScoreCircle';
 import { type RiskAssessment, type CategoryScore, type ConfidenceSummary } from '../../types';
+import { useLanguage } from '../../context/LanguageContext';
 
 interface ExecutiveSummaryProps {
   score: number;
@@ -31,6 +32,7 @@ const ExecutiveSummary: React.FC<ExecutiveSummaryProps> = ({
   isReviewRequired,
   riskAssessment,
 }) => {
+  const { t } = useLanguage();
   let bgClass = 'bg-slate-50 dark:bg-slate-900';
   let borderClass = 'border-slate-200/90 dark:border-slate-800';
   
@@ -68,7 +70,7 @@ const ExecutiveSummary: React.FC<ExecutiveSummaryProps> = ({
             </span>
           )}
           <span className="text-xs font-bold uppercase tracking-wider text-slate-400 dark:text-slate-500">
-            Compliance Verdict
+            {t('results.compliance_verdict')}
           </span>
         </div>
         <p className="text-xs sm:text-sm text-slate-700 dark:text-slate-300 font-medium leading-relaxed sm:text-right">
@@ -85,10 +87,10 @@ const ExecutiveSummary: React.FC<ExecutiveSummaryProps> = ({
             <div className="w-2.5 h-2.5 rounded-full bg-emerald-500 shrink-0" />
             <div className="min-w-0">
               <div className="text-xs sm:text-sm font-black text-emerald-950 dark:text-emerald-200 font-mono tracking-tight">
-                {passedCount} Passed
+                {passedCount} {t('results.passed_label')}
               </div>
               <div className="text-[10px] text-emerald-700 dark:text-emerald-400 font-semibold truncate">
-                Verified
+                {t('results.verified')}
               </div>
             </div>
           </div>
@@ -98,10 +100,10 @@ const ExecutiveSummary: React.FC<ExecutiveSummaryProps> = ({
             <div className="w-2.5 h-2.5 rounded-full bg-amber-500 shrink-0" />
             <div className="min-w-0">
               <div className="text-xs sm:text-sm font-black text-amber-950 dark:text-amber-200 font-mono tracking-tight">
-                {needsReviewCount} Review
+                {needsReviewCount} {t('results.review_label')}
               </div>
               <div className="text-[10px] text-amber-700 dark:text-amber-400 font-semibold truncate">
-                Check required
+                {t('results.check_required')}
               </div>
             </div>
           </div>
@@ -111,10 +113,10 @@ const ExecutiveSummary: React.FC<ExecutiveSummaryProps> = ({
             <div className="w-2.5 h-2.5 rounded-full bg-red-500 shrink-0" />
             <div className="min-w-0">
               <div className="text-xs sm:text-sm font-black text-red-950 dark:text-red-200 font-mono tracking-tight">
-                {failedCount} Failed
+                {failedCount} {t('results.failed_label')}
               </div>
               <div className="text-[10px] text-red-700 dark:text-red-400 font-semibold truncate">
-                Non-compliant
+                {t('results.non_compliant')}
               </div>
             </div>
           </div>
@@ -124,10 +126,10 @@ const ExecutiveSummary: React.FC<ExecutiveSummaryProps> = ({
             <div className="w-2.5 h-2.5 rounded-full bg-slate-400 shrink-0" />
             <div className="min-w-0">
               <div className="text-xs sm:text-sm font-black text-slate-800 dark:text-slate-200 font-mono tracking-tight">
-                {notApplicableCount} N/A
+                {notApplicableCount} {t('results.na_label')}
               </div>
               <div className="text-[10px] text-slate-500 dark:text-slate-400 font-semibold truncate">
-                Not applicable
+                {t('results.not_applicable')}
               </div>
             </div>
           </div>
@@ -137,7 +139,7 @@ const ExecutiveSummary: React.FC<ExecutiveSummaryProps> = ({
         <div className="flex items-center justify-between sm:justify-end gap-3.5 px-4 py-2.5 rounded-xl bg-white dark:bg-slate-900 border border-slate-200/90 dark:border-slate-800 shrink-0 shadow-2xs">
           <div className="text-left sm:text-right">
             <span className="text-[10px] font-bold text-slate-400 dark:text-slate-500 uppercase tracking-widest block">
-              COMPLIANCE SCORE
+              {t('results.compliance_score_label')}
             </span>
             <div className="flex items-baseline gap-1">
               <span className="text-base sm:text-lg font-black text-slate-900 dark:text-slate-100 font-mono">

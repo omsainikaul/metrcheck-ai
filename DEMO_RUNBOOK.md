@@ -14,12 +14,23 @@
 | **Backend Health Check** | `http://localhost:8000/api/health` | Service & OCR Engine Status |
 
 ### Default Demonstration Accounts (RBAC)
+
 | Role | Username | Password | Permissions |
 |---|---|---|---|
 | **Enforcement Officer** | `officer` | `officer123` | Statutory screening, evidence verification, show-cause notices |
 | **Audit Officer** | `audit` | `audit123` | Quality inspection, technical rule verification, OCR calibration |
 | **Merchant / Public** | `merchant` | `merchant123` | Self-compliance pre-screening & report downloads |
-| **Administrator** | Provisioned via CLI | `[REDACTED — ADMIN PASSWORD]` | Full system governance, user management, audit logs via `/admin/login` |
+| **Administrator** | Provisioned via CLI — see below | Set during bootstrap | Full system governance, user management, audit logs via `/admin/login` |
+
+> **Note:** Demo officer/merchant accounts are auto-seeded when `METRCHECK_DEMO_MODE=true` is set in `backend/.env`.
+> The Admin account is **not** auto-seeded — it must be provisioned separately (once) before the demo:
+
+**Admin Account Bootstrap (run once before demo):**
+```bash
+cd "d:\SIH\Legal Metrology Compliance AI Prototype\backend"
+python -m backend.scripts.bootstrap_admin
+```
+This interactive script prompts for an admin username, email, and password, then creates the admin account in the database. The password you set here is what you use to log in at `/admin/login`.
 
 ### Quick Start Verification
 1. **Backend**:
@@ -68,10 +79,12 @@
    - **Side Panels 1 & 2 (Optional)**: Captures Consumer Care Cell details, Nutritional Facts, Batch No.
 3. **Sample Image Selection**:
    - The project repository includes designated test folders in `test_data/`:
-     - `test_data/compliant/` — Reference compliant package samples.
-     - `test_data/violation/` — Samples with missing MRP, incorrect net qty units, or missing manufacturer PIN code.
-     - `test_data/warning/` — Samples with borderline font sizes or missing consumer care email.
-   - *If custom sample files are not placed in `test_data/`*, drag and drop sample images from `backend/fixtures/` (`alpino_front.png` and `alpino_back.png`), or upload any packaged food/commodity photograph from your machine.
+     - `test_data/compliant/` — Place compliant package samples here before the demo.
+     - `test_data/violation/` — Place violation samples here (missing MRP, incorrect net qty units, missing manufacturer PIN code).
+     - `test_data/warning/` — Place borderline samples here (borderline font sizes, missing consumer care email).
+   - **Note**: These directories currently contain only `.gitkeep` placeholders. Add representative images before the SIH demo.
+   - **Recommended Fallback Images (already in repository)**: Use `backend/fixtures/alpino_front.png` and `backend/fixtures/alpino_back.png`, or drag and drop any packaged food/commodity photograph from your machine.
+   - **Demo Mode Fallback**: If no images are available, click **"Demo Mode"** (`/demo`) in the sidebar — pre-verified benchmark analyses load without any file uploads.
 4. Click **"Run Statutory Compliance Analysis"**.
 5. **Judge Focus**: Watch the real-time pipeline visualizer transition through 8 transparent stages: *Images Received $\rightarrow$ Quality & Blur Check $\rightarrow$ OCR Text Extraction $\rightarrow$ Entity Parsing $\rightarrow$ Legal Metrology Screening $\rightarrow$ Rule 12 Font Height Calibration $\rightarrow$ Dossier Compilation*.
 

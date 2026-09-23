@@ -764,7 +764,60 @@ async def escalate_review(
     rev["history"].append(event)
 
     await save_review(rev)
+
+    # ── Phase 4B: Audit → Enforcement Persistent Case Creation ──
+    try:
+        from database.db import get_enforcement_case_by_analysis_id, save_enforcement_case, generate_case_reference
+        existing_case = await get_enforcement_case_by_analysis_id(rev["analysis_id"])
+        if not existing_case:
+            ana_data = await get_analysis(rev["analysis_id"]) or {}
+            sev = "CRITICAL" if rev.get("ai_risk_level") == "CRITICAL" else "HIGH"
+            case_id = f"case-{uuid.uuid4().hex[:8]}"
+            case_ref = generate_case_reference()
+            viol_summary = f"Escalated from Audit Review '{review_id}'. Reason: {req.escalation_reason}"
+            
+            case_record = {
+                "id": case_id,
+                "case_reference": case_ref,
+                "analysis_id": rev["analysis_id"],
+                "review_id": review_id,
+                "product_id": ana_data.get("product_id", ""),
+                "organization_id": rev.get("organization_id") or ana_data.get("organization_id") or "org_ministry",
+                "merchant_organization_id": ana_data.get("organization_id", ""),
+                "product_name": rev.get("product_name") or ana_data.get("product_name", "Product under audit"),
+                "status": "OPEN",
+                "severity": sev,
+                "jurisdiction_state": actor_user.get("state", ""),
+                "jurisdiction_district": actor_user.get("district_jurisdiction", "") or actor_user.get("jurisdiction", ""),
+                "violation_summary": viol_summary,
+                "created_by": actor_user.get("username", "audit_officer"),
+                "assigned_officer": "",
+                "opened_at": now,
+                "updated_at": now,
+                "closed_at": None,
+                "closure_reason": "",
+                "resolution_type": "",
+                "timeline": [{
+                    "event_id": f"evt-{uuid.uuid4().hex[:8]}",
+                    "action": "CASE_CREATED",
+                    "actor_username": actor_user.get("username", "officer"),
+                    "actor_role": actor_user.get("role", "OFFICER"),
+                    "details": f"Case automatically initiated from escalated audit review '{review_id}'. Reason: {req.escalation_reason}",
+                    "previous_state": None,
+                    "new_state": "OPEN",
+                    "timestamp": now,
+                    "metadata": {"review_id": review_id, "escalation_target": target}
+                }],
+                "created_at": now
+            }
+            await save_enforcement_case(case_record)
+            rev["enforcement_case_id"] = case_id
+            rev["enforcement_case_reference"] = case_ref
+    except Exception:
+        pass
+
     return rev
+
 
 
 async def reopen_review(

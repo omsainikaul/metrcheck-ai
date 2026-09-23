@@ -1,12 +1,14 @@
 import { useEffect, useState, useRef, useMemo, useCallback } from 'react';
 import {
   LayoutDashboard,
+  ShieldAlert,
   Package,
   AlertTriangle,
   ClipboardCheck,
   ShieldCheck,
   Database,
   Ruler,
+  Scan,
   BadgeCheck,
   Eye,
 } from 'lucide-react';
@@ -26,27 +28,29 @@ interface Props {
 // Authoritative mapping of section IDs to icons
 const SECTION_ICONS: Record<string, LucideIcon> = {
   'section-summary': LayoutDashboard,
+  'section-risk': ShieldAlert,
   'section-preview': Package,
   'section-attention': AlertTriangle,
   'section-actions': ClipboardCheck,
   'section-requirements': ShieldCheck,
   'section-package-data': Database,
   'section-rule12': Ruler,
+  'section-vision': Scan,
   'section-verification': BadgeCheck,
   'section-evidence': Eye,
 };
 
-// Logical grouping of sections
+// Logical grouping of sections in exact DOM order
 const SECTION_GROUPS = [
   {
     name: 'core',
     label: 'Core Review',
-    ids: ['section-summary', 'section-preview', 'section-attention', 'section-actions'],
+    ids: ['section-summary', 'section-risk', 'section-preview', 'section-attention', 'section-actions'],
   },
   {
     name: 'compliance',
     label: 'Compliance',
-    ids: ['section-requirements', 'section-package-data', 'section-rule12', 'section-verification'],
+    ids: ['section-requirements', 'section-package-data', 'section-rule12', 'section-vision', 'section-verification'],
   },
   {
     name: 'evidence',

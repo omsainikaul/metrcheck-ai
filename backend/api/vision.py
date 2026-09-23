@@ -37,8 +37,8 @@ async def analyze_image_vision(
         )
         return vision_result
     except Exception as e:
-        logger.error(f"Error during standalone vision analysis: {e}")
-        raise HTTPException(status_code=500, detail=f"Vision analysis failed: {str(e)}")
+        logger.exception("Error during standalone vision analysis: %s", e)
+        raise HTTPException(status_code=500, detail="An internal server error occurred during image analysis.")
     finally:
         if os.path.exists(temp_path):
             try:

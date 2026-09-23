@@ -1,5 +1,5 @@
 import os
-from pydantic_settings import BaseSettings
+from pydantic_settings import BaseSettings, SettingsConfigDict
 from pydantic import field_validator
 
 _BACKEND_DIR = os.path.dirname(os.path.abspath(__file__))
@@ -145,9 +145,11 @@ class Settings(BaseSettings):
                     f"  Please configure an isolated test database (e.g. via testing_utils.isolated_test_env)."
                 )
 
-    class Config:
-        env_file = os.path.join(_BACKEND_DIR, ".env")
+    model_config = SettingsConfigDict(
+        env_file=os.path.join(_BACKEND_DIR, ".env")
+    )
 
 settings = Settings()
+
 
 

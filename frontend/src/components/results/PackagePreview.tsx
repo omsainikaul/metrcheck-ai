@@ -1,7 +1,8 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { ImageIcon, Layers } from 'lucide-react';
 import { type ProductImageEvidence } from '../../types';
-import api from '../../services/api';
+import { api } from '../../services/api';
+import { useLanguage } from '../../context/LanguageContext';
 
 interface PackagePreviewProps {
   images: ProductImageEvidence[];
@@ -13,8 +14,32 @@ const PackagePreview: React.FC<PackagePreviewProps> = ({
   images = [],
   productName,
 }) => {
+  const { t } = useLanguage();
   const [selectedIndex, setSelectedIndex] = useState<number>(0);
+  const [imgSrcMap, setImgSrcMap] = useState<Record<number, string>>({});
   const [imgErrors, setImgErrors] = useState<Record<number, boolean>>({});
+
+  // Ensure selectedIndex is within bounds
+  const activeIndex = selectedIndex >= 0 && selectedIndex < images.length ? selectedIndex : 0;
+  const activeImage = images[activeIndex] || images[0];
+
+  useEffect(() => {
+    let isCancelled = false;
+    if (activeImage?.image_url && !imgSrcMap[activeIndex]) {
+      api.fetchImageBlobUrl(activeImage.image_url).then((resolvedUrl) => {
+        if (!isCancelled && resolvedUrl) {
+          setImgSrcMap(prev => ({ ...prev, [activeIndex]: resolvedUrl }));
+        }
+      }).catch(() => {
+        if (!isCancelled) {
+          setImgSrcMap(prev => ({ ...prev, [activeIndex]: api.getAssetUrl(activeImage.image_url) }));
+        }
+      });
+    }
+    return () => {
+      isCancelled = true;
+    };
+  }, [activeImage?.image_url, activeIndex, imgSrcMap]);
 
   if (!images || images.length === 0) {
     return (
@@ -22,18 +47,16 @@ const PackagePreview: React.FC<PackagePreviewProps> = ({
         <div className="inline-flex p-3 rounded-xl bg-slate-100 dark:bg-slate-800 text-slate-400 dark:text-slate-500 mb-2">
           <ImageIcon className="w-6 h-6" />
         </div>
-        <h4 className="text-sm font-bold text-slate-800 dark:text-slate-200">Package image unavailable</h4>
+        <h4 className="text-sm font-bold text-slate-800 dark:text-slate-200">{t('results.package_image_unavailable')}</h4>
         <p className="text-xs text-slate-500 dark:text-slate-400 mt-1">
-          This analysis does not contain a viewable package image.
+          {t('results.package_image_unavailable_desc')}
         </p>
       </div>
     );
   }
 
-  // Ensure selectedIndex is within bounds
-  const activeIndex = selectedIndex >= 0 && selectedIndex < images.length ? selectedIndex : 0;
-  const activeImage = images[activeIndex] || images[0];
   const isImageBroken = imgErrors[activeIndex] || !activeImage?.image_url;
+  const currentDisplaySrc = imgSrcMap[activeIndex] || api.getAssetUrl(activeImage.image_url);
 
   const isFront = (activeImage?.label || '').toLowerCase().includes('front') || activeIndex === 0;
 
@@ -47,10 +70,10 @@ const PackagePreview: React.FC<PackagePreviewProps> = ({
           </div>
           <div>
             <h3 className="font-bold text-xs sm:text-sm text-slate-900 dark:text-slate-100 uppercase tracking-wider">
-              Package Preview
+              {t('results.package_preview')}
             </h3>
             <span className="text-[11px] text-slate-500 dark:text-slate-400">
-              Primary analyzed commodity artwork
+              {t('results.primary_artwork_desc')}
             </span>
           </div>
         </div>
@@ -58,7 +81,7 @@ const PackagePreview: React.FC<PackagePreviewProps> = ({
         <div className="flex items-center gap-2">
           <span className="inline-flex items-center gap-1 text-xs font-bold px-2.5 py-1 rounded-full bg-slate-100 dark:bg-slate-800 text-slate-700 dark:text-slate-300 border border-slate-200 dark:border-slate-700 font-mono">
             <Layers className="w-3.5 h-3.5 text-indigo-600 dark:text-indigo-400" />
-            {images.length} {images.length === 1 ? 'PANEL' : 'PANELS'}
+            {images.length === 1 ? t('results.panels_count_single', { count: 1 }) : t('results.panels_count_multiple', { count: images.length })}
           </span>
         </div>
       </div>
@@ -68,7 +91,7 @@ const PackagePreview: React.FC<PackagePreviewProps> = ({
         <div className="w-full max-w-xl min-h-[220px] max-h-[380px] bg-slate-950/5 dark:bg-slate-950/60 rounded-xl border border-slate-200/80 dark:border-slate-800 flex items-center justify-center p-3 relative overflow-hidden group">
           {!isImageBroken ? (
             <img
-              src={api.getAssetUrl(activeImage.image_url)}
+              src={currentDisplaySrc}
               alt={`${productName} - ${activeImage.label || 'Package'}`}
               className="max-h-[340px] w-auto max-w-full object-contain mx-auto rounded-lg shadow-xs transition-transform duration-200 group-hover:scale-[1.01]"
               loading="eager"
@@ -79,8 +102,8 @@ const PackagePreview: React.FC<PackagePreviewProps> = ({
           ) : (
             <div className="flex flex-col items-center justify-center text-slate-400 dark:text-slate-500 py-10 space-y-2">
               <ImageIcon className="w-10 h-10 stroke-[1.5]" />
-              <span className="text-xs font-semibold">Package image preview unavailable</span>
-              <span className="text-[11px] text-slate-400">Panel: {activeImage?.label || `Panel ${activeIndex + 1}`}</span>
+              <span className="text-xs font-semibold">{t('results.preview_unavailable', { defaultValue: 'Package image preview unavailable' })}</span>
+              <span className="text-[11px] text-slate-400">{t('common.panel', { defaultValue: 'Panel' })}: {activeImage?.label || `Panel ${activeIndex + 1}`}</span>
             </div>
           )}
         </div>
@@ -92,12 +115,12 @@ const PackagePreview: React.FC<PackagePreviewProps> = ({
               {activeImage.label || `Panel ${activeIndex + 1}`}
             </h4>
             <span className="text-[10px] font-semibold px-2 py-0.5 rounded-full bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-400 border border-slate-200 dark:border-slate-700">
-              {isFront ? 'Primary package view' : 'Secondary package view'}
+              {isFront ? t('results.primary_package_view', { defaultValue: 'Primary package view' }) : t('results.secondary_package_view', { defaultValue: 'Secondary package view' })}
             </span>
           </div>
           {activeImage.word_count !== undefined && activeImage.word_count > 0 && (
             <p className="text-xs text-slate-500 dark:text-slate-400 font-medium">
-              {activeImage.word_count} OCR text elements detected on this panel
+              {activeImage.word_count} {t('results.ocr_elements_detected', { defaultValue: 'OCR text elements detected on this panel' })}
             </p>
           )}
         </div>
@@ -106,7 +129,7 @@ const PackagePreview: React.FC<PackagePreviewProps> = ({
         {images.length > 1 && (
           <div className="mt-4 pt-3.5 border-t border-slate-100 dark:border-slate-800 w-full flex items-center justify-center gap-2 flex-wrap">
             <span className="text-xs font-bold text-slate-400 dark:text-slate-500 uppercase tracking-wider mr-1">
-              Switch Panel:
+              {t('results.switch_panel', { defaultValue: 'Switch Panel:' })}
             </span>
             {images.map((img, idx) => {
               const isSelected = activeIndex === idx;
@@ -142,3 +165,4 @@ const PackagePreview: React.FC<PackagePreviewProps> = ({
 };
 
 export default PackagePreview;
+

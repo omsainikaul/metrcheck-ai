@@ -203,7 +203,7 @@ class LocalExtractor:
         # -------------------------------------------------------------
         mrp_candidates = []
         mrp_anchor_pattern = re.compile(
-            r'(?:M\.?R\.?P\.?|Maximum\s*Retail\s*Price|Retail\s*Price|MRPR|एम\.?आर\.?पी\.?|अधिकतम\s*खुदra\s*मूल्य|खुदरा\s*मूल्य|मूल्य|FOR\s*MR\b|FOR\s*MRP\b)[\s.:₹RsINR\/\-*~#\'\"\=]*([^\n]{1,40})',
+            r'(?:M\.?R\.?P\.?|Maximum\s*Retail\s*Price|Retail\s*Price|MRPR|एम\.?आर\.?पी\.?|अधिकतम\s*खुदra\s*मूल्य|खुदरा\s*मूल्य|मूल्य|FOR\s*MR\b|FOR\s*MRP\b)[^\S\r\n.:₹RsINR\/\-*~#\'\"\=]*([^\n]{1,40})',
             re.IGNORECASE
         )
         for m in mrp_anchor_pattern.finditer(text):

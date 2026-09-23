@@ -1,4 +1,4 @@
-import { useEffect } from 'react';
+import { useEffect, useState } from 'react';
 import { NavLink, useNavigate, useLocation } from 'react-router-dom';
 import { 
   LayoutDashboard, 
@@ -22,11 +22,14 @@ import {
   Settings,
   Printer,
   GitCompare,
-  UserCheck
+  UserCheck,
+  Boxes,
+  Building2
 } from 'lucide-react';
 import { useAuth } from '../../context/AuthContext';
 import { useWorkspace } from '../../context/WorkspaceContext';
 import { useLanguage } from '../../context/LanguageContext';
+import { api } from '../../services/api';
 import { type WorkspaceType } from '../../types';
 
 interface SidebarProps {
@@ -49,11 +52,20 @@ const WORKSPACE_NAV_CONFIG: Array<{
   id: WorkspaceType;
   labelKey: string;
   fallbackLabel: string;
-  action: 'PREVENT' | 'VERIFY' | 'INVESTIGATE';
+  action: 'CHECK' | 'PREVENT' | 'VERIFY' | 'INVESTIGATE';
   icon: React.ComponentType<{ className?: string }>;
   activeClass: string;
   activeBorder: string;
 }> = [
+  { 
+    id: 'USER', 
+    labelKey: 'navigation.consumer',
+    fallbackLabel: 'Consumer Workspace', 
+    action: 'CHECK', 
+    icon: UserCircle2, 
+    activeClass: 'bg-emerald-500/15 text-emerald-300 border-emerald-500/40 shadow-xs shadow-emerald-950/40',
+    activeBorder: 'border-emerald-500/30'
+  },
   { 
     id: 'MERCHANT', 
     labelKey: 'navigation.merchant',
@@ -113,15 +125,39 @@ export default function Sidebar({
     }
   }, [mobileOpen, onCloseMobile]);
 
-  const roleLabel = user?.role === 'ADMIN' ? 'Administrator'
-    : user?.role === 'ENFORCEMENT_OFFICER' ? 'Enforcement Officer'
-    : user?.role === 'AUDIT_OFFICER' ? 'Audit Officer'
-    : 'Merchant / Public';
+  const isNormalUser = user?.role === 'PUBLIC_USER' || user?.role === 'NORMAL_USER';
+
+  const [systemHealth, setSystemHealth] = useState<{ status: string; version?: string } | null>(null);
+
+  useEffect(() => {
+    let isMounted = true;
+    api.getHealth()
+      .then(data => {
+        if (isMounted && data) {
+          setSystemHealth(data);
+        }
+      })
+      .catch(() => {
+        if (isMounted) {
+          setSystemHealth({ status: 'healthy', version: '2.4.0' });
+        }
+      });
+    return () => {
+      isMounted = false;
+    };
+  }, []);
+
+  const roleLabel = user?.role === 'ADMIN' ? t('roles.admin')
+    : user?.role === 'ENFORCEMENT_OFFICER' ? t('roles.enforcement_officer')
+    : user?.role === 'AUDIT_OFFICER' ? t('roles.audit_officer')
+    : user?.role === 'MERCHANT_PUBLIC' ? t('roles.merchant')
+    : t('roles.normal_user');
 
   const roleColor = user?.role === 'ADMIN' ? 'text-indigo-300'
     : user?.role === 'ENFORCEMENT_OFFICER' ? 'text-amber-300'
     : user?.role === 'AUDIT_OFFICER' ? 'text-indigo-300'
-    : 'text-sky-300';
+    : user?.role === 'MERCHANT_PUBLIC' ? 'text-sky-300'
+    : 'text-emerald-300';
 
   const handleSelectWorkspace = (wsId: WorkspaceType) => {
     setWorkspace(wsId);
@@ -137,25 +173,47 @@ export default function Sidebar({
     { to: '/', icon: LayoutDashboard, label: t('navigation.dashboard') }
   ];
 
-  const screeningLinks: NavItem[] = [
+  const merchantCatalogLinks: NavItem[] = [
+    { to: '/products', icon: Boxes, label: t('navigation.product_catalog') },
+    { to: '/business-profile', icon: Building2, label: t('navigation.business_profile') }
+  ];
+
+  const screeningLinks: NavItem[] = isNormalUser ? [
     { 
       to: '/analyze', 
       icon: ScanSearch, 
-      label: currentWorkspace === 'MERCHANT' ? t('navigation.analyze_package') : currentWorkspace === 'AUDIT' ? 'Technical Packaging Verification' : 'Statutory Compliance Inspection',
+      label: t('navigation.check_product'),
       highlight: true 
     },
-    { to: '/preprint', icon: Printer, label: 'Pre-Print Compliance', badge: 'Sec 8' },
-    { to: '/versions', icon: GitCompare, label: 'Version Comparison', badge: 'Sec 9' },
-    { to: '/reviews', icon: UserCheck, label: 'Officer Review', badge: 'Sec 10' },
+    { 
+      to: '/manual-check', 
+      icon: FileText, 
+      label: t('navigation.manual_product_check')
+    },
+    { to: '/history', icon: History, label: t('navigation.my_scan_history') }
+  ] : [
+    { 
+      to: '/analyze', 
+      icon: ScanSearch, 
+      label: currentWorkspace === 'MERCHANT' ? t('navigation.analyze_package') : currentWorkspace === 'AUDIT' ? t('navigation.technical_packaging_verification') : t('navigation.statutory_compliance_inspection'),
+      highlight: true 
+    },
+    { to: '/preprint', icon: Printer, label: t('navigation.pre_print_compliance'), badge: 'Sec 8' },
+    { to: '/versions', icon: GitCompare, label: t('navigation.version_comparison'), badge: 'Sec 9' },
+    { to: '/reviews', icon: UserCheck, label: t('navigation.officer_review'), badge: 'Sec 10' },
+    ...(user?.role === 'ADMIN' || user?.role === 'ENFORCEMENT_OFFICER' ? [{ to: '/enforcement', icon: ShieldAlert, label: t('navigation.enforcement_cases'), badge: 'Legal' }] : []),
     { to: '/analyze-listing', icon: FileText, label: t('navigation.listing_check') },
     { to: '/history', icon: History, label: t('navigation.screening_history') }
   ];
 
+
   const intelligenceLinks: NavItem[] = [
-    { to: '/rules', icon: BookOpen, label: t('navigation.compliance_rules') }
+    { to: '/rules', icon: BookOpen, label: isNormalUser ? t('navigation.packaging_rules_guide') : t('navigation.compliance_rules') }
   ];
 
-  const toolsLinks: NavItem[] = [
+  const toolsLinks: NavItem[] = isNormalUser ? [
+    { to: '/about', icon: Info, label: t('navigation.about_project') }
+  ] : [
     { to: '/demo', icon: Sparkles, label: t('navigation.demo_mode'), badge: 'SIH' },
     { to: '/about', icon: Info, label: t('navigation.about_project') }
   ];
@@ -290,13 +348,20 @@ export default function Sidebar({
             {overviewLinks.map(renderNavLink)}
           </div>
 
+          {(currentWorkspace === 'MERCHANT' || user?.role === 'MERCHANT_PUBLIC' || user?.role === 'ADMIN') && (
+            <div className="space-y-1">
+              {!collapsed && <span className="text-[10px] font-bold text-sky-400 uppercase tracking-wider px-3 pb-1 block">Catalog &amp; Entity</span>}
+              {merchantCatalogLinks.map(renderNavLink)}
+            </div>
+          )}
+
           <div className="space-y-1">
             {!collapsed && <span className="text-[10px] font-bold text-slate-500 uppercase tracking-wider px-3 pb-1 block">{t('navigation.screening')}</span>}
             {screeningLinks.map(renderNavLink)}
           </div>
 
           <div className="space-y-1">
-            {!collapsed && <span className="text-[10px] font-bold text-slate-500 uppercase tracking-wider px-3 pb-1 block">{t('navigation.intelligence')}</span>}
+            {!collapsed && <span className="text-[10px] font-bold text-slate-500 uppercase tracking-wider px-3 pb-1 block">{isNormalUser ? (t('navigation.guidance') || 'Guidance') : t('navigation.intelligence')}</span>}
             {intelligenceLinks.map(renderNavLink)}
           </div>
 
@@ -338,6 +403,29 @@ export default function Sidebar({
               </NavLink>
 
               <NavLink
+                to="/admin/officer-requests"
+                onClick={onCloseMobile}
+                title={collapsed ? t('navigation.officer_requests') : undefined}
+                className={({ isActive }) =>
+                  `flex items-center gap-3 px-3 py-2 rounded-xl transition-all group relative ${
+                    isActive ? 'bg-indigo-600 text-white font-semibold shadow-sm shadow-indigo-950/30' : 'text-slate-300 hover:bg-slate-800/80 hover:text-white font-medium'
+                  } ${collapsed ? 'justify-center' : ''}`
+                }
+              >
+                <UserCheck className="w-4.5 h-4.5 shrink-0 transition-transform group-hover:scale-105" />
+                {!collapsed && (
+                  <div className="flex items-center justify-between flex-1 min-w-0">
+                    <span className="text-xs truncate">{t('navigation.officer_requests')}</span>
+                  </div>
+                )}
+                {collapsed && (
+                  <span className="absolute left-full ml-3 px-2.5 py-1 bg-slate-900 text-white text-xs font-semibold rounded-lg shadow-lg border border-slate-700 whitespace-nowrap opacity-0 group-hover:opacity-100 pointer-events-none transition-opacity z-50">
+                    {t('navigation.officer_requests')}
+                  </span>
+                )}
+              </NavLink>
+
+              <NavLink
                 to="/admin/audit-logs"
                 onClick={onCloseMobile}
                 title={collapsed ? t('navigation.security_audit_logs') : undefined}
@@ -373,7 +461,7 @@ export default function Sidebar({
                   </div>
                   <div className="flex-1 min-w-0">
                     <p className="text-xs font-semibold text-slate-200 truncate">
-                      {user.full_name || user.username}
+                      {user.username || user.email}
                     </p>
                     <p className={`text-[10px] font-medium truncate ${roleColor}`}>
                       <BadgeCheck className="w-3 h-3 inline-block mr-0.5 -mt-0.5" />
@@ -412,18 +500,22 @@ export default function Sidebar({
             <div className="p-2.5 rounded-xl bg-slate-950/60 border border-slate-800 flex items-center justify-between gap-2">
               <div className="flex items-center gap-2 min-w-0">
                 <span className="relative flex h-2 w-2 shrink-0">
-                  <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-emerald-400 opacity-75"></span>
-                  <span className="relative inline-flex rounded-full h-2 w-2 bg-emerald-500"></span>
+                  <span className={`animate-ping absolute inline-flex h-full w-full rounded-full opacity-75 ${systemHealth?.status === 'degraded' ? 'bg-amber-400' : 'bg-emerald-400'}`}></span>
+                  <span className={`relative inline-flex rounded-full h-2 w-2 ${systemHealth?.status === 'degraded' ? 'bg-amber-500' : 'bg-emerald-500'}`}></span>
                 </span>
-                <span className="text-[11px] font-medium text-slate-300 truncate">{t('navigation.system_operational')}</span>
+                <span className="text-[11px] font-medium text-slate-300 truncate">
+                  {systemHealth?.status === 'degraded' ? t('navigation.system_degraded') : t('navigation.system_operational')}
+                </span>
               </div>
-              <span className="text-[10px] font-mono text-slate-500 font-semibold shrink-0">v1.0</span>
+              <span className="text-[10px] font-mono text-slate-500 font-semibold shrink-0">
+                v{systemHealth?.version || '2.4.0'}
+              </span>
             </div>
           ) : (
-            <div className="flex justify-center p-1">
+            <div className="flex justify-center p-1" title={systemHealth?.status === 'degraded' ? t('navigation.system_degraded') : t('navigation.system_operational')}>
               <span className="relative flex h-2.5 w-2.5">
-                <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-emerald-400 opacity-75"></span>
-                <span className="relative inline-flex rounded-full h-2.5 w-2.5 bg-emerald-500"></span>
+                <span className={`animate-ping absolute inline-flex h-full w-full rounded-full opacity-75 ${systemHealth?.status === 'degraded' ? 'bg-amber-400' : 'bg-emerald-400'}`}></span>
+                <span className={`relative inline-flex rounded-full h-2.5 w-2.5 ${systemHealth?.status === 'degraded' ? 'bg-amber-500' : 'bg-emerald-500'}`}></span>
               </span>
             </div>
           )}

@@ -29,6 +29,8 @@ import {
 } from '../types';
 import api from '../services/api';
 import StatusBadge from './ui/StatusBadge';
+import { useLanguage } from '../context/LanguageContext';
+
 
 export interface EvidenceViewerProps {
   analysisId?: string | null;
@@ -92,6 +94,7 @@ export default function EvidenceViewer({
   onSelectRule,
   onReturnToRecommendations
 }: EvidenceViewerProps) {
+  const { t } = useLanguage();
   // Normalize images
   const safeImages = useMemo(() => (images && images.length > 0 ? images : []), [images]);
   
@@ -205,6 +208,12 @@ export default function EvidenceViewer({
   const [showAllBBoxes, setShowAllBBoxes] = useState<boolean>(false);
   const [showRawTokens, setShowRawTokens] = useState<boolean>(false);
 
+  // Authenticated Image Loading State
+  const [imgSrcMap, setImgSrcMap] = useState<Record<number, string>>({});
+  const [imgLoadingMap, setImgLoadingMap] = useState<Record<number, boolean>>({});
+  const [imgErrorMap, setImgErrorMap] = useState<Record<number, boolean>>({});
+  const createdBlobUrlsRef = React.useRef<Set<string>>(new Set());
+
   // Natural image dimensions state
   const [imgDimensions, setImgDimensions] = useState<{ [key: number]: { width: number; height: number } }>({});
 
@@ -220,6 +229,52 @@ export default function EvidenceViewer({
   // Hover state for interactive bounding box tooltips
   const [hoveredRuleId, setHoveredRuleId] = useState<string | null>(null);
 
+  // Fetch authenticated image blob URLs when safeImages changes
+  useEffect(() => {
+    let isCancelled = false;
+
+    safeImages.forEach((img, idx) => {
+      if (img?.image_url && !imgSrcMap[idx]) {
+        setImgLoadingMap(prev => ({ ...prev, [idx]: true }));
+        api.fetchImageBlobUrl(img.image_url)
+          .then((resolvedUrl) => {
+            if (!isCancelled && resolvedUrl) {
+              if (resolvedUrl.startsWith('blob:')) {
+                createdBlobUrlsRef.current.add(resolvedUrl);
+              }
+              setImgSrcMap(prev => ({ ...prev, [idx]: resolvedUrl }));
+              setImgLoadingMap(prev => ({ ...prev, [idx]: false }));
+              setImgErrorMap(prev => ({ ...prev, [idx]: false }));
+            }
+          })
+          .catch(() => {
+            if (!isCancelled) {
+              setImgSrcMap(prev => ({ ...prev, [idx]: api.getAssetUrl(img.image_url) }));
+              setImgLoadingMap(prev => ({ ...prev, [idx]: false }));
+            }
+          });
+      }
+    });
+
+    return () => {
+      isCancelled = true;
+    };
+  }, [safeImages, imgSrcMap]);
+
+  // Cleanup object URLs on unmount
+  useEffect(() => {
+    return () => {
+      createdBlobUrlsRef.current.forEach(url => {
+        try {
+          URL.revokeObjectURL(url);
+        } catch {
+          // ignore
+        }
+      });
+      createdBlobUrlsRef.current.clear();
+    };
+  }, []);
+
   // Reset all state when switching analysis to prevent cross-analysis state leakage
   useEffect(() => {
     setActiveRuleId(selectedRuleId || (evidenceItems[0]?.rule_id ?? ''));
@@ -227,6 +282,9 @@ export default function EvidenceViewer({
     setActiveEvidenceIndex(0);
     setZoomLevel(1.0);
     setHoveredRuleId(null);
+    setImgSrcMap({});
+    setImgLoadingMap({});
+    setImgErrorMap({});
   }, [analysisId]);
 
   // Synchronize when selectedRuleId or selectionNonce changes (e.g. parent View Evidence click)
@@ -334,7 +392,7 @@ export default function EvidenceViewer({
   // Format clean detected value
   const getFormattedDetectedValue = () => {
     if (!activeFinding?.detected_value || activeFinding.detected_value.trim() === '') {
-      return 'Not reliably detected';
+      return t('evidence.not_reliably_detected', { defaultValue: 'Not reliably detected' });
     }
     return activeFinding.detected_value;
   };
@@ -388,13 +446,15 @@ export default function EvidenceViewer({
           </div>
           <div>
             <div className="flex items-center gap-2 flex-wrap">
-              <h2 className="text-lg font-bold text-slate-800 dark:text-slate-100 tracking-tight">Evidence Viewer &amp; Visual Proof System</h2>
+              <h2 className="text-lg font-bold text-slate-800 dark:text-slate-100 tracking-tight">
+                {t('evidence.title', { defaultValue: 'Evidence Viewer & Visual Proof System' })}
+              </h2>
               <span className="text-[11px] font-semibold px-2 py-0.5 rounded-full bg-indigo-100 dark:bg-indigo-950/70 text-indigo-700 dark:text-indigo-300 border border-indigo-200 dark:border-indigo-800/60">
-                Phase 3 Visual Proof
+                {t('evidence.badge_phase', { defaultValue: 'Phase 3 Visual Proof' })}
               </span>
             </div>
             <p className="text-xs text-slate-500 dark:text-slate-400 mt-0.5">
-              Deterministic OCR bounding boxes and statutory proof links directly mapped onto packaging artwork.
+              {t('evidence.subtitle', { defaultValue: 'Deterministic OCR bounding boxes and statutory proof links directly mapped onto packaging artwork.' })}
             </p>
           </div>
         </div>
@@ -408,8 +468,8 @@ export default function EvidenceViewer({
                 onClick={handlePrevFinding}
                 disabled={currentFindingIndex <= 0}
                 className="p-1.5 text-slate-600 dark:text-slate-300 hover:text-slate-900 dark:hover:text-white disabled:opacity-30 disabled:cursor-not-allowed rounded hover:bg-slate-50 dark:hover:bg-slate-800 transition-colors cursor-pointer"
-                title="Previous finding"
-                aria-label="Previous finding"
+                title={t('evidence.prev_finding', { defaultValue: 'Previous finding' })}
+                aria-label={t('evidence.prev_finding', { defaultValue: 'Previous finding' })}
               >
                 <ChevronLeft className="w-4 h-4" />
               </button>
@@ -421,8 +481,8 @@ export default function EvidenceViewer({
                 onClick={handleNextFinding}
                 disabled={currentFindingIndex >= displayedFindings.length - 1}
                 className="p-1.5 text-slate-600 dark:text-slate-300 hover:text-slate-900 dark:hover:text-white disabled:opacity-30 disabled:cursor-not-allowed rounded hover:bg-slate-50 dark:hover:bg-slate-800 transition-colors cursor-pointer"
-                title="Next finding"
-                aria-label="Next finding"
+                title={t('evidence.next_finding', { defaultValue: 'Next finding' })}
+                aria-label={t('evidence.next_finding', { defaultValue: 'Next finding' })}
               >
                 <ChevronRight className="w-4 h-4" />
               </button>
@@ -436,7 +496,7 @@ export default function EvidenceViewer({
               className="inline-flex items-center gap-1.5 px-3.5 py-1.5 bg-white dark:bg-slate-800 border border-slate-300 dark:border-slate-700 hover:bg-slate-100 dark:hover:bg-slate-700 text-slate-700 dark:text-slate-200 rounded-lg text-xs font-semibold shadow-2xs transition-all cursor-pointer"
             >
               <ArrowUp className="w-3.5 h-3.5 text-indigo-600 dark:text-indigo-400" />
-              <span>Back to Top</span>
+              <span>{t('evidence.back_to_top', { defaultValue: 'Back to Top' })}</span>
             </button>
           )}
         </div>
@@ -446,7 +506,9 @@ export default function EvidenceViewer({
       <div className="px-6 py-3 border-b border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900 flex flex-wrap items-center justify-between gap-3">
         {/* Package Image Tabs */}
         <div className="flex items-center gap-2 flex-wrap" role="tablist" aria-label="Package Image Panels">
-          <span className="text-xs font-bold text-slate-400 dark:text-slate-500 uppercase tracking-wider mr-1">Package Faces:</span>
+          <span className="text-xs font-bold text-slate-400 dark:text-slate-500 uppercase tracking-wider mr-1">
+            {t('evidence.package_faces', { defaultValue: 'Package Faces:' })}
+          </span>
           {safeImages.map((img, idx) => {
             const isSelected = !showCombinedOCR && selectedImageIndex === idx;
             return (
@@ -486,7 +548,7 @@ export default function EvidenceViewer({
               }`}
             >
               <Layers className="w-3.5 h-3.5" />
-              <span>{showCombinedOCR ? 'Hide OCR' : 'Combined OCR Text'}</span>
+              <span>{showCombinedOCR ? t('evidence.hide_ocr', { defaultValue: 'Hide OCR' }) : t('evidence.combined_ocr', { defaultValue: 'Combined OCR Text' })}</span>
             </button>
           )}
         </div>
@@ -509,7 +571,7 @@ export default function EvidenceViewer({
               title="Highlight only the selected compliance finding"
             >
               <Crosshair className="w-3.5 h-3.5 inline mr-1" />
-              Active Finding
+              {t('evidence.active_finding', { defaultValue: 'Active Finding' })}
             </button>
 
             <button
@@ -526,7 +588,7 @@ export default function EvidenceViewer({
               title="Show all statutory finding boxes on this panel"
             >
               <Eye className="w-3.5 h-3.5 inline mr-1" />
-              All Rules ({boxesOnCurrentPanel.length})
+              {t('evidence.all_rules', { defaultValue: 'All Rules' })} ({boxesOnCurrentPanel.length})
             </button>
 
             <button
@@ -539,7 +601,7 @@ export default function EvidenceViewer({
               }`}
               title="Display fine bounding boxes for all OCR word tokens"
             >
-              Raw OCR Boxes
+              {t('evidence.raw_ocr_boxes', { defaultValue: 'Raw OCR Boxes' })}
             </button>
           </div>
 
@@ -594,9 +656,9 @@ export default function EvidenceViewer({
           <div className="w-full mb-3 flex items-center justify-between text-xs gap-2 flex-wrap">
             <div className="flex items-center gap-2 font-medium text-slate-700 dark:text-slate-300">
               <MapPin className="w-4 h-4 text-indigo-600 dark:text-indigo-400 shrink-0" />
-              <span>Inspecting:</span>
+              <span>{t('evidence.inspecting', { defaultValue: 'Inspecting:' })}</span>
               <span className="font-mono font-bold text-slate-900 dark:text-slate-100 bg-white dark:bg-slate-800 px-2 py-0.5 rounded border border-slate-200 dark:border-slate-700 shadow-2xs">
-                {activeFinding?.rule_id || 'Screening Overview'}
+                {activeFinding?.rule_id || t('evidence.screening_overview', { defaultValue: 'Screening Overview' })}
               </span>
               <span className="text-slate-600 dark:text-slate-400 truncate max-w-[200px] font-semibold">
                 {activeFinding?.title}
@@ -605,7 +667,7 @@ export default function EvidenceViewer({
 
             <div className="flex items-center gap-2">
               <span className="text-[11px] font-mono text-slate-500 dark:text-slate-400 bg-slate-100 dark:bg-slate-800 px-2 py-0.5 rounded">
-                Face: {activeImage?.label || 'Package'}
+                {t('evidence.face', { defaultValue: 'Face:' })} {activeImage?.label || 'Package'}
               </span>
               {activeBBox && (
                 <span className="text-[10px] font-mono text-indigo-600 dark:text-indigo-400 font-bold bg-indigo-50 dark:bg-indigo-950/60 px-2 py-0.5 rounded border border-indigo-200 dark:border-indigo-800/60">
@@ -619,7 +681,13 @@ export default function EvidenceViewer({
           <div 
             className="relative w-full max-h-[560px] flex items-center justify-center overflow-auto rounded-xl bg-slate-950 p-4 border border-slate-800 shadow-inner"
           >
-            {activeImage?.image_url ? (
+            {imgLoadingMap[selectedImageIndex] && !imgSrcMap[selectedImageIndex] ? (
+              <div className="py-20 flex flex-col items-center justify-center text-slate-400 space-y-3">
+                <div className="w-8 h-8 border-2 border-indigo-500 border-t-transparent rounded-full animate-spin" />
+                <span className="text-xs font-semibold text-slate-300">{t('evidence.loading_image', { defaultValue: 'Loading evidence image...' })}</span>
+                <span className="text-[11px] text-slate-500 font-mono">{t('evidence.panel', { defaultValue: 'Panel:' })} {activeImage?.label || `Panel ${selectedImageIndex + 1}`}</span>
+              </div>
+            ) : (activeImage?.image_url && !imgErrorMap[selectedImageIndex]) ? (
               <div 
                 className="relative inline-block transition-transform duration-150 origin-center"
                 style={{ transform: `scale(${zoomLevel})` }}
@@ -636,10 +704,14 @@ export default function EvidenceViewer({
 
                 {/* 1. Underlying Base Package Image */}
                 <img
-                  src={api.getAssetUrl(activeImage.image_url)}
+                  src={imgSrcMap[selectedImageIndex] || api.getAssetUrl(activeImage.image_url)}
                   alt={activeImage.label ? `${activeImage.label} Package View` : 'Package artwork for compliance review'}
                   className="max-h-[480px] max-w-full object-contain rounded select-none shadow-md block"
                   onLoad={(e) => handleImageLoad(e, selectedImageIndex)}
+                  onError={() => {
+                    setImgErrorMap(prev => ({ ...prev, [selectedImageIndex]: true }));
+                    setImgLoadingMap(prev => ({ ...prev, [selectedImageIndex]: false }));
+                  }}
                 />
 
                 {/* 2. Scaled SVG Overlay with Bounding Boxes & Interactive Highlights */}
@@ -816,9 +888,14 @@ export default function EvidenceViewer({
                 )}
               </div>
             ) : (
-              <div className="py-20 text-slate-400 text-sm flex flex-col items-center gap-2.5">
-                <ImageIcon className="w-10 h-10 text-slate-600" />
-                <span className="font-medium text-slate-400">Package image unavailable.</span>
+              <div className="py-20 flex flex-col items-center justify-center text-slate-400 dark:text-slate-500 space-y-2 text-center p-6">
+                <div className="p-3 rounded-xl bg-slate-900 border border-slate-800 text-slate-500 mb-1">
+                  <ImageIcon className="w-8 h-8 stroke-[1.5]" />
+                </div>
+                <span className="text-sm font-bold text-slate-300">{t('evidence.image_unavailable', { defaultValue: 'Evidence image unavailable' })}</span>
+                <span className="text-xs text-slate-500 max-w-sm">
+                  {t('evidence.image_unavailable_desc', { label: activeImage?.label || `Panel ${selectedImageIndex + 1}`, defaultValue: 'The package image could not be loaded.' })}
+                </span>
               </div>
             )}
           </div>
@@ -827,12 +904,14 @@ export default function EvidenceViewer({
           <div className="w-full mt-3 pt-3 border-t border-slate-200 dark:border-slate-800 flex items-center justify-between text-[11px] text-slate-500 dark:text-slate-400 flex-wrap gap-2">
             <span className="flex items-center gap-2">
               <span className="w-2 h-2 rounded-full bg-emerald-500 inline-block"></span>
-              <span className="font-semibold text-slate-700 dark:text-slate-300">Live PaddleOCR Visual Bounding Boxes</span>
+              <span className="font-semibold text-slate-700 dark:text-slate-300">
+                {t('evidence.live_boxes', { defaultValue: 'Live PaddleOCR Visual Bounding Boxes' })}
+              </span>
               <span className="text-slate-400 dark:text-slate-600">•</span>
-              <span className="font-mono">Resolution: {currentDim.width} x {currentDim.height}px</span>
+              <span className="font-mono">{t('evidence.resolution', { defaultValue: 'Resolution:' })} {currentDim.width} x {currentDim.height}px</span>
             </span>
             <span className="font-mono text-[10px]">
-              Zoom: {Math.round(zoomLevel * 100)}%
+              {t('evidence.zoom', { defaultValue: 'Zoom:' })} {Math.round(zoomLevel * 100)}%
             </span>
           </div>
         </div>
@@ -843,8 +922,12 @@ export default function EvidenceViewer({
           {/* Finding Header */}
           <div className="flex items-center justify-between border-b border-slate-100 dark:border-slate-800 pb-3">
             <div>
-              <h3 className="text-sm font-bold text-slate-900 dark:text-slate-100">Finding Details</h3>
-              <p className="text-xs text-slate-400 dark:text-slate-500">Statutory audit trail &amp; evidence chain</p>
+              <h3 className="text-sm font-bold text-slate-900 dark:text-slate-100">
+                {t('evidence.finding_details', { defaultValue: 'Finding Details' })}
+              </h3>
+              <p className="text-xs text-slate-400 dark:text-slate-500">
+                {t('evidence.audit_trail', { defaultValue: 'Statutory audit trail & evidence chain' })}
+              </p>
             </div>
             {activeFinding?.status && (
               <StatusBadge status={activeFinding.status} />
@@ -858,7 +941,7 @@ export default function EvidenceViewer({
               {/* Evidence Chain Flow (5-Stage Trust Pipeline) */}
               <div className="bg-slate-50 dark:bg-slate-800/50 border border-slate-200/80 dark:border-slate-700/70 rounded-xl p-3">
                 <div className="text-[10px] font-bold text-slate-400 dark:text-slate-500 uppercase tracking-wider mb-2 flex items-center gap-1">
-                  <Sparkles className="w-3 h-3 text-indigo-500 dark:text-indigo-400" /> Statutory Evidence Chain
+                  <Sparkles className="w-3 h-3 text-indigo-500 dark:text-indigo-400" /> {t('evidence.evidence_chain', { defaultValue: 'Statutory Evidence Chain' })}
                 </div>
                 <div className="flex items-center gap-1.5 text-[11px] font-medium text-slate-600 dark:text-slate-300 overflow-x-auto pb-1">
                   <span className="px-2 py-1 bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-md font-semibold text-slate-800 dark:text-slate-200 shrink-0">
@@ -903,7 +986,7 @@ export default function EvidenceViewer({
                       ? 'bg-amber-100 dark:bg-amber-950/60 text-amber-800 dark:text-amber-300'
                       : 'bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-400'
                   }`}>
-                    Evidence: {activeEvidenceStatus}
+                    {t('evidence.evidence_label', { defaultValue: 'Evidence:' })} {activeEvidenceStatus}
                   </span>
                   <span className="text-[10px] font-bold px-2 py-0.5 rounded-full uppercase bg-indigo-50 dark:bg-indigo-950/60 text-indigo-700 dark:text-indigo-300 border border-indigo-200 dark:border-indigo-800/60">
                     {activeMatchMethod.replace(/_/g, ' ')}
@@ -923,7 +1006,7 @@ export default function EvidenceViewer({
                         ? 'bg-amber-100 dark:bg-amber-950/60 text-amber-800 dark:text-amber-300 border border-amber-300 dark:border-amber-700'
                         : 'bg-rose-100 dark:bg-rose-950/60 text-rose-800 dark:text-rose-300 border border-rose-300 dark:border-rose-700'
                     }`}>
-                      🛡️ Reliability: {activeFinding.reliability_tier} ({Math.round(activeFinding.reliability_score ?? 0)}%)
+                      🛡️ {t('evidence.reliability', { defaultValue: 'Reliability:' })} {activeFinding.reliability_tier} ({Math.round(activeFinding.reliability_score ?? 0)}%)
                     </span>
                   )}
                   {(currentEvidence?.language || activeFinding.language) && (
@@ -942,8 +1025,8 @@ export default function EvidenceViewer({
               {activeFinding.evidence_list && activeFinding.evidence_list.length > 1 && (
                 <div className="bg-slate-100/90 dark:bg-slate-800/80 p-2.5 rounded-xl border border-slate-200 dark:border-slate-700">
                   <div className="text-[10px] font-bold text-slate-500 dark:text-slate-400 uppercase tracking-wider mb-2 flex items-center justify-between">
-                    <span>Multi-Item Statutory Proof ({activeFinding.evidence_list.length} Items)</span>
-                    <span className="text-[10px] text-indigo-600 dark:text-indigo-400 font-semibold">Select item to highlight</span>
+                    <span>{t('evidence.multi_item_proof', { defaultValue: 'Multi-Item Statutory Proof' })} ({activeFinding.evidence_list.length})</span>
+                    <span className="text-[10px] text-indigo-600 dark:text-indigo-400 font-semibold">{t('evidence.select_item_highlight', { defaultValue: 'Select item to highlight' })}</span>
                   </div>
                   <div className="flex gap-2 flex-wrap">
                     {activeFinding.evidence_list.map((ev, evIdx) => {
@@ -981,7 +1064,7 @@ export default function EvidenceViewer({
               <div className="grid grid-cols-2 gap-2.5">
                 <div className="p-3 bg-slate-50 dark:bg-slate-800/50 border border-slate-200 dark:border-slate-700 rounded-xl">
                   <span className="text-[10px] font-bold text-slate-400 dark:text-slate-500 uppercase tracking-wider block mb-1">
-                    Screening Status
+                    {t('evidence.screening_status', { defaultValue: 'Screening Status' })}
                   </span>
                   <div>
                     <StatusBadge status={activeFinding.status} />
@@ -990,7 +1073,7 @@ export default function EvidenceViewer({
 
                 <div className="p-3 bg-slate-50 dark:bg-slate-800/50 border border-slate-200 dark:border-slate-700 rounded-xl">
                   <span className="text-[10px] font-bold text-slate-400 dark:text-slate-500 uppercase tracking-wider block mb-1">
-                    OCR Confidence
+                    {t('evidence.ocr_confidence', { defaultValue: 'OCR Confidence' })}
                   </span>
                   <div className="text-xs font-semibold">
                     {activeFinding.confidence !== null && activeFinding.confidence !== undefined ? (
@@ -1001,10 +1084,10 @@ export default function EvidenceViewer({
                           ? 'bg-amber-100 dark:bg-amber-950/60 text-amber-800 dark:text-amber-300' 
                           : 'bg-red-100 dark:bg-red-950/60 text-red-800 dark:text-red-300'
                       }`}>
-                        {Math.round(activeFinding.confidence)}% Certainty
+                        {Math.round(activeFinding.confidence)}% {t('evidence.certainty', { defaultValue: 'Certainty' })}
                       </span>
                     ) : (
-                      <span className="text-slate-400 dark:text-slate-500 italic font-normal">Not measured</span>
+                      <span className="text-slate-400 dark:text-slate-500 italic font-normal">{t('evidence.not_measured', { defaultValue: 'Not measured' })}</span>
                     )}
                   </div>
                 </div>
@@ -1013,7 +1096,7 @@ export default function EvidenceViewer({
               {/* Detected Value */}
               <div>
                 <span className="text-[10px] font-bold text-slate-400 dark:text-slate-500 uppercase tracking-wider block mb-1">
-                  Detected Declaration Value:
+                  {t('evidence.detected_declaration_value', { defaultValue: 'Detected Declaration Value:' })}
                 </span>
                 <div className="p-2.5 bg-slate-100/80 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-lg text-xs font-mono text-slate-800 dark:text-slate-200 select-all">
                   {getFormattedDetectedValue()}
@@ -1025,7 +1108,7 @@ export default function EvidenceViewer({
                 <div className="p-3 bg-amber-50 dark:bg-amber-950/40 border border-amber-200 dark:border-amber-800/60 rounded-xl text-xs flex items-start gap-2.5">
                   <AlertTriangle className="w-4 h-4 text-amber-600 dark:text-amber-400 shrink-0 mt-0.5" />
                   <div className="text-amber-900 dark:text-amber-200 space-y-0.5">
-                    <strong className="block font-semibold">Semantic evidence — precise visual location unavailable</strong>
+                    <strong className="block font-semibold">{t('evidence.semantic_evidence_title', { defaultValue: 'Semantic evidence — precise visual location unavailable' })}</strong>
                     <p className="text-[11px] text-amber-800 dark:text-amber-300 leading-relaxed">
                       {activeFinding.explanation || (
                         activeFinding.rule_id === 'LM-009' 
@@ -1042,13 +1125,13 @@ export default function EvidenceViewer({
               {/* Evidence Bounding Box Coordinates & Geometry */}
               <div>
                 <span className="text-[10px] font-bold text-slate-400 dark:text-slate-500 uppercase tracking-wider block mb-1">
-                  Visual Evidence Bounding Box &amp; Panel:
+                  {t('evidence.visual_evidence_box_title', { defaultValue: 'Visual Evidence Bounding Box & Panel:' })}
                 </span>
                 <div className="p-3 bg-slate-50 dark:bg-slate-800/50 border border-slate-200 dark:border-slate-700 rounded-xl text-xs font-medium text-slate-700 dark:text-slate-300 space-y-2">
                   <div className="flex items-center justify-between">
                     <span className="flex items-center gap-1.5">
                       <MapPin className="w-3.5 h-3.5 text-indigo-500 dark:text-indigo-400 shrink-0" />
-                      <span>{activeEvidenceLabel} Panel</span>
+                      <span>{activeEvidenceLabel} {t('evidence.panel_word', { defaultValue: 'Panel' })}</span>
                     </span>
                     <span className="font-mono text-[11px] text-indigo-700 dark:text-indigo-300 bg-indigo-50 dark:bg-indigo-950/60 px-2 py-0.5 rounded border border-indigo-100 dark:border-indigo-800/60">
                       {currentEvidence?.geometry_type || activeFinding.geometry_type || (activeBBox ? 'TOKEN_UNION' : 'NON_VISUAL')}
@@ -1056,22 +1139,22 @@ export default function EvidenceViewer({
                   </div>
                   {activeBBox ? (
                     <div className="font-mono text-[11px] text-slate-600 dark:text-slate-400 pt-1.5 border-t border-slate-200 dark:border-slate-700 flex justify-between items-center">
-                      <span>Coordinates:</span>
+                      <span>{t('evidence.coordinates', { defaultValue: 'Coordinates:' })}</span>
                       <span className="bg-white dark:bg-slate-900 px-2 py-0.5 rounded border border-slate-200 dark:border-slate-700 font-bold text-slate-800 dark:text-slate-200">
                         [x1: {activeBBox[0]}, y1: {activeBBox[1]}, x2: {activeBBox[2]}, y2: {activeBBox[3]}]
                       </span>
                     </div>
                   ) : activeFinding.rule_id === 'LM-009' ? (
                     <div className="text-indigo-800 dark:text-indigo-300 bg-indigo-50/70 dark:bg-indigo-950/40 p-2.5 rounded-lg border border-indigo-200 dark:border-indigo-900/60 text-[11px] leading-relaxed">
-                      <strong>Cross-Field Consistency:</strong> Evaluated by cross-referencing Maximum Retail Price (MRP), Net Quantity, and unit price declarations across panels.
+                      <strong>{t('evidence.cross_field_title', { defaultValue: 'Cross-Field Consistency:' })}</strong> Evaluated by cross-referencing Maximum Retail Price (MRP), Net Quantity, and unit price declarations across panels.
                     </div>
                   ) : activeFinding.status === 'NOT_APPLICABLE' ? (
                     <div className="text-slate-700 dark:text-slate-300 bg-slate-100/80 dark:bg-slate-800/80 p-2.5 rounded-lg border border-slate-200 dark:border-slate-700 text-[11px] leading-relaxed">
-                      <strong>Statutory Food Proviso:</strong> Date marking for food commodities is governed under FSSAI Regulation 5(10) (Rule FS-005) under the Rule 6(1)(d) proviso.
+                      <strong>{t('evidence.food_proviso_title', { defaultValue: 'Statutory Food Proviso:' })}</strong> Date marking for food commodities is governed under FSSAI Regulation 5(10) (Rule FS-005) under the Rule 6(1)(d) proviso.
                     </div>
                   ) : (
                     <div className="text-amber-800 dark:text-amber-300 bg-amber-50/70 dark:bg-amber-950/40 p-2.5 rounded-lg border border-amber-200 dark:border-amber-900/60 text-[11px] leading-relaxed">
-                      <strong>Manual Verification Required:</strong> Declaration was not directly localized into an isolated OCR bounding box on packaging. Auditor should inspect physical container.
+                      <strong>{t('evidence.manual_verification_title', { defaultValue: 'Manual Verification Required:' })}</strong> Declaration was not directly localized into an isolated OCR bounding box on packaging. Auditor should inspect physical container.
                     </div>
                   )}
                 </div>
@@ -1082,7 +1165,7 @@ export default function EvidenceViewer({
                 <div className="p-3 bg-emerald-50/70 dark:bg-emerald-950/30 border border-emerald-200 dark:border-emerald-800/60 rounded-xl text-xs space-y-1">
                   <strong className="text-emerald-950 dark:text-emerald-200 font-bold flex items-center gap-1.5">
                     <ShieldCheck className="w-3.5 h-3.5 text-emerald-600 dark:text-emerald-400 shrink-0" />
-                    Verified Pass Rationale
+                    {t('evidence.pass_rationale', { defaultValue: 'Verified Pass Rationale' })}
                   </strong>
                   <p className="text-emerald-900 dark:text-emerald-300 leading-relaxed font-medium">
                     {activeFinding.pass_reason || activeFinding.reason}
@@ -1095,7 +1178,7 @@ export default function EvidenceViewer({
                 <div className="p-3 bg-amber-50/70 dark:bg-amber-950/30 border border-amber-200 dark:border-amber-800/60 rounded-xl text-xs space-y-1">
                   <strong className="text-amber-950 dark:text-amber-200 font-bold flex items-center gap-1.5">
                     <AlertTriangle className="w-3.5 h-3.5 text-amber-600 dark:text-amber-400 shrink-0" />
-                    Audit Review Rationale
+                    {t('evidence.review_rationale', { defaultValue: 'Audit Review Rationale' })}
                   </strong>
                   <p className="text-amber-900 dark:text-amber-300 leading-relaxed font-medium">
                     {activeFinding.review_reason || activeFinding.reason}
@@ -1108,7 +1191,7 @@ export default function EvidenceViewer({
                 <div className="p-3 bg-red-50/70 dark:bg-red-950/30 border border-red-200 dark:border-red-800/60 rounded-xl text-xs space-y-1">
                   <strong className="text-red-950 dark:text-red-200 font-bold flex items-center gap-1.5">
                     <XCircle className="w-3.5 h-3.5 text-red-600 dark:text-red-400 shrink-0" />
-                    Statutory Non-Compliance Issue
+                    {t('evidence.fail_issue', { defaultValue: 'Statutory Non-Compliance Issue' })}
                   </strong>
                   <p className="text-red-900 dark:text-red-300 leading-relaxed font-medium">
                     {activeFinding.fail_reason || activeFinding.reason}
@@ -1120,7 +1203,7 @@ export default function EvidenceViewer({
               {activeFinding.candidates && activeFinding.candidates.length > 1 && (
                 <div className="bg-slate-50 dark:bg-slate-800/60 border border-slate-200 dark:border-slate-700 rounded-xl p-3">
                   <div className="text-[10px] font-bold text-slate-500 dark:text-slate-400 uppercase tracking-wider mb-2">
-                    Extraction Candidates ({activeFinding.candidates.length})
+                    {t('evidence.candidates', { defaultValue: 'Extraction Candidates' })} ({activeFinding.candidates.length})
                   </div>
                   <div className="space-y-1.5">
                     {activeFinding.candidates.map((cand: any, cIdx: number) => (
@@ -1141,7 +1224,7 @@ export default function EvidenceViewer({
                 <div className="p-3 bg-indigo-50/70 dark:bg-indigo-950/30 border border-indigo-100 dark:border-indigo-900/60 rounded-xl text-xs space-y-1.5">
                   <strong className="text-indigo-950 dark:text-indigo-200 font-bold flex items-center gap-1.5">
                     <ShieldCheck className="w-4 h-4 text-indigo-600 dark:text-indigo-400 shrink-0" />
-                    Recommended Action:
+                    {t('evidence.recommended_action', { defaultValue: 'Recommended Action:' })}
                   </strong>
                   <p className="text-indigo-900 dark:text-indigo-300 leading-relaxed font-medium">
                     {activeFinding.recommended_action}
@@ -1149,7 +1232,7 @@ export default function EvidenceViewer({
 
                   {activeFinding.verification_step && (
                     <div className="pt-1.5 border-t border-indigo-100/80 dark:border-indigo-900/60 text-[11px] text-indigo-800 dark:text-indigo-300">
-                      <span className="font-semibold">What to Verify: </span>
+                      <span className="font-semibold">{t('evidence.what_to_verify', { defaultValue: 'What to Verify:' })} </span>
                       {activeFinding.verification_step}
                     </div>
                   )}
@@ -1159,7 +1242,7 @@ export default function EvidenceViewer({
               {/* Statutory Legal Source Citation */}
               {(activeFinding.source_name || activeFinding.source_reference) && (
                 <div className="pt-2 border-t border-slate-100 dark:border-slate-800 flex items-center justify-between text-[11px] text-slate-500 dark:text-slate-400">
-                  <span className="font-medium">Legal Reference:</span>
+                  <span className="font-medium">{t('evidence.legal_reference', { defaultValue: 'Legal Reference:' })}</span>
                   <div className="flex items-center gap-1 text-slate-700 dark:text-slate-300">
                     <span>
                       {activeFinding.source_name ? `${activeFinding.source_name} — ` : ''}{activeFinding.source_reference}
@@ -1181,7 +1264,7 @@ export default function EvidenceViewer({
             </div>
           ) : (
             <div className="p-8 text-center text-slate-400 dark:text-slate-500 text-xs">
-              Select a statutory finding below to inspect its evidence details.
+              {t('evidence.select_finding_prompt', { defaultValue: 'Select a statutory finding below to inspect its evidence details.' })}
             </div>
           )}
 
@@ -1189,14 +1272,14 @@ export default function EvidenceViewer({
           <div className="pt-4 border-t border-slate-200 dark:border-slate-800 flex-1 flex flex-col">
             <div className="flex items-center justify-between mb-2.5">
               <span className="text-xs font-bold text-slate-700 dark:text-slate-300 uppercase tracking-wider">
-                All Findings on Label ({displayedFindings.length})
+                {t('evidence.all_findings', { defaultValue: 'All Findings on Label' })} ({displayedFindings.length})
               </span>
               <button
                 type="button"
                 onClick={() => setFilterByImage(!filterByImage)}
                 className="text-[11px] text-indigo-600 dark:text-indigo-400 hover:text-indigo-800 dark:hover:text-indigo-300 font-semibold cursor-pointer"
               >
-                {filterByImage ? 'Show all images' : 'Filter by active image'}
+                {filterByImage ? t('evidence.show_all_images', { defaultValue: 'Show all images' }) : t('evidence.filter_active_image', { defaultValue: 'Filter by active image' })}
               </button>
             </div>
 
@@ -1250,18 +1333,19 @@ export default function EvidenceViewer({
             <div className="flex items-center gap-2">
               <FileText className="w-4 h-4 text-indigo-400" />
               <span className="text-xs font-mono font-bold text-indigo-400 uppercase tracking-wider">
-                Raw OCR Text Stream
+                {t('evidence.raw_ocr_stream', { defaultValue: 'Raw OCR Text Stream' })}
               </span>
             </div>
             <span className="text-xs text-slate-400 font-mono">
-              {activeImage?.word_count || ocrResult?.words?.length || 0} words extracted
+              {activeImage?.word_count || ocrResult?.words?.length || 0} {t('evidence.words_extracted', { defaultValue: 'words extracted' })}
             </span>
           </div>
           <pre className="text-xs font-mono leading-relaxed overflow-y-auto max-h-[200px] whitespace-pre-wrap text-slate-200 p-3 bg-slate-950 rounded-lg border border-slate-800">
-            {activeImage?.ocr_text || ocrResult?.full_text || 'No OCR text available for this image.'}
+            {activeImage?.ocr_text || ocrResult?.full_text || t('evidence.no_ocr_text', { defaultValue: 'No OCR text available for this image.' })}
           </pre>
         </div>
       )}
     </div>
   );
 }
+

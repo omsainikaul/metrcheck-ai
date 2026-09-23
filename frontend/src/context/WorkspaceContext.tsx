@@ -5,6 +5,24 @@ import { useAuth } from './AuthContext';
 export const WORKSPACE_STORAGE_KEY = 'metrcheck-active-workspace';
 
 export const WORKSPACE_DEFINITIONS: Record<WorkspaceType, WorkspaceDefinition> = {
+  USER: {
+    id: 'USER',
+    label: 'Consumer Workspace',
+    shortLabel: 'Consumer',
+    tagline: 'Check product information and understand compliance findings',
+    coreAction: 'CHECK',
+    badge: 'CONSUMER ACCESS',
+    iconName: 'User',
+    description: 'Check product packaging information, review detected declarations, and understand MetrCheck AI compliance findings.',
+    capabilities: [
+      'Scan packaging product photos & labels',
+      'Verify mandatory statutory declarations',
+      'Understand compliance score & warnings',
+      'Inspect detected MRP, net quantity, manufacturing & expiry dates',
+      'Review consumer care and manufacturer information'
+    ],
+    allowedRoles: ['PUBLIC_USER', 'NORMAL_USER', 'MERCHANT_PUBLIC', 'AUDIT_OFFICER', 'ENFORCEMENT_OFFICER', 'ADMIN']
+  },
   MERCHANT: {
     id: 'MERCHANT',
     label: 'Merchant Workspace',
@@ -73,6 +91,7 @@ export interface WorkspaceContextType {
   isEnforcementWorkspace: boolean;
   isAuditWorkspace: boolean;
   isMerchantWorkspace: boolean;
+  isUserWorkspace: boolean;
   canUseEnforcementFeatures: boolean;
   canDeleteAnalyses: boolean;
   officerId: string;
@@ -81,12 +100,15 @@ export interface WorkspaceContextType {
 
 export function getAllowedWorkspacesForRole(role?: string | null): WorkspaceType[] {
   if (role === 'ADMIN' || role === 'ENFORCEMENT_OFFICER') {
-    return ['ENFORCEMENT', 'AUDIT', 'MERCHANT'];
+    return ['ENFORCEMENT', 'AUDIT', 'MERCHANT', 'USER'];
   }
   if (role === 'AUDIT_OFFICER') {
-    return ['AUDIT', 'MERCHANT'];
+    return ['AUDIT', 'MERCHANT', 'USER'];
   }
-  return ['MERCHANT'];
+  if (role === 'MERCHANT_PUBLIC') {
+    return ['MERCHANT', 'USER'];
+  }
+  return ['USER'];
 }
 
 export function getDefaultWorkspaceForRole(role?: string | null): WorkspaceType {
@@ -96,7 +118,10 @@ export function getDefaultWorkspaceForRole(role?: string | null): WorkspaceType 
   if (role === 'AUDIT_OFFICER') {
     return 'AUDIT';
   }
-  return 'MERCHANT';
+  if (role === 'MERCHANT_PUBLIC') {
+    return 'MERCHANT';
+  }
+  return 'USER';
 }
 
 const WorkspaceContext = createContext<WorkspaceContextType | undefined>(undefined);
@@ -115,6 +140,9 @@ export function WorkspaceProvider({ children }: { children: ReactNode }) {
   }, [user]);
 
   const [currentWorkspace, setCurrentWorkspaceState] = useState<WorkspaceType>(() => {
+    // Initialize to 'USER' (neutral, accessible to all roles) before auth resolves.
+    // The useEffect below corrects this to the role's proper workspace once auth loads.
+    // This prevents non-enforcement users from seeing a flash of the ENFORCEMENT workspace.
     try {
       const saved = localStorage.getItem(WORKSPACE_STORAGE_KEY) as WorkspaceType | null;
       if (saved && (saved in WORKSPACE_DEFINITIONS)) {
@@ -123,7 +151,7 @@ export function WorkspaceProvider({ children }: { children: ReactNode }) {
     } catch {
       // Fallback
     }
-    return 'ENFORCEMENT';
+    return 'USER';
   });
 
   // Ensure active workspace is always in allowedWorkspaces when auth state loads/changes
@@ -166,6 +194,7 @@ export function WorkspaceProvider({ children }: { children: ReactNode }) {
   const isEnforcementWorkspace = currentWorkspace === 'ENFORCEMENT';
   const isAuditWorkspace = currentWorkspace === 'AUDIT';
   const isMerchantWorkspace = currentWorkspace === 'MERCHANT';
+  const isUserWorkspace = currentWorkspace === 'USER';
 
   // Backend authorization capability flags
   const canUseEnforcementFeatures = (user?.role === 'ADMIN' || user?.role === 'ENFORCEMENT_OFFICER') && isEnforcementWorkspace;
@@ -175,12 +204,20 @@ export function WorkspaceProvider({ children }: { children: ReactNode }) {
     ? 'SYS-ADMIN-DOCA' 
     : user?.role === 'ENFORCEMENT_OFFICER' 
     ? (user.username === 'officer' ? 'LM-INSP-2026-IND' : `LM-INSP-${user.username.toUpperCase()}`)
-    : 'MERCHANT-PUB';
+    : user?.role === 'AUDIT_OFFICER'
+    ? (user.username === 'audit' ? 'QA-AUDIT-9921' : `QA-AUDIT-${user.username.toUpperCase()}`)
+    : user?.role === 'MERCHANT_PUBLIC'
+    ? 'MERCHANT-PUB'
+    : 'USER-CONSUMER';
 
   const jurisdiction = user?.jurisdiction || (
     user?.role === 'ADMIN' || user?.role === 'ENFORCEMENT_OFFICER'
       ? 'Consumer Affairs & Legal Metrology Directorate'
-      : 'Commercial Packaging Verification'
+      : user?.role === 'AUDIT_OFFICER'
+      ? 'Packaging Quality & Standard Division'
+      : user?.role === 'MERCHANT_PUBLIC'
+      ? 'Commercial Packaging Verification'
+      : 'Consumer Self-Service'
   );
 
   return (
@@ -194,6 +231,7 @@ export function WorkspaceProvider({ children }: { children: ReactNode }) {
         isEnforcementWorkspace,
         isAuditWorkspace,
         isMerchantWorkspace,
+        isUserWorkspace,
         canUseEnforcementFeatures,
         canDeleteAnalyses,
         officerId,

@@ -1,84 +1,68 @@
 # Python
 __pycache__/
 *.py[cod]
-venv/
+*.pyc
+*.pyo
 *.egg-info/
-dist/
-build/
 
-# Logs & Cache
-*.log
-.pytest_cache/
+# Virtual Environments
+venv/
+.venv/
+backend/venv/
+backend/venv311/
 
 # Node
 node_modules/
+frontend/node_modules/
+
+# Build Artifacts
 dist/
+build/
+frontend/dist/
 
-# Environment
-.env
-.env.paddle-backup
+# Caches & Test Artifacts
+.pytest_cache/
+.mypy_cache/
+.coverage
+htmlcov/
 
-# Agent task scratch (OMP)
-.omp_tasks/
-
-# Database
+# Databases
 *.db
-
-# Uploads
-uploads/
-
-# IDE
-.vscode/
-.idea/
-*.swp
-
-# OS
-.DS_Store
-Thumbs.db
-
-# MetrCheck AI local/runtime data
-.env
-.env.*
-!.env.example
-
-# Local databases
-*.db
+*.db-shm
+*.db-wal
 *.sqlite
 *.sqlite3
 
-# Uploaded/local generated files
-backend/uploads/
-uploads/
-
-# Local task/runtime data
-.omp_tasks/
-
-# Python cache
-__pycache__/
-*.pyc
-*.pyo
-.pytest_cache/
-.mypy_cache/
-
-# Python virtual environments
-backend/venv311/
-backend/venv/
-venv/
-.venv/
-
-# Local database backups
+# Database Backups
 *.db.backup*
 *.db.bak
+backend/archive/db_backups/
 
-# Frontend environment files
+# Runtime Uploads
+uploads/
+backend/uploads/
+
+# Environment & Secrets
+.env
+.env.*
+!.env.example
 frontend/.env.development
 frontend/.env.production
-
-# GitHub/device authentication data
 gh-device.json
 
-# Python virtual environments
-backend/venv311/
-backend/venv/
-venv/
-.venv/
+# IDE / Editor
+.vscode/
+.idea/
+*.swp
+*.swo
+
+# OS Artifacts
+.DS_Store
+Thumbs.db
+
+# Temporary Files & Local Tooling
+.omp_tasks/
+scratch/
+logs/
+*.log
+tatus --ignored

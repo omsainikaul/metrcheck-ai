@@ -48,6 +48,7 @@ from auth.security import (
     hash_password,
     verify_password,
     get_delivery_provider,
+    set_delivery_provider,
     DevLoggerDeliveryProvider,
     ROLE_ADMIN,
     ROLE_ENFORCEMENT,
@@ -67,10 +68,19 @@ from database.db import (
 
 
 @pytest.fixture(autouse=True)
+def setup_delivery_provider():
+    provider = DevLoggerDeliveryProvider()
+    set_delivery_provider(provider)
+    yield provider
+    set_delivery_provider(None)
+
+
+@pytest.fixture(autouse=True)
 def reset_rate_limits():
     clear_rate_limits()
     yield
     clear_rate_limits()
+
 
 
 @pytest.fixture(scope="module")
@@ -318,7 +328,8 @@ async def test_10_forgot_password_by_username_dispatches_to_registered_email(cli
     assert resp.status_code == 200
     data = resp.json()
     assert "If an account matches the information provided" in data["message"]
-    assert data["dev_token"] is not None
+    assert data.get("dev_token") is None
+    assert "dev_token" not in data
 
     provider = get_delivery_provider()
     if isinstance(provider, DevLoggerDeliveryProvider):
@@ -341,7 +352,8 @@ async def test_11_forgot_password_by_email_dispatches_to_registered_email(client
     assert resp.status_code == 200
     data = resp.json()
     assert "If an account matches the information provided" in data["message"]
-    assert data["dev_token"] is not None
+    assert data.get("dev_token") is None
+    assert "dev_token" not in data
 
     provider = get_delivery_provider()
     if isinstance(provider, DevLoggerDeliveryProvider):
@@ -374,7 +386,8 @@ def test_13_forgot_password_nonexistent_identifier_returns_generic_200(client):
     assert resp.status_code == 200
     data = resp.json()
     assert "If an account matches the information provided" in data["message"]
-    assert data["dev_token"] is None
+    assert data.get("dev_token") is None
+    assert "dev_token" not in data
 
 
 @pytest.mark.asyncio
@@ -391,7 +404,11 @@ async def test_14_complete_reset_flow_with_email_account(client):
     # 1. Request forgot password using email
     r_forgot = client.post("/api/auth/forgot-password", json={"identifier": email})
     assert r_forgot.status_code == 200
-    token = r_forgot.json()["dev_token"]
+    assert r_forgot.json().get("dev_token") is None
+    assert "dev_token" not in r_forgot.json()
+    provider = get_delivery_provider()
+    assert provider.last_sent is not None
+    token = provider.last_sent["raw_token"]
     assert token is not None
 
     # 2. Verify token
@@ -399,6 +416,7 @@ async def test_14_complete_reset_flow_with_email_account(client):
     assert r_verify.status_code == 200
     assert r_verify.json()["valid"] is True
     assert r_verify.json()["username"] == username
+
 
     # 3. Reset password
     r_reset = client.post("/api/auth/reset-password", json={"token": token, "new_password": new_pw})

@@ -1,5 +1,5 @@
 import { createContext, useContext, useEffect, useState, type ReactNode } from 'react';
-import { type AuthUser } from '../types';
+import { type AuthUser, type RegisterUserPayload, type RegisterMerchantPayload } from '../types';
 import { api, tokenStore } from '../services/api';
 
 interface AuthContextType {
@@ -8,6 +8,8 @@ interface AuthContextType {
   loading: boolean;
   login: (username: string, password: string) => Promise<AuthUser>;
   register: (username: string, email: string, password: string, fullName?: string) => Promise<AuthUser>;
+  registerUser: (payload: RegisterUserPayload) => Promise<AuthUser>;
+  registerMerchant: (payload: RegisterMerchantPayload) => Promise<AuthUser>;
   logout: () => void;
 }
 
@@ -60,6 +62,22 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     return res.user;
   };
 
+  const registerUser = async (payload: RegisterUserPayload): Promise<AuthUser> => {
+    const res = await api.registerUser(payload);
+    tokenStore.set(res.token);
+    setToken(res.token);
+    setUser(res.user);
+    return res.user;
+  };
+
+  const registerMerchant = async (payload: RegisterMerchantPayload): Promise<AuthUser> => {
+    const res = await api.registerMerchant(payload);
+    tokenStore.set(res.token);
+    setToken(res.token);
+    setUser(res.user);
+    return res.user;
+  };
+
   const logout = () => {
     tokenStore.clear();
     setToken(null);
@@ -67,7 +85,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   };
 
   return (
-    <AuthContext.Provider value={{ user, token, loading, login, register, logout }}>
+    <AuthContext.Provider value={{ user, token, loading, login, register, registerUser, registerMerchant, logout }}>
       {children}
     </AuthContext.Provider>
   );

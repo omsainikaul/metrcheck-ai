@@ -28,6 +28,7 @@ from auth.security import (
     ROLE_ENFORCEMENT,
     ROLE_AUDIT,
     ROLE_MERCHANT,
+    ROLE_USER,
 )
 
 
@@ -328,3 +329,97 @@ async def test_10_non_existent_file_returns_404():
     assert res.status_code == 404
     detail = res.json().get("detail", "")
     assert "Requested file not found." in detail
+
+
+@pytest.mark.asyncio
+async def test_11_normal_user_access_own_linked_file_via_bearer_and_ticket():
+    """Normal user can access their own linked image via Bearer header or single-use download ticket."""
+    await init_db()
+    client = TestClient(app)
+    username = f"consumer_img_{os.urandom(4).hex()}"
+    org_id = f"org_{username}"
+    await _create_test_user(username, ROLE_USER, org_id)
+    token = create_token(username, ROLE_USER)
+
+    filename = f"consumer_scan_{os.urandom(4).hex()}.png"
+    filepath = os.path.join(settings.UPLOAD_DIR, filename)
+    png_bytes = b"\x89PNG\r\n\x1a\n" + b"\x00" * 32
+    with open(filepath, "wb") as f:
+        f.write(png_bytes)
+
+    ana_id = f"ana-consumer-{os.urandom(4).hex()}"
+    await save_analysis(
+        analysis_id=ana_id,
+        product_name="Consumer Scanned Cereal",
+        image_filename=filename,
+        extracted_data={"product_name": "Consumer Scanned Cereal"},
+        compliance_result={"score": 100.0, "status": "PASS", "checks": []},
+        ocr_text="Cereal 500g",
+        owner_user_id=username,
+        organization_id=org_id,
+    )
+
+    try:
+        # 1. Bearer header authentication (200 OK)
+        res_bearer = client.get(f"/api/images/{filename}", headers={"Authorization": f"Bearer {token}"})
+        assert res_bearer.status_code == 200
+        assert res_bearer.content == png_bytes
+
+        # 2. Download ticket authentication (200 OK)
+        ticket_res = client.post(
+            "/api/auth/download-ticket",
+            headers={"Authorization": f"Bearer {token}"},
+            json={"resource_type": "image", "resource_id": filename}
+        )
+        assert ticket_res.status_code == 200
+        ticket = ticket_res.json()["ticket"]
+
+        res_ticket = client.get(f"/api/images/{filename}?ticket={ticket}")
+        assert res_ticket.status_code == 200
+        assert res_ticket.content == png_bytes
+    finally:
+        if os.path.exists(filepath):
+            os.remove(filepath)
+
+
+@pytest.mark.asyncio
+async def test_12_normal_user_cross_user_file_access_denied():
+    """Normal user cannot access another normal user's scan image."""
+    await init_db()
+    client = TestClient(app)
+    username_a = f"consumer_a_{os.urandom(4).hex()}"
+    username_b = f"consumer_b_{os.urandom(4).hex()}"
+    await _create_test_user(username_a, ROLE_USER, f"org_{username_a}")
+    await _create_test_user(username_b, ROLE_USER, f"org_{username_b}")
+    token_b = create_token(username_b, ROLE_USER)
+
+    filename = f"consumer_a_private_{os.urandom(4).hex()}.png"
+    filepath = os.path.join(settings.UPLOAD_DIR, filename)
+    png_bytes = b"\x89PNG\r\n\x1a\n" + b"\x00" * 32
+    with open(filepath, "wb") as f:
+        f.write(png_bytes)
+
+    ana_id = f"ana-a-priv-{os.urandom(4).hex()}"
+    await save_analysis(
+        analysis_id=ana_id,
+        product_name="Consumer A Private Item",
+        image_filename=filename,
+        extracted_data={"product_name": "Consumer A Private Item"},
+        compliance_result={"score": 90.0, "status": "PASS", "checks": []},
+        ocr_text="Private Item",
+        owner_user_id=username_a,
+        organization_id=f"org_{username_a}",
+    )
+
+    try:
+        # 1. Bearer header with User B's token -> 403 Forbidden
+        res_forbidden = client.get(f"/api/images/{filename}", headers={"Authorization": f"Bearer {token_b}"})
+        assert res_forbidden.status_code == 403
+
+        # 2. Raw session JWT in ?token= -> 401 Unauthorized
+        res_token_param = client.get(f"/api/images/{filename}?token={token_b}")
+        assert res_token_param.status_code == 401
+    finally:
+        if os.path.exists(filepath):
+            os.remove(filepath)
+

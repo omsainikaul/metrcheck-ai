@@ -457,6 +457,23 @@ def compute_font_size_and_readability(
         except Exception:
             min_required_mm = 2.0
             
+    has_bbox = any(getattr(c, 'bbox', None) for c in (checks or []))
+    if getattr(product_info, 'extraction_mode', None) == 'manual' or (not images and (not ocr_result or not ocr_result.words) and not has_bbox and not calibration_result):
+        return FontSizeAnalysis(
+            net_quantity_font_height_mm=None,
+            mrp_font_height_mm=None,
+            min_required_font_height_mm=min_required_mm,
+            is_font_compliant=True,
+            readability_score=0.0,
+            readability_tier="NOT_ASSESSED",
+            rule_12_verdict="Not Assessed (Physical package artwork not submitted; manual declaration screening)",
+            details="Physical readability was not assessed because no package image was submitted.",
+            calibration_status="PHYSICAL_MEASUREMENT_NOT_ASSESSED",
+            pixels_per_mm=None,
+            calibration_target=None,
+            measurement_method="NONE"
+        )
+
     net_qty_height_mm = None
     mrp_height_mm = None
     
@@ -498,7 +515,17 @@ def compute_font_size_and_readability(
         
     is_compliant = (net_qty_height_mm >= min_required_mm)
     
-    avg_conf = ocr_result.average_confidence if ocr_result else 85.0
+    avg_conf = 85.0
+    if ocr_result and getattr(ocr_result, 'average_confidence', None) and ocr_result.average_confidence > 0:
+        avg_conf = ocr_result.average_confidence
+    elif images and len(images) > 0:
+        confs = []
+        for im in images:
+            c_val = im.get('average_confidence') if isinstance(im, dict) else getattr(im, 'average_confidence', None)
+            if c_val and c_val > 0:
+                confs.append(float(c_val))
+        if confs:
+            avg_conf = sum(confs) / len(confs)
     blur_score = 150.0
     if images and len(images) > 0:
         first_img = images[0]

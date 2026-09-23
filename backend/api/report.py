@@ -160,6 +160,11 @@ async def _get_full_analysis_object(id: str, user: dict) -> AnalysisResponse:
     if 'failed_rules' not in comp_dict:
         comp_dict['failed_rules'] = sum(1 for c in checks_raw if (c.get('status') if isinstance(c, dict) else getattr(c, 'status', '')) in ('FAIL', 'NON_COMPLIANT'))
 
+    if 'score' not in comp_dict:
+        comp_dict['score'] = float(comp_dict.get('compliance_score', data.get('score', 100.0)))
+    if 'status' not in comp_dict:
+        comp_dict['status'] = data.get('status', 'COMPLIANT')
+
     if 'recommendations' not in comp_dict or not comp_dict['recommendations']:
         from compliance.recommendations import generate_recommendations
         checks = [ComplianceCheck(**c) if isinstance(c, dict) else c for c in checks_raw]

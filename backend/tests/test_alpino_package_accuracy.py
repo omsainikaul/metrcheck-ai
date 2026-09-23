@@ -1,13 +1,20 @@
 import pytest
 import os
-from ocr.paddle_engine import PaddleOCREngine
+from ocr.paddle_engine import PaddleOCREngine, _is_paddle_available
 from extraction.extractor import LocalExtractor
 from compliance.engine import ComplianceEngine
 from compliance.rules.models import ComplianceStatus
 from models.schemas import ProductImageEvidence
 
+# Evaluate once at module import time so the mark is stable.
+_PADDLE_AVAILABLE = _is_paddle_available()
+
 
 @pytest.mark.asyncio
+@pytest.mark.skipif(
+    not _PADDLE_AVAILABLE,
+    reason="PaddleOCR/PaddlePaddle not installed — test skipped in this environment"
+)
 async def test_alpino_real_package_extraction_and_evidence():
     base_dir = os.path.dirname(__file__)
     front_path = os.path.join(base_dir, "..", "fixtures", "alpino_front.png")

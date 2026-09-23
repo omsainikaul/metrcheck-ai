@@ -127,3 +127,71 @@ docker compose logs -f backend
 # View frontend / Nginx logs only
 docker compose logs -f frontend
 ```
+
+---
+
+## 8. Report Exports, Download Tickets & SMTP Configuration
+
+### Multi-Format Report Exports
+
+MetrCheck AI generates compliance audit reports in four formats, available from any analysis results page:
+
+| Format | Endpoint | Description |
+|---|---|---|
+| **PDF** | `GET /api/report/{analysis_id}.pdf` | Formal GoI/DoCA-style statutory inspection dossier with embedded evidence thumbnail and QR verification code |
+| **Excel (XLSX)** | `GET /api/report/{analysis_id}.xlsx` | Multi-tab spreadsheet for departmental audit registers |
+| **CSV** | `GET /api/report/{analysis_id}.csv` | Machine-readable export for integration with enforcement databases |
+| **JSON** | `GET /api/report/{analysis_id}.json` | Structured data export for API consumers and automated pipelines |
+
+All report endpoints enforce the same tenant isolation and authorization checks as the analysis API — a user can only download reports for their own organization's analyses.
+
+### Secure Download Ticket Mechanism
+
+For browser-side file downloads (triggered by UI buttons), MetrCheck AI uses a secure, single-use **download ticket** system to avoid embedding Bearer tokens in URL query strings:
+
+1. The frontend requests a short-lived ticket via `POST /api/report/ticket`.
+2. The server returns a one-time-use token valid for 60 seconds.
+3. The frontend appends the ticket to the download URL: `GET /api/report/{id}.pdf?ticket=<token>`.
+4. The ticket is consumed on first use and cannot be replayed.
+
+This eliminates the need to expose authentication tokens in server logs, browser history, or HTTP referrer headers.
+
+### SMTP Configuration (Officer Invitation & Password Recovery Emails)
+
+The system sends transactional emails for:
+- Officer account invitation (access provisioning flow)
+- Password reset links
+
+SMTP is configured via environment variables. **Never hardcode real credentials in source code, `.env` files committed to Git, or Docker image layers.**
+
+**For local/dev:** Set in `backend/.env` (gitignored):
+```
+METRCHECK_SMTP_HOST=smtp.gmail.com
+METRCHECK_SMTP_PORT=587
+METRCHECK_SMTP_USER=your-email@gmail.com
+METRCHECK_SMTP_PASS=your-app-password
+METRCHECK_SMTP_FROM=your-email@gmail.com
+METRCHECK_SMTP_TLS=true
+```
+
+**For Docker:** Set via `docker-compose.yml` environment section or Docker secrets:
+```yaml
+environment:
+  - METRCHECK_SMTP_HOST=smtp.example.com
+  - METRCHECK_SMTP_PORT=587
+  - METRCHECK_SMTP_USER=${SMTP_USER}        # injected from host environment
+  - METRCHECK_SMTP_PASS=${SMTP_PASS}        # injected from host environment
+  - METRCHECK_SMTP_TLS=true
+```
+
+> **Security Note:** Gmail App Passwords must be generated through Google Account → Security → App Passwords. The password grants email-send access to the account — rotate it immediately if it is ever accidentally exposed in logs, source control, or bug reports.
+
+### Docker Secret & Environment Best Practices
+
+| Practice | Details |
+|---|---|
+| **`.dockerignore`** | The project includes a `.dockerignore` file that explicitly excludes `.env`, `backend/.env`, `*.db`, `venv/`, `venv311/`, and `node_modules/` from the Docker build context. |
+| **No secrets in images** | Never use `ENV SMTP_PASS=...` inside a `Dockerfile` — this bakes secrets into the image layer and they appear in `docker inspect`. |
+| **Inject at runtime** | Pass secrets via `docker run -e` or Docker Compose `environment:` with host-environment variable references (`${VAR}`). |
+| **Production SECRET_KEY** | The application validates at startup that `SECRET_KEY` is not a default/placeholder in production environments. Set a minimum 32-character random string. |
+

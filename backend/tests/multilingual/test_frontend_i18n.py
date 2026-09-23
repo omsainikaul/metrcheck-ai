@@ -174,3 +174,113 @@ def test_parameter_interpolation():
         template = resolve_key(data, 'dashboard.manualVerification')
         assert template is not None
         assert '{count}' in template, f'manualVerification in {lang} should contain {{count}}'
+
+def test_manual_check_and_results_keys_in_all_locales():
+    keys = [
+        'navigation.manual_product_check',
+        'results.title',
+        'results.complianceResult',
+        'results.complianceScore',
+        'results.statutoryChecklist',
+        'results.rule12Analysis',
+        'results.download_pdf',
+        'evidence.title',
+        'reports.pdfReport',
+        'status.PASS',
+        'status.FAIL',
+        'status.NEEDS_REVIEW',
+        'rules.registry_title',
+        'vision.title',
+    ]
+    for lang in SUPPORTED_LANGUAGES:
+        data = load_locale(lang)
+        for key in keys:
+            val = resolve_key(data, key)
+            assert val is not None and len(val.strip()) > 0, f'Key {key} missing in locale {lang}'
+
+def test_analyze_package_keys_in_all_locales():
+    analyze_keys = [
+        'analysis.ai_badge',
+        'analysis.analyze_package',
+        'analysis.upload_instruction',
+        'analysis.banner_upload_guide',
+        'analysis.banner_front_required',
+        'analysis.banner_back_recommended',
+        'analysis.banner_side1_optional',
+        'analysis.banner_side2_optional',
+        'analysis.image_added',
+        'analysis.gallery',
+        'analysis.gallery_files',
+        'analysis.live_camera',
+        'analysis.remove',
+        'analysis.validation_add_image',
+        'analysis.staged_count_single',
+        'analysis.staged_count_multiple',
+        'analysis.btn_analyze',
+        'analysis.accuracy_title',
+        'analysis.accuracy_flat',
+        'analysis.accuracy_lighting',
+        'analysis.accuracy_glare',
+        'analysis.accuracy_complete',
+        'analysis.accuracy_footer',
+        'analysis.specs_title',
+        'analysis.specs_formats_label',
+        'analysis.specs_size_label',
+        'analysis.specs_size_val',
+        'analysis.specs_capacity_label',
+        'analysis.specs_capacity_val',
+        'analysis.statutory_footer',
+        'analysis.benchmarks_title',
+        'analysis.benchmarks_full_guide',
+        'analysis.benchmarks_load',
+        'analysis.benchmarks_case1_title',
+        'analysis.benchmarks_case1_desc',
+        'analysis.benchmarks_case2_title',
+        'analysis.benchmarks_case2_desc',
+        'analysis.benchmarks_case3_title',
+        'analysis.benchmarks_case3_desc',
+        'analysis.processing_paused',
+        'analysis.processing_complete',
+        'analysis.processing_active',
+        'analysis.processing_err_desc',
+        'analysis.processing_complete_desc',
+        'analysis.processing_active_desc',
+        'analysis.slots.front_label',
+        'analysis.slots.front_desc',
+        'analysis.slots.front_hints',
+        'analysis.slots.back_label',
+        'analysis.slots.back_desc',
+        'analysis.slots.back_hints',
+        'analysis.slots.side1_label',
+        'analysis.slots.side1_desc',
+        'analysis.slots.side1_hints',
+        'analysis.slots.side2_label',
+        'analysis.slots.side2_desc',
+        'analysis.slots.side2_hints',
+        'analysis.slots.required',
+        'analysis.slots.recommended',
+        'analysis.slots.optional',
+        'analysis.stages.images_received_title',
+        'analysis.stages.quality_check_title',
+        'analysis.stages.ocr_extraction_title',
+        'analysis.stages.declaration_extraction_title',
+        'analysis.stages.rules_evaluation_title',
+        'analysis.stages.compliance_screening_title',
+        'analysis.stages.preparing_results_title',
+    ]
+    for lang in SUPPORTED_LANGUAGES:
+        data = load_locale(lang)
+        for key in analyze_keys:
+            val = resolve_key(data, key)
+            assert val is not None and len(val.strip()) > 0, f'Analyze key {key} missing in locale {lang}'
+
+def test_analyze_page_has_no_listing_text_mode():
+    analyze_file = Path(__file__).resolve().parent.parent.parent.parent / 'frontend' / 'src' / 'pages' / 'Analyze.tsx'
+    assert analyze_file.exists(), 'Analyze.tsx must exist'
+    content = analyze_file.read_text(encoding='utf-8')
+    assert "scanMode === 'text'" not in content, 'Analyze.tsx must not contain scanMode text condition'
+    assert 'SAMPLE_LISTING_TEXT' not in content, 'Analyze.tsx must not contain listing sample text constant'
+    assert 'handleAnalyzeText' not in content, 'Analyze.tsx must not contain text handler'
+    assert '<span>Listing Text</span>' not in content, 'Analyze.tsx must not render Listing Text button'
+
+

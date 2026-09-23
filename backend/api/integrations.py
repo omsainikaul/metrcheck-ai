@@ -1,3 +1,4 @@
+import logging
 from fastapi import APIRouter, UploadFile, File, HTTPException
 from pydantic import BaseModel
 from typing import Optional
@@ -11,6 +12,7 @@ from integrations.gs1.verifier import gs1_verifier
 from services.calibration_service import calibration_service
 from config import settings
 
+logger = logging.getLogger(__name__)
 router = APIRouter(prefix="/integrations", tags=["Integrations & Metrology"])
 
 class FSSAIRequest(BaseModel):
@@ -70,7 +72,8 @@ async def calibrate_image_target(file: UploadFile = File(...)):
         result = calibration_service.detect_aruco_marker(tmp_path)
         return result
     except Exception as e:
-        raise HTTPException(status_code=500, detail=f"Calibration analysis failed: {str(e)}")
+        logger.exception("Calibration analysis failed: %s", e)
+        raise HTTPException(status_code=500, detail="An internal server error occurred during calibration analysis.")
     finally:
         if tmp_path and os.path.exists(tmp_path):
             try:

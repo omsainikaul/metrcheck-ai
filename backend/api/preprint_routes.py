@@ -129,6 +129,7 @@ async def upload_artwork(
     parent_artwork_id: Optional[str] = Form(None),
     iteration_number: int = Form(1),
     owner_user_id: Optional[str] = Form(None),
+    product_id: Optional[str] = Form(None),
     user: dict = Depends(get_current_user),
 ):
     """
@@ -162,6 +163,16 @@ async def upload_artwork(
     elif user.get("role") == ROLE_MERCHANT:
         effective_owner = user.get("username", "") or owner_user_id or ""
 
+    validated_product_id: Optional[str] = None
+    if product_id and product_id.strip():
+        clean_pid = product_id.strip()
+        from database.db import get_product
+        prod = await get_product(clean_pid)
+        if not prod:
+            raise HTTPException(status_code=404, detail="Specified product was not found.")
+        check_tenant_access(user, prod, raise_exception=True)
+        validated_product_id = clean_pid
+
     now_iso = datetime.now(timezone.utc).isoformat()
     org_id = user.get("organization_id", "")
     artwork_doc = {
@@ -184,6 +195,7 @@ async def upload_artwork(
         "pages_data": [p.model_dump() for p in pages],
         "owner_user_id": effective_owner,
         "organization_id": org_id,
+        "product_id": validated_product_id or "",
         "created_at": now_iso,
         "updated_at": now_iso,
     }

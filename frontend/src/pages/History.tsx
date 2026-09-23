@@ -29,10 +29,11 @@ export default function History() {
   const isAdmin = user?.role === 'ADMIN';
   const isOfficer = user?.role === 'ENFORCEMENT_OFFICER';
   const isMerchant = user?.role === 'MERCHANT_PUBLIC';
+  const isNormalUser = user?.role === 'PUBLIC_USER' || user?.role === 'NORMAL_USER';
 
   const canDeleteItem = (item: HistoryItem) => {
     if (isAdmin || isOfficer) return true;
-    if (isMerchant) {
+    if (isMerchant || isNormalUser) {
       if (!item.owner_user_id || !user?.username) return false;
       return item.owner_user_id.toLowerCase() === user.username.toLowerCase();
     }
@@ -181,9 +182,9 @@ export default function History() {
     return (
       <EmptyState 
         icon={HistoryIcon}
-        title={t('dashboard.no_screenings')}
-        description="Your completed package screenings will appear here."
-        actionLabel={t('navigation.analyze_package')}
+        title={isNormalUser ? t('history_page.no_records_consumer') : t('dashboard.no_screenings')}
+        description={isNormalUser ? t('history_page.no_records_desc_consumer') : t('dashboard.no_screenings_desc')}
+        actionLabel={isNormalUser ? t('navigation.check_product') : t('navigation.analyze_package')}
         onAction={() => navigate('/analyze')}
       />
     );
@@ -194,8 +195,12 @@ export default function History() {
       {/* Header */}
       <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
         <div>
-          <h1 className="text-2xl font-bold text-slate-900 dark:text-slate-100 tracking-tight">{t('navigation.screening_history')}</h1>
-          <p className="text-sm text-slate-500 dark:text-slate-400 mt-1">Review previously screened package analyses.</p>
+          <h1 className="text-2xl font-bold text-slate-900 dark:text-slate-100 tracking-tight">
+            {isNormalUser ? t('history_page.title') : t('navigation.screening_history')}
+          </h1>
+          <p className="text-sm text-slate-500 dark:text-slate-400 mt-1">
+            {isNormalUser ? t('history_page.subtitle_consumer') : t('history_page.subtitle_default')}
+          </p>
         </div>
         <div className="flex items-center gap-2 flex-wrap">
           {isAdmin && (
@@ -219,7 +224,7 @@ export default function History() {
             className="inline-flex items-center gap-1.5 px-3 py-1.5 bg-indigo-600 hover:bg-indigo-700 text-white rounded-lg font-semibold text-xs shadow-sm transition-colors cursor-pointer"
           >
             <ScanSearch className="w-3.5 h-3.5" />
-            {t('navigation.analyze_package')}
+            {isNormalUser ? t('navigation.check_product') : t('navigation.analyze_package')}
           </button>
         </div>
       </div>
@@ -382,7 +387,9 @@ export default function History() {
       {itemToDelete && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-900/60 backdrop-blur-xs p-4">
           <div className="bg-white dark:bg-slate-900 rounded-xl max-w-sm w-full p-5 space-y-4 border border-slate-200 dark:border-slate-800 shadow-2xl">
-            <h3 className="font-bold text-slate-900 dark:text-slate-100 text-sm">Delete Screening Record?</h3>
+            <h3 className="font-bold text-slate-900 dark:text-slate-100 text-sm">
+              {isNormalUser ? 'Delete this scan from your history?' : 'Delete Screening Record?'}
+            </h3>
             <p className="text-xs text-slate-500 dark:text-slate-400">
               Are you sure you want to delete <span className="font-semibold text-slate-700 dark:text-slate-200">"{itemToDelete.product_name || 'this product'}"</span>? This action cannot be undone.
             </p>

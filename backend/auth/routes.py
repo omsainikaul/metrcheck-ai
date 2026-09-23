@@ -25,13 +25,13 @@ Endpoints:
 """
 import os
 import re
-from fastapi import APIRouter, Depends, HTTPException, status, Response, Request
+from fastapi import APIRouter, Depends, HTTPException, status, Response, Request, Query
 from pydantic import BaseModel, Field
 from typing import List, Optional
 
 from config import settings
 from auth.security import (
-    ROLE_ADMIN, ROLE_ENFORCEMENT, ROLE_AUDIT, ROLE_MERCHANT, ALL_ROLES, ROLE_LABELS,
+    ROLE_ADMIN, ROLE_ENFORCEMENT, ROLE_AUDIT, ROLE_MERCHANT, ROLE_USER, ALL_ROLES, ROLE_LABELS,
     hash_password, verify_password, create_token, require_roles, get_current_user,
     generate_password_reset_token, generate_invitation_token, hash_reset_token,
     get_delivery_provider, get_delivery_provider_status
@@ -52,11 +52,15 @@ from database.db import (
     create_invited_user, get_valid_invitation, activate_user_account,
     resend_invitation_record, suspend_user, reactivate_user, change_user_role,
     revoke_invitation, log_account_audit_event, get_account_audit_logs,
-    create_organization, get_organization
+    create_organization, get_organization,
+    create_officer_access_request, get_officer_access_request_by_id,
+    get_pending_officer_request_by_email_and_role, list_officer_access_requests,
+    approve_officer_access_request, reject_officer_access_request
 )
 
 router = APIRouter(prefix="/auth", tags=["Auth"])
 admin_router = APIRouter(prefix="/admin", tags=["Admin"])
+officer_access_router = APIRouter(prefix="/officer-access", tags=["Officer Access"])
 
 EMAIL_REGEX = re.compile(r"^[a-zA-Z0-9_.+-]+@[a-zA-Z0-9-]+\.[a-zA-Z0-9-.]+$")
 
@@ -72,6 +76,44 @@ def normalize_email(email: Optional[str]) -> str:
 
 
 # ── Schemas ──────────────────────────────────────────────────────────────
+class RegisterUserRequest(BaseModel):
+    """Payload for consumer / normal user registration."""
+    full_name: str = Field(default="", max_length=100)
+    username: str = Field(min_length=3, max_length=50)
+    email: str = Field(min_length=5, max_length=100)
+    password: str = Field(min_length=8, max_length=128)
+    mobile_number: Optional[str] = Field(default="", max_length=20)
+
+
+class RegisterMerchantRequest(BaseModel):
+    """Payload for merchant / business organization registration."""
+    # Section A: Account Information
+    full_name: str = Field(default="", max_length=100)
+    username: str = Field(min_length=3, max_length=50)
+    email: str = Field(min_length=5, max_length=100)
+    mobile_number: Optional[str] = Field(default="", max_length=20)
+    password: str = Field(min_length=8, max_length=128)
+    
+    # Section B: Business Information
+    business_name: str = Field(min_length=1, max_length=150)
+    business_type: str = Field(default="Manufacturer", max_length=50)
+    trade_name: Optional[str] = Field(default="", max_length=150)
+    
+    # Section C: Business Address
+    address_line1: str = Field(min_length=1, max_length=200)
+    address_line2: Optional[str] = Field(default="", max_length=200)
+    city: str = Field(min_length=1, max_length=100)
+    state: str = Field(min_length=1, max_length=100)
+    pincode: str = Field(min_length=3, max_length=20)
+    country: str = Field(default="India", max_length=100)
+    
+    # Section D: Regulatory / Business Identifiers (Optional / Applicable)
+    gstin: Optional[str] = Field(default="", max_length=30)
+    fssai_license: Optional[str] = Field(default="", max_length=50)
+    legal_metrology_license: Optional[str] = Field(default="", max_length=50)
+    other_identifier: Optional[str] = Field(default="", max_length=100)
+
+
 class RegisterRequest(BaseModel):
     username: str = Field(min_length=3, max_length=50)
     email: Optional[str] = Field(default="", max_length=100)
@@ -152,7 +194,7 @@ class ForgotPasswordRequest(BaseModel):
 
 class ForgotPasswordResponse(BaseModel):
     message: str
-    dev_token: Optional[str] = None
+
 
 
 class ResetPasswordRequest(BaseModel):
@@ -216,6 +258,70 @@ class DownloadTicketResponse(BaseModel):
     download_url: str
 
 
+class OfficerAccessRequestCreate(BaseModel):
+    """Payload for submitting an official officer access request."""
+    requested_role: str = Field(description="Must be AUDIT_OFFICER or ENFORCEMENT_OFFICER")
+    full_name: str = Field(min_length=2, max_length=100)
+    official_email: str = Field(min_length=5, max_length=100)
+    mobile_number: str = Field(min_length=7, max_length=20)
+    employee_officer_id: str = Field(min_length=2, max_length=50)
+    designation: str = Field(min_length=2, max_length=100)
+    department_organization: str = Field(min_length=2, max_length=150)
+    state: str = Field(min_length=2, max_length=100)
+    district_jurisdiction: str = Field(min_length=2, max_length=100)
+    reason: str = Field(min_length=5, max_length=500)
+    office_address: Optional[str] = Field(default="", max_length=250)
+    additional_information: Optional[str] = Field(default="", max_length=500)
+
+
+class OfficerAccessRequestOut(BaseModel):
+    id: int
+    request_id: str
+    requested_role: str
+    role_label: str
+    full_name: str
+    official_email: str
+    mobile_number: str
+    employee_officer_id: str
+    designation: str
+    department_organization: str
+    state: str
+    district_jurisdiction: str
+    office_address: Optional[str] = ""
+    reason: str
+    additional_information: Optional[str] = ""
+    status: str
+    submitted_at: str
+    reviewed_at: Optional[str] = None
+    reviewed_by: Optional[str] = ""
+    rejection_reason: Optional[str] = ""
+    created_user_id: Optional[str] = ""
+
+
+class OfficerAccessRequestPublicStatus(BaseModel):
+    request_id: str
+    requested_role: str
+    role_label: str
+    status: str
+    submitted_at: str
+    reviewed_at: Optional[str] = None
+    rejection_reason: Optional[str] = None
+    message: str
+
+
+class AdminRejectOfficerRequest(BaseModel):
+    rejection_reason: str = Field(min_length=3, max_length=500)
+
+
+class AdminApproveOfficerRequestResponse(BaseModel):
+    message: str
+    request_id: str
+    username: str
+    user: UserOut
+    dev_invitation_token: Optional[str] = None
+    activation_url: Optional[str] = None
+
+
 def _to_user_out(u: dict) -> UserOut:
     return UserOut(
         username=u["username"],
@@ -233,9 +339,155 @@ def _to_user_out(u: dict) -> UserOut:
     )
 
 
+def _to_officer_request_out(r: dict) -> OfficerAccessRequestOut:
+    return OfficerAccessRequestOut(
+        id=r["id"],
+        request_id=r["request_id"],
+        requested_role=r["requested_role"],
+        role_label=ROLE_LABELS.get(r["requested_role"], r["requested_role"]),
+        full_name=r["full_name"],
+        official_email=r["official_email"],
+        mobile_number=r["mobile_number"],
+        employee_officer_id=r["employee_officer_id"],
+        designation=r["designation"],
+        department_organization=r["department_organization"],
+        state=r["state"],
+        district_jurisdiction=r["district_jurisdiction"],
+        office_address=r.get("office_address", "") or "",
+        reason=r["reason"],
+        additional_information=r.get("additional_information", "") or "",
+        status=r["status"],
+        submitted_at=r["submitted_at"],
+        reviewed_at=r.get("reviewed_at"),
+        reviewed_by=r.get("reviewed_by", "") or "",
+        rejection_reason=r.get("rejection_reason", "") or "",
+        created_user_id=r.get("created_user_id", "") or "",
+    )
+
+
 # ══════════════════════════════════════════════════════════════════════════
 # AUTH ROUTES (Public & Self-Service)
 # ══════════════════════════════════════════════════════════════════════════
+
+@router.post("/register-user", response_model=AuthResponse, status_code=201)
+async def register_user(req: RegisterUserRequest, request: Request):
+    """Consumer / Normal User self-registration.
+    
+    Security: Strictly assigns role=PUBLIC_USER and provisions dedicated personal tenant space.
+    """
+    client_ip = get_client_ip(request)
+    
+    # ── Rate limiting guard ──
+    allowed, rate_msg = check_register_rate_limit(client_ip)
+    if not allowed:
+        raise HTTPException(
+            status_code=status.HTTP_429_TOO_MANY_REQUESTS,
+            detail=rate_msg,
+        )
+
+    username = req.username.strip()
+    norm_email = normalize_email(req.email)
+    
+    if not norm_email or not validate_email_format(norm_email):
+        raise HTTPException(status_code=400, detail="A valid email address is required.")
+    
+    existing_email = await get_user_by_email(norm_email)
+    if existing_email:
+        raise HTTPException(status_code=409, detail="Email address is already registered")
+
+    existing = await get_user_by_username(username)
+    if existing:
+        raise HTTPException(status_code=409, detail="Username already exists")
+
+    org_id = f"org_user_{username.lower()}"
+    await create_organization(id=org_id, name=f"{req.full_name or username} Personal Space", org_type="USER", status="ACTIVE")
+
+    pw_hash, salt = hash_password(req.password)
+    ok = await create_user(
+        username=username,
+        password_hash=pw_hash,
+        salt=salt,
+        role=ROLE_USER,
+        full_name=req.full_name.strip(),
+        jurisdiction="Consumer Self-Service",
+        email=norm_email,
+        organization_id=org_id,
+    )
+    if not ok:
+        raise HTTPException(status_code=400, detail="Could not create user account")
+
+    user = await get_user_by_username(username)
+    token = create_token(user["username"], user["role"], user.get("token_version", 1) or 1)
+    await log_account_audit_event(
+        actor_username=username,
+        target_username=username,
+        event_type="USER_REGISTERED",
+        details=f"Public self-registration as PUBLIC_USER under personal tenant '{org_id}'",
+        ip_address=client_ip
+    )
+    return AuthResponse(token=token, user=_to_user_out(user))
+
+
+@router.post("/register-merchant", response_model=AuthResponse, status_code=201)
+async def register_merchant(req: RegisterMerchantRequest, request: Request):
+    """Merchant / Business organization self-registration.
+    
+    Security: Strictly assigns role=MERCHANT_PUBLIC and provisions dedicated business tenant space.
+    """
+    client_ip = get_client_ip(request)
+    
+    # ── Rate limiting guard ──
+    allowed, rate_msg = check_register_rate_limit(client_ip)
+    if not allowed:
+        raise HTTPException(
+            status_code=status.HTTP_429_TOO_MANY_REQUESTS,
+            detail=rate_msg,
+        )
+
+    username = req.username.strip()
+    norm_email = normalize_email(req.email)
+    
+    if not norm_email or not validate_email_format(norm_email):
+        raise HTTPException(status_code=400, detail="A valid business email address is required.")
+    
+    existing_email = await get_user_by_email(norm_email)
+    if existing_email:
+        raise HTTPException(status_code=409, detail="Email address is already registered")
+
+    existing = await get_user_by_username(username)
+    if existing:
+        raise HTTPException(status_code=409, detail="Username already exists")
+
+    org_id = f"org_{username.lower()}"
+    org_name = req.business_name.strip() if req.business_name else f"{username.capitalize()} Packagers Corp"
+    jurisdiction_str = f"{req.city.strip()}, {req.state.strip()}, {req.country.strip()}" if req.city and req.state else "National"
+    await create_organization(id=org_id, name=org_name, org_type="MERCHANT", jurisdiction=jurisdiction_str, status="ACTIVE")
+
+    pw_hash, salt = hash_password(req.password)
+    ok = await create_user(
+        username=username,
+        password_hash=pw_hash,
+        salt=salt,
+        role=ROLE_MERCHANT,
+        full_name=req.full_name.strip(),
+        jurisdiction=jurisdiction_str,
+        email=norm_email,
+        organization_id=org_id,
+    )
+    if not ok:
+        raise HTTPException(status_code=400, detail="Could not create merchant account")
+
+    user = await get_user_by_username(username)
+    token = create_token(user["username"], user["role"], user.get("token_version", 1) or 1)
+    await log_account_audit_event(
+        actor_username=username,
+        target_username=username,
+        event_type="MERCHANT_REGISTERED",
+        details=f"Merchant self-registration for '{org_name}' (Type: {req.business_type}) under tenant '{org_id}'",
+        ip_address=client_ip
+    )
+    return AuthResponse(token=token, user=_to_user_out(user))
+
 
 @router.post("/register", response_model=AuthResponse, status_code=201)
 async def register(req: RegisterRequest, request: Request):
@@ -373,7 +625,6 @@ async def forgot_password(req: ForgotPasswordRequest, request: Request):
     record_forgot_password_attempt(client_ip, identifier)
 
     user = await get_user_by_identifier(identifier)
-    dev_token: Optional[str] = None
     
     if user:
         recovery_email = user.get("email", "").strip()
@@ -391,27 +642,11 @@ async def forgot_password(req: ForgotPasswordRequest, request: Request):
             
             provider = get_delivery_provider()
             await provider.send_reset_instructions(user["username"], raw_token, reset_url, email=recovery_email)
-            
-            is_prod = (
-                os.environ.get("METRCHECK_ENV") == "production" 
-                or os.environ.get("ENVIRONMENT") == "production"
-                or getattr(settings, "ENVIRONMENT", "") == "production"
-            )
-            is_dev = (
-                settings.TEST_MODE 
-                or os.environ.get("TEST_MODE") == "1" 
-                or os.environ.get("DEV_MODE") == "1" 
-                or os.environ.get("METRCHECK_ENV") == "development"
-                or getattr(settings, "ENVIRONMENT", "") == "development"
-                or getattr(settings, "METRCHECK_DEMO_MODE", False)
-            )
-            if is_dev and not is_prod:
-                dev_token = raw_token
 
     return ForgotPasswordResponse(
-        message="If an account matches the information provided, password reset instructions have been sent.",
-        dev_token=dev_token
+        message="If an account matches the information provided, password reset instructions have been sent."
     )
+
 
 
 @router.get("/delivery-status")
@@ -1238,3 +1473,302 @@ async def admin_audit_logs(
 ):
     """Admin-only: view account security audit logs."""
     return await get_account_audit_logs(limit=limit)
+
+
+# ══════════════════════════════════════════════════════════════════════════
+# OFFICER ACCESS REQUESTS (Public Submission & Status Check)
+# ══════════════════════════════════════════════════════════════════════════
+
+@officer_access_router.post("/requests", response_model=OfficerAccessRequestOut, status_code=status.HTTP_201_CREATED)
+@router.post("/officer-requests", response_model=OfficerAccessRequestOut, status_code=status.HTTP_201_CREATED)
+async def submit_officer_access_request(req: OfficerAccessRequestCreate, request: Request):
+    """Public submission of an officer access request for Audit or Enforcement role.
+    
+    Security: Validates institutional credentials, ensures role is strictly AUDIT_OFFICER or
+    ENFORCEMENT_OFFICER, enforces rate limits, and prevents duplicate pending submissions.
+    """
+    client_ip = get_client_ip(request)
+    
+    # Rate limit check
+    allowed, rate_msg = check_register_rate_limit(client_ip)
+    if not allowed:
+        raise HTTPException(
+            status_code=status.HTTP_429_TOO_MANY_REQUESTS,
+            detail=rate_msg,
+        )
+
+    requested_role = req.requested_role.strip()
+    if requested_role not in (ROLE_AUDIT, ROLE_ENFORCEMENT):
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Requested role must be AUDIT_OFFICER or ENFORCEMENT_OFFICER.",
+        )
+
+    norm_email = normalize_email(req.official_email)
+    if not validate_email_format(norm_email):
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="A valid official email address is required.")
+
+    # Duplicate check for pending requests with same email and role
+    pending_existing = await get_pending_officer_request_by_email_and_role(norm_email, requested_role)
+    if pending_existing:
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT,
+            detail="An access request for this officer type is already pending.",
+        )
+
+    # Active user check
+    existing_user = await get_user_by_email(norm_email)
+    if existing_user and existing_user.get("status") == "ACTIVE" and existing_user.get("role") == requested_role:
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT,
+            detail="An active officer account is already registered with this official email. Please log in directly.",
+        )
+
+    payload = req.model_dump()
+    payload["official_email"] = norm_email
+    payload["requested_role"] = requested_role
+
+    created_req = await create_officer_access_request(payload)
+    if not created_req:
+        raise HTTPException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail="Could not record officer access request.")
+
+    await log_account_audit_event(
+        actor_username=norm_email,
+        target_username=norm_email,
+        event_type="OFFICER_ACCESS_REQUESTED",
+        details=f"Submitted {requested_role} access request ({created_req['request_id']}) from {req.department_organization}",
+        ip_address=client_ip
+    )
+
+    return _to_officer_request_out(created_req)
+
+
+@officer_access_router.get("/requests/{request_id}", response_model=OfficerAccessRequestPublicStatus)
+@router.get("/officer-requests/{request_id}", response_model=OfficerAccessRequestPublicStatus)
+async def get_officer_access_request_status(request_id: str):
+    """Public status check for an officer access request using its non-sensitive request ID."""
+    req_record = await get_officer_access_request_by_id(request_id.strip())
+    if not req_record:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Access request not found.")
+
+    status_str = req_record["status"]
+    if status_str == "PENDING":
+        msg = "Your access request is currently under review by system administrators."
+    elif status_str == "APPROVED":
+        msg = "Your access request has been approved. Please check your official email for the activation link."
+    elif status_str == "REJECTED":
+        msg = "Your access request was not approved."
+    else:
+        msg = f"Request status: {status_str}"
+
+    return OfficerAccessRequestPublicStatus(
+        request_id=req_record["request_id"],
+        requested_role=req_record["requested_role"],
+        role_label=ROLE_LABELS.get(req_record["requested_role"], req_record["requested_role"]),
+        status=status_str,
+        submitted_at=req_record["submitted_at"],
+        reviewed_at=req_record.get("reviewed_at"),
+        rejection_reason=req_record.get("rejection_reason") if status_str == "REJECTED" else None,
+        message=msg
+    )
+
+
+# ══════════════════════════════════════════════════════════════════════════
+# ADMIN OFFICER ACCESS REQUESTS GOVERNANCE (ADMIN ONLY)
+# ══════════════════════════════════════════════════════════════════════════
+
+@admin_router.get("/officer-requests", response_model=List[OfficerAccessRequestOut])
+async def admin_list_officer_requests(
+    status: Optional[str] = Query(default=None, description="Filter by PENDING, APPROVED, REJECTED, or ALL"),
+    search: Optional[str] = Query(default=None, description="Search term across name, email, org, id"),
+    admin: dict = Depends(require_roles(ROLE_ADMIN))
+):
+    """Admin-only: list officer access requests with optional status and text search filtering."""
+    rows = await list_officer_access_requests(status_filter=status, search=search)
+    return [_to_officer_request_out(r) for r in rows]
+
+
+@admin_router.get("/officer-requests/{request_id}", response_model=OfficerAccessRequestOut)
+async def admin_get_officer_request(
+    request_id: str,
+    admin: dict = Depends(require_roles(ROLE_ADMIN))
+):
+    """Admin-only: inspect detailed submitted information for an officer access request."""
+    row = await get_officer_access_request_by_id(request_id.strip())
+    if not row:
+        raise HTTPException(status_code=404, detail="Officer access request not found.")
+    return _to_officer_request_out(row)
+
+
+@admin_router.post("/officer-requests/{request_id}/approve", response_model=AdminApproveOfficerRequestResponse)
+async def admin_approve_officer_request(
+    request_id: str,
+    request: Request,
+    admin: dict = Depends(require_roles(ROLE_ADMIN))
+):
+    """Admin-only: approve a PENDING officer access request, provision the officer account in INVITED state,
+    and generate a single-use 24-hour cryptographic activation token.
+    """
+    client_ip = get_client_ip(request)
+    req_record = await get_officer_access_request_by_id(request_id.strip())
+    if not req_record:
+        raise HTTPException(status_code=404, detail="Officer access request not found.")
+
+    if req_record.get("status") != "PENDING":
+        raise HTTPException(
+            status_code=400,
+            detail=f"Cannot approve request in '{req_record.get('status')}' status. Only PENDING requests can be approved."
+        )
+
+    target_role = req_record["requested_role"]
+    if target_role not in (ROLE_AUDIT, ROLE_ENFORCEMENT):
+        raise HTTPException(status_code=400, detail="Invalid officer role in access request.")
+
+    norm_email = normalize_email(req_record["official_email"])
+    existing_email_user = await get_user_by_email(norm_email)
+    if existing_email_user:
+        raise HTTPException(
+            status_code=409,
+            detail=f"An account with email '{norm_email}' already exists (Username: @{existing_email_user['username']})."
+        )
+
+    # Generate a clean, canonical unique officer username
+    raw_ident = (req_record.get("employee_officer_id") or norm_email.split("@")[0]).strip()
+    safe_slug = re.sub(r'[^a-zA-Z0-9_]', '', raw_ident.lower().replace("-", "_"))
+    if not safe_slug:
+        safe_slug = "officer"
+
+    if target_role == ROLE_AUDIT:
+        prefix = "audit_" if not safe_slug.startswith("audit_") else ""
+        base_username = f"{prefix}{safe_slug}"
+    else:
+        prefix = "off_" if not safe_slug.startswith("off_") else ""
+        base_username = f"{prefix}{safe_slug}"
+
+    username = base_username
+    counter = 1
+    while await get_user_by_username(username):
+        username = f"{base_username}_{counter}"
+        counter += 1
+
+    org_id = "org_ministry"
+    org = await get_organization(org_id)
+    if not org:
+        await create_organization(id=org_id, name="Ministry of Consumer Affairs & Legal Metrology Directorate", org_type="REGULATOR", jurisdiction="National", status="ACTIVE")
+
+    jurisdiction_str = f"{req_record.get('district_jurisdiction', '').strip()}, {req_record.get('state', '').strip()}".strip(", ")
+    if not jurisdiction_str:
+        jurisdiction_str = "National Directorate"
+
+    raw_token, token_hash, expires_at = generate_invitation_token(expire_hours=24)
+    ok = await create_invited_user(
+        username=username,
+        email=norm_email,
+        role=target_role,
+        full_name=req_record.get("full_name", "").strip(),
+        jurisdiction=jurisdiction_str,
+        token_hash=token_hash,
+        expires_at=expires_at,
+        organization_id=org_id
+    )
+    if not ok:
+        raise HTTPException(status_code=500, detail="Could not provision officer account in database.")
+
+    # Mark request as APPROVED
+    approved_ok = await approve_officer_access_request(request_id.strip(), admin["username"], username)
+    if not approved_ok:
+        raise HTTPException(status_code=500, detail="Could not update request status to APPROVED.")
+
+    # Build activation URL
+    configured_frontend = getattr(settings, "METRCHECK_FRONTEND_URL", "").strip()
+    if configured_frontend:
+        origin = configured_frontend.rstrip("/")
+    else:
+        base_url = str(request.base_url).rstrip("/")
+        origin = request.headers.get("origin") or request.headers.get("referer") or base_url
+        origin = origin.rstrip("/")
+    activation_url = f"{origin}/activate?token={raw_token}"
+
+    provider = get_delivery_provider()
+    await provider.send_invitation_email(
+        full_name=req_record.get("full_name", ""),
+        username=username,
+        role=target_role,
+        raw_token=raw_token,
+        activation_url=activation_url,
+        email=norm_email
+    )
+
+    await log_account_audit_event(
+        actor_username=admin["username"],
+        target_username=username,
+        event_type="OFFICER_REQUEST_APPROVED",
+        details=f"Approved request {request_id}, provisioned {target_role} for {norm_email}",
+        ip_address=client_ip
+    )
+
+    dev_token: Optional[str] = None
+    is_prod = (
+        os.environ.get("METRCHECK_ENV") == "production" 
+        or os.environ.get("ENVIRONMENT") == "production"
+        or getattr(settings, "ENVIRONMENT", "") == "production"
+    )
+    is_dev = (
+        settings.TEST_MODE 
+        or os.environ.get("TEST_MODE") == "1" 
+        or os.environ.get("DEV_MODE") == "1" 
+        or os.environ.get("METRCHECK_ENV") == "development"
+        or getattr(settings, "ENVIRONMENT", "") == "development"
+        or getattr(settings, "METRCHECK_DEMO_MODE", False)
+    )
+    if is_dev and not is_prod:
+        dev_token = raw_token
+
+    created_user = await get_user_by_username(username)
+    return AdminApproveOfficerRequestResponse(
+        message=f"Officer access request approved. Invitation sent to {norm_email}.",
+        request_id=request_id.strip(),
+        username=username,
+        user=_to_user_out(created_user),
+        dev_invitation_token=dev_token,
+        activation_url=activation_url if dev_token else None
+    )
+
+
+@admin_router.post("/officer-requests/{request_id}/reject", response_model=OfficerAccessRequestOut)
+async def admin_reject_officer_request(
+    request_id: str,
+    req: AdminRejectOfficerRequest,
+    request: Request,
+    admin: dict = Depends(require_roles(ROLE_ADMIN))
+):
+    """Admin-only: reject a PENDING officer access request with a recorded justification."""
+    client_ip = get_client_ip(request)
+    req_record = await get_officer_access_request_by_id(request_id.strip())
+    if not req_record:
+        raise HTTPException(status_code=404, detail="Officer access request not found.")
+
+    if req_record.get("status") != "PENDING":
+        raise HTTPException(
+            status_code=400,
+            detail=f"Cannot reject request in '{req_record.get('status')}' status. Only PENDING requests can be rejected."
+        )
+
+    reason = req.rejection_reason.strip()
+    if not reason:
+        raise HTTPException(status_code=400, detail="Rejection reason is required.")
+
+    ok = await reject_officer_access_request(request_id.strip(), admin["username"], reason)
+    if not ok:
+        raise HTTPException(status_code=500, detail="Could not update request status to REJECTED.")
+
+    await log_account_audit_event(
+        actor_username=admin["username"],
+        target_username=req_record.get("official_email", ""),
+        event_type="OFFICER_REQUEST_REJECTED",
+        details=f"Rejected request {request_id} ({req_record.get('requested_role')}). Reason: {reason}",
+        ip_address=client_ip
+    )
+
+    updated = await get_officer_access_request_by_id(request_id.strip())
+    return _to_officer_request_out(updated)

@@ -194,8 +194,8 @@ def evaluate_fs_004(info: ProductInfo, context: Dict[str, Any], ocr_text: str) -
         return ComplianceStatus.NOT_APPLICABLE, "Single-ingredient raw food commodity; exempt from mandatory nutrition labelling under Regulation 5(3)", None
     nut_text = info.nutritional_info
     nut_facts = info.nutrition_facts
-    if nut_facts and len(nut_facts) >= 2 or (nut_text and "panel detected" in nut_text.lower()):
-        return ComplianceStatus.PASS, "Nutritional information panel detected on food label", nut_text or "Panel Detected"
+    if (nut_facts and len(nut_facts) >= 2) or (nut_text and ("panel detected" in nut_text.lower() or len(nut_text.strip()) >= 5)):
+        return ComplianceStatus.PASS, f"Nutritional information declared: '{nut_text[:80]}...'" if nut_text else "Nutritional information panel detected on food label", nut_text or "Panel Detected"
     if re.search(r'\b(?:NUTRITION|NUTRIENTS|PER\s*100[gG]|ENERGY|PROTEIN)\b', ocr_text, re.IGNORECASE):
         return ComplianceStatus.NEEDS_REVIEW, "Nutritional information markings detected, but complete nutrient breakdown was unreadable by OCR", None
     return ComplianceStatus.FAIL, "Nutritional information panel was not detected", None

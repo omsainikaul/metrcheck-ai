@@ -253,14 +253,24 @@ async def test_09_e2e_complete_reset_flow_and_single_use_token(client):
     await create_user(username=username, password_hash=pw_hash, salt=salt, role=ROLE_ENFORCEMENT, email=email, organization_id="org_ministry")
 
     # 1. Forgot password
-    resp = client.post("/api/auth/forgot-password", json={"identifier": username})
-    assert resp.status_code == 200
-    token = resp.json()["dev_token"]
-    assert token is not None
+    dev_provider = DevLoggerDeliveryProvider()
+    set_delivery_provider(dev_provider)
+    try:
+        resp = client.post("/api/auth/forgot-password", json={"identifier": username})
+        assert resp.status_code == 200
+        assert resp.json().get("dev_token") is None
+        assert "dev_token" not in resp.json()
+        assert dev_provider.last_sent is not None
+        token = dev_provider.last_sent["raw_token"]
+        assert token is not None
+    finally:
+        set_delivery_provider(None)
 
     # 2. Reset password
+
     r_reset = client.post("/api/auth/reset-password", json={"token": token, "new_password": new_pw})
     assert r_reset.status_code == 200
+
 
     # 3. Attempting to reuse same token must fail
     r_reuse = client.post("/api/auth/reset-password", json={"token": token, "new_password": "AnotherPassword999!"})

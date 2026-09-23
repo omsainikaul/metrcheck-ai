@@ -4,11 +4,24 @@
 .vscode
 .idea
 
+# ── Secrets & Credentials (CRITICAL — prevent .env from entering build context) ──
+.env
+.env.*
+!.env.example
+backend/.env
+backend/.env.*
+!backend/.env.example
+
 # Data & SQLite databases
 data/
 *.db
+*.db-shm
+*.db-wal
 *.sqlite
 *.sqlite3
+*.db.backup*
+*.db.bak
+backend/archive/db_backups/
 
 # Python artifacts
 __pycache__/
@@ -24,7 +37,15 @@ htmlcov/
 venv/
 .venv/
 env/
+backend/venv/
+backend/venv311/
 backend/uploads/
+logs/
+*.log
+scratch/
+.omp_tasks/
+PHASE_*.md
+
 
 # Frontend / Node artifacts
 node_modules/

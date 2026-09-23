@@ -2,6 +2,7 @@ import React, { useState, useMemo } from 'react';
 import { ShieldCheck, Search } from 'lucide-react';
 import { type ComplianceCheck } from '../../types';
 import StatusBadge from '../ui/StatusBadge';
+import { useLanguage } from '../../context/LanguageContext';
 
 interface ComplianceTableProps {
   checks: ComplianceCheck[];
@@ -14,6 +15,7 @@ const ComplianceTable: React.FC<ComplianceTableProps> = ({
   onViewEvidence,
   onSelectRequirement,
 }) => {
+  const { t } = useLanguage();
   const [searchQuery, setSearchQuery] = useState('');
   const [statusFilter, setStatusFilter] = useState<string>('All');
   const [domainFilter, setDomainFilter] = useState<string>('All');
@@ -48,12 +50,12 @@ const ComplianceTable: React.FC<ComplianceTableProps> = ({
     <div className="bg-white dark:bg-slate-900 rounded-xl border border-slate-200 dark:border-slate-800 shadow-2xs mb-6 overflow-hidden">
       <div className="p-4 border-b border-slate-200 dark:border-slate-800 flex flex-col gap-4">
         <div className="flex items-center justify-between">
-          <div className="flex items-center gap-2 text-slate-900 dark:text-slate-100 font-semibold">
+          <div className="flex items-center gap-2 text-slate-900 dark:text-slate-100 font-semibold uppercase tracking-wider text-xs sm:text-sm">
             <ShieldCheck className="w-5 h-5 text-indigo-500" />
-            COMPLIANCE REQUIREMENTS
+            {t('results.compliance_requirements')}
           </div>
           <div className="text-sm text-slate-500 dark:text-slate-400">
-            Showing {filteredChecks.length} of {checks.length}
+            {t('results.showing_checks', { filtered: filteredChecks.length, total: checks.length })}
           </div>
         </div>
 
@@ -62,7 +64,7 @@ const ComplianceTable: React.FC<ComplianceTableProps> = ({
             <Search className="w-4 h-4 absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" />
             <input
               type="text"
-              placeholder="Search rules, fields, values..."
+              placeholder={t('results.search_placeholder')}
               value={searchQuery}
               onChange={(e) => setSearchQuery(e.target.value)}
               className="w-full pl-9 pr-3 py-2 text-sm bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-lg focus:outline-none focus:ring-2 focus:ring-indigo-500 text-slate-900 dark:text-slate-100"
@@ -73,18 +75,18 @@ const ComplianceTable: React.FC<ComplianceTableProps> = ({
             onChange={(e) => setStatusFilter(e.target.value)}
             className="px-3 py-2 text-sm bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-lg focus:outline-none focus:ring-2 focus:ring-indigo-500 text-slate-900 dark:text-slate-100 cursor-pointer"
           >
-            <option value="All">All Status</option>
-            <option value="PASS">Pass</option>
-            <option value="NEEDS_REVIEW">Needs Review</option>
-            <option value="FAIL">Fail</option>
-            <option value="NOT_APPLICABLE">N/A</option>
+            <option value="All">{t('results.all_status')}</option>
+            <option value="PASS">{t('results.passed_label')}</option>
+            <option value="NEEDS_REVIEW">{t('results.review_label')}</option>
+            <option value="FAIL">{t('results.failed_label')}</option>
+            <option value="NOT_APPLICABLE">{t('results.na_label')}</option>
           </select>
           <select
             value={domainFilter}
             onChange={(e) => setDomainFilter(e.target.value)}
             className="px-3 py-2 text-sm bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-lg focus:outline-none focus:ring-2 focus:ring-indigo-500 text-slate-900 dark:text-slate-100 cursor-pointer"
           >
-            <option value="All">All Domains</option>
+            <option value="All">{t('results.all_domains')}</option>
             <option value="Legal Metrology">Legal Metrology</option>
             <option value="FSSAI">FSSAI</option>
           </select>
@@ -95,10 +97,10 @@ const ComplianceTable: React.FC<ComplianceTableProps> = ({
         <table className="w-full text-sm text-left">
           <thead className="bg-slate-50 dark:bg-slate-800/50 text-xs uppercase text-slate-500 dark:text-slate-400">
             <tr>
-              <th className="px-4 py-3 font-medium">Status / Rule</th>
-              <th className="px-4 py-3 font-medium">Requirement</th>
-              <th className="px-4 py-3 font-medium hidden sm:table-cell">Detected Value</th>
-              <th className="px-4 py-3 font-medium text-right">Action</th>
+              <th className="px-4 py-3 font-medium">{t('results.status_rule')}</th>
+              <th className="px-4 py-3 font-medium">{t('results.requirement')}</th>
+              <th className="px-4 py-3 font-medium hidden sm:table-cell">{t('results.detected_value')}</th>
+              <th className="px-4 py-3 font-medium text-right">{t('results.action')}</th>
             </tr>
           </thead>
           <tbody className="divide-y divide-slate-100 dark:divide-slate-800/60">
@@ -118,7 +120,7 @@ const ComplianceTable: React.FC<ComplianceTableProps> = ({
                   {check.field_label && check.field_label.length > 2 ? check.field_label : (check.field || check.rule_id)}
                 </td>
                 <td className="px-4 py-3 text-slate-500 dark:text-slate-400 max-w-[200px] truncate hidden sm:table-cell">
-                  {check.detected_value || <span className="italic opacity-50">Not detected</span>}
+                  {check.detected_value || <span className="italic opacity-50">{t('results.not_reliably_detected')}</span>}
                 </td>
                 <td className="px-4 py-3 text-right whitespace-nowrap">
                   <button
@@ -128,7 +130,7 @@ const ComplianceTable: React.FC<ComplianceTableProps> = ({
                     }}
                     className="text-indigo-600 dark:text-indigo-400 font-medium hover:underline text-xs bg-transparent border-0 cursor-pointer"
                   >
-                    Evidence
+                    {t('results.nav_evidence')}
                   </button>
                 </td>
               </tr>
@@ -137,7 +139,7 @@ const ComplianceTable: React.FC<ComplianceTableProps> = ({
         </table>
         {filteredChecks.length === 0 && (
           <div className="p-8 text-center text-slate-500 dark:text-slate-400">
-            No requirements match the current filters.
+            {t('common.noResults') || 'No requirements match the current filters.'}
           </div>
         )}
       </div>

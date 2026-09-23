@@ -1,3 +1,4 @@
+import logging
 from typing import List, Optional, Dict, Any
 from fastapi import APIRouter, HTTPException, Query, Depends
 from models.schemas import ProductInfo, ComplianceResult, RuleTestRequest, RuleTestResponse
@@ -6,6 +7,7 @@ from compliance.rules.registry import registry
 from database.db import get_analysis
 from auth.security import get_current_user, check_tenant_access
 
+logger = logging.getLogger(__name__)
 router = APIRouter()
 
 @router.post("/compliance/check", response_model=ComplianceResult)
@@ -61,7 +63,8 @@ async def test_rule(req: RuleTestRequest):
     except ValueError as ve:
         raise HTTPException(status_code=400, detail=str(ve))
     except Exception as e:
-        raise HTTPException(status_code=500, detail=f"Simulation error: {str(e)}")
+        logger.exception("Compliance simulation failed: %s", e)
+        raise HTTPException(status_code=500, detail="An internal server error occurred during compliance simulation.")
 
 @router.get("/compliance/conflicts/{analysis_id}")
 async def get_analysis_conflicts(

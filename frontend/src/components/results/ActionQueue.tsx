@@ -1,6 +1,7 @@
 import React, { useState } from 'react';
 import { ListChecks, ChevronDown, ChevronUp, CheckCircle } from 'lucide-react';
 import { type Recommendation } from '../../types';
+import { useLanguage } from '../../context/LanguageContext';
 
 interface ActionQueueProps {
   recommendations: Recommendation[];
@@ -10,6 +11,7 @@ interface ActionQueueProps {
 }
 
 const ActionRow: React.FC<{ rec: Recommendation, onViewEvidence: (r: string) => void }> = ({ rec, onViewEvidence }) => {
+  const { t } = useLanguage();
   const [expanded, setExpanded] = useState(false);
   const isHigh = rec.priority === 'HIGH';
 
@@ -44,18 +46,18 @@ const ActionRow: React.FC<{ rec: Recommendation, onViewEvidence: (r: string) => 
         <div className="px-4 pb-4 pt-1 bg-slate-50/50 dark:bg-slate-800/20 text-sm">
           <div className="grid gap-3 pl-5">
             <div>
-              <span className="font-semibold text-slate-700 dark:text-slate-300 block mb-1">Corrective Action</span>
+              <span className="font-semibold text-slate-700 dark:text-slate-300 block mb-1">{t('results.action')}</span>
               <p className="text-slate-600 dark:text-slate-400">{rec.corrective_action || rec.recommended_action}</p>
             </div>
             {rec.verification_step && (
               <div>
-                <span className="font-semibold text-slate-700 dark:text-slate-300 block mb-1">Verification Step</span>
+                <span className="font-semibold text-slate-700 dark:text-slate-300 block mb-1">{t('results.verified')}</span>
                 <p className="text-slate-600 dark:text-slate-400">{rec.verification_step}</p>
               </div>
             )}
             {rec.source_reference && (
               <div>
-                <span className="font-semibold text-slate-700 dark:text-slate-300 block mb-1">Legal Source</span>
+                <span className="font-semibold text-slate-700 dark:text-slate-300 block mb-1">{t('results.legal_basis')}</span>
                 <a href={rec.source_url || undefined} target="_blank" rel="noreferrer" className="text-indigo-600 dark:text-indigo-400 hover:underline">
                   {rec.source_reference}
                 </a>
@@ -66,7 +68,7 @@ const ActionRow: React.FC<{ rec: Recommendation, onViewEvidence: (r: string) => 
                 onClick={(e) => { e.stopPropagation(); onViewEvidence(rec.rule_id); }}
                 className="text-indigo-600 dark:text-indigo-400 font-medium hover:underline text-sm cursor-pointer"
               >
-                Inspect Associated Evidence →
+                {t('results.inspect_associated_evidence')}
               </button>
             </div>
           </div>
@@ -81,25 +83,26 @@ const ActionQueue: React.FC<ActionQueueProps> = ({
   passedRecs,
   onViewEvidence,
 }) => {
+  const { t } = useLanguage();
   const actionable = recommendations.filter(r => r.status !== 'PASS');
   const [showPassed, setShowPassed] = useState(false);
 
   return (
     <div className="bg-white dark:bg-slate-900 rounded-xl border border-slate-200 dark:border-slate-800 shadow-2xs mb-6 overflow-hidden">
       <div className="bg-slate-50 dark:bg-slate-800/50 p-4 border-b border-slate-200 dark:border-slate-800 flex items-center justify-between">
-        <div className="flex items-center gap-2 text-slate-900 dark:text-slate-100 font-semibold">
+        <div className="flex items-center gap-2 text-slate-900 dark:text-slate-100 font-semibold uppercase tracking-wider text-xs sm:text-sm">
           <ListChecks className="w-5 h-5 text-indigo-500" />
-          ACTION QUEUE
+          {t('results.action_queue')}
         </div>
         <div className="px-2.5 py-0.5 rounded-full text-xs font-medium bg-slate-200 text-slate-700 dark:bg-slate-700 dark:text-slate-300">
-          {actionable.length} Action{actionable.length !== 1 ? 's' : ''}
+          {actionable.length === 1 ? t('results.actions_count_single', { count: 1 }) : t('results.actions_count_multiple', { count: actionable.length })}
         </div>
       </div>
 
       {actionable.length === 0 ? (
         <div className="p-6 text-center text-green-600 dark:text-green-400 font-medium flex items-center justify-center gap-2 bg-green-50/50 dark:bg-green-900/10">
           <CheckCircle className="w-5 h-5" />
-          No Corrective Actions Required
+          {t('results.no_corrective_actions')}
         </div>
       ) : (
         <div className="divide-y divide-slate-100 dark:divide-slate-800/60">
@@ -117,7 +120,7 @@ const ActionQueue: React.FC<ActionQueueProps> = ({
           >
             <span className="flex items-center gap-2">
               <CheckCircle className="w-4 h-4" />
-              Passed & Verified ({passedRecs.length})
+              {t('results.passed_and_verified', { count: passedRecs.length })}
             </span>
             {showPassed ? <ChevronUp className="w-4 h-4" /> : <ChevronDown className="w-4 h-4" />}
           </button>

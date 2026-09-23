@@ -1,6 +1,7 @@
 import React from 'react';
 import { AlertTriangle, ShieldAlert, ShieldCheck, Info, TrendingDown } from 'lucide-react';
 import { type RiskAssessment, type CategoryScore, type ConfidenceSummary } from '../../types';
+import { useLanguage } from '../../context/LanguageContext';
 
 interface RiskFactorBreakdownProps {
   riskAssessment?: RiskAssessment | null;
@@ -15,6 +16,8 @@ export const RiskFactorBreakdown: React.FC<RiskFactorBreakdownProps> = ({
   confidenceSummary,
   score = 0,
 }) => {
+  const { t } = useLanguage();
+
   if (!riskAssessment && !categoryScores && !confidenceSummary) {
     return null;
   }
@@ -68,7 +71,7 @@ export const RiskFactorBreakdown: React.FC<RiskFactorBreakdownProps> = ({
               <span>{badgeInfo.text}</span>
             </span>
             <span className="text-xs font-bold uppercase tracking-wider text-slate-400 dark:text-slate-500">
-              Risk &amp; Scoring Assessment
+              {t('results.risk_assessment_title')}
             </span>
           </div>
           <p className="text-xs sm:text-sm text-slate-700 dark:text-slate-300 font-medium leading-relaxed pt-1">
@@ -81,14 +84,14 @@ export const RiskFactorBreakdown: React.FC<RiskFactorBreakdownProps> = ({
           <div className="flex items-center gap-3 px-4 py-2.5 rounded-xl bg-slate-50 dark:bg-slate-800/80 border border-slate-200/90 dark:border-slate-700 shrink-0">
             <div>
               <span className="text-[10px] font-bold text-slate-400 dark:text-slate-500 uppercase tracking-widest block">
-                CONFIDENCE-ADJUSTED SCORE
+                {t('results.confidence_adjusted_score')}
               </span>
               <div className="flex items-baseline gap-1.5">
                 <span className="text-lg font-black font-mono text-slate-900 dark:text-slate-100">
                   {Number(riskAssessment.confidence_adjusted_score ?? score).toFixed(1)}
                 </span>
                 <span className="text-xs text-slate-400 dark:text-slate-500 font-medium">
-                  (Raw: {Number(score).toFixed(1)})
+                  ({t('results.raw_score', { score: Number(score).toFixed(1) })})
                 </span>
               </div>
             </div>
@@ -101,7 +104,7 @@ export const RiskFactorBreakdown: React.FC<RiskFactorBreakdownProps> = ({
         <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
           <div className="p-3 rounded-xl bg-slate-50 dark:bg-slate-800/60 border border-slate-200/80 dark:border-slate-800">
             <span className="text-[10px] font-bold uppercase tracking-wider text-slate-500 dark:text-slate-400 block">
-              Missing Declarations
+              {t('results.missing_declarations')}
             </span>
             <span className={`text-base font-black font-mono ${riskAssessment.missing_declaration_count > 0 ? 'text-red-600 dark:text-red-400' : 'text-emerald-600 dark:text-emerald-400'}`}>
               {riskAssessment.missing_declaration_count}
@@ -110,7 +113,7 @@ export const RiskFactorBreakdown: React.FC<RiskFactorBreakdownProps> = ({
 
           <div className="p-3 rounded-xl bg-slate-50 dark:bg-slate-800/60 border border-slate-200/80 dark:border-slate-800">
             <span className="text-[10px] font-bold uppercase tracking-wider text-slate-500 dark:text-slate-400 block">
-              Critical Violations
+              {t('results.critical_violations')}
             </span>
             <span className={`text-base font-black font-mono ${riskAssessment.critical_violation_count > 0 ? 'text-red-600 dark:text-red-400' : 'text-emerald-600 dark:text-emerald-400'}`}>
               {riskAssessment.critical_violation_count}
@@ -119,7 +122,7 @@ export const RiskFactorBreakdown: React.FC<RiskFactorBreakdownProps> = ({
 
           <div className="p-3 rounded-xl bg-slate-50 dark:bg-slate-800/60 border border-slate-200/80 dark:border-slate-800">
             <span className="text-[10px] font-bold uppercase tracking-wider text-slate-500 dark:text-slate-400 block">
-              Review Required
+              {t('results.review_required')}
             </span>
             <span className={`text-base font-black font-mono ${riskAssessment.review_required_count > 0 ? 'text-amber-600 dark:text-amber-400' : 'text-slate-600 dark:text-slate-400'}`}>
               {riskAssessment.review_required_count}
@@ -128,7 +131,7 @@ export const RiskFactorBreakdown: React.FC<RiskFactorBreakdownProps> = ({
 
           <div className="p-3 rounded-xl bg-slate-50 dark:bg-slate-800/60 border border-slate-200/80 dark:border-slate-800">
             <span className="text-[10px] font-bold uppercase tracking-wider text-slate-500 dark:text-slate-400 block">
-              Aggregate Confidence
+              {t('results.aggregate_confidence')}
             </span>
             <span className="text-base font-black font-mono text-indigo-600 dark:text-indigo-400">
               {Number(confidenceSummary?.aggregate_confidence ?? 90).toFixed(1)}%
@@ -141,7 +144,7 @@ export const RiskFactorBreakdown: React.FC<RiskFactorBreakdownProps> = ({
       {categoryScores && Object.keys(categoryScores).length > 0 && (
         <div className="space-y-2">
           <span className="text-xs font-bold uppercase tracking-wider text-slate-500 dark:text-slate-400 block">
-            Category Breakdown
+            {t('results.category_breakdown')}
           </span>
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
             {Object.entries(categoryScores).map(([catKey, cat]) => (
@@ -149,7 +152,7 @@ export const RiskFactorBreakdown: React.FC<RiskFactorBreakdownProps> = ({
                 <div>
                   <h4 className="text-xs font-bold text-slate-900 dark:text-slate-100">{cat.category}</h4>
                   <p className="text-[11px] text-slate-500 dark:text-slate-400">
-                    {cat.passed_rules} Passed • {cat.failed_rules} Failed • {cat.review_rules} Review
+                    {t('results.category_stats', { passed: cat.passed_rules, failed: cat.failed_rules, review: cat.review_rules })}
                   </p>
                 </div>
                 <div className="text-right">
@@ -157,7 +160,7 @@ export const RiskFactorBreakdown: React.FC<RiskFactorBreakdownProps> = ({
                     {Number(cat.score).toFixed(1)}%
                   </span>
                   <span className="text-[10px] text-slate-400 block">
-                    {cat.earned_points} / {cat.max_points} pts
+                    {cat.earned_points} / {cat.max_points} {t('results.pts')}
                   </span>
                 </div>
               </div>
@@ -170,7 +173,7 @@ export const RiskFactorBreakdown: React.FC<RiskFactorBreakdownProps> = ({
       {riskAssessment && riskAssessment.risk_factors && riskAssessment.risk_factors.length > 0 && (
         <div className="space-y-2.5 pt-2">
           <span className="text-xs font-bold uppercase tracking-wider text-slate-500 dark:text-slate-400 block">
-            Identified Risk Factors ({riskAssessment.risk_factors.length})
+            {t('results.identified_risk_factors', { count: riskAssessment.risk_factors.length })}
           </span>
           <div className="space-y-2">
             {riskAssessment.risk_factors.map((factor, idx) => (
@@ -198,14 +201,14 @@ export const RiskFactorBreakdown: React.FC<RiskFactorBreakdownProps> = ({
                     {factor.description}
                   </p>
                   <span className="text-[10px] text-slate-400 italic">
-                    Legal Reference: {factor.source_reference}
+                    {t('results.legal_reference')}: {factor.source_reference}
                   </span>
                 </div>
 
                 <div className="shrink-0 text-right">
                   <span className="inline-flex items-center gap-1 text-xs font-bold font-mono text-red-600 dark:text-red-400">
                     <TrendingDown className="w-3.5 h-3.5" />
-                    <span>-{factor.impact_on_score} pts</span>
+                    <span>-{factor.impact_on_score} {t('results.pts')}</span>
                   </span>
                 </div>
               </div>

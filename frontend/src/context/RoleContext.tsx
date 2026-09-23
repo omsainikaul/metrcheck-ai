@@ -35,6 +35,14 @@ export const ROLE_DEFINITIONS: Record<UserRole, RoleInfo> = {
     officerId: 'MERCHANT-PUB',
     jurisdiction: 'Commercial Packaging Verification',
     description: 'Merchant mode: Pre-flight packaging check before printing and retail distribution.'
+  },
+  PUBLIC_USER: {
+    role: 'PUBLIC_USER',
+    label: 'Normal User Mode',
+    badge: 'CONSUMER ACCESS',
+    officerId: 'USER-CONSUMER',
+    jurisdiction: 'Consumer Self-Service',
+    description: 'Consumer mode: Check packaged products, understand detected declarations and compliance scores.'
   }
 };
 
@@ -46,13 +54,15 @@ export function RoleProvider({ children }: { children: ReactNode }) {
   const role: UserRole = useMemo(() => {
     if (currentWorkspace === 'ENFORCEMENT') return 'ENFORCEMENT_OFFICER';
     if (currentWorkspace === 'AUDIT') return 'COMPLIANCE_INSPECTOR';
-    return 'MERCHANT_PUBLIC';
+    if (currentWorkspace === 'MERCHANT') return 'MERCHANT_PUBLIC';
+    return 'PUBLIC_USER';
   }, [currentWorkspace]);
 
   const setRole = (newRole: UserRole) => {
     if (newRole === 'ENFORCEMENT_OFFICER') setWorkspace('ENFORCEMENT');
     else if (newRole === 'COMPLIANCE_INSPECTOR') setWorkspace('AUDIT');
-    else setWorkspace('MERCHANT');
+    else if (newRole === 'MERCHANT_PUBLIC') setWorkspace('MERCHANT');
+    else setWorkspace('USER');
   };
 
   const roleInfo = ROLE_DEFINITIONS[role] || ROLE_DEFINITIONS.MERCHANT_PUBLIC;

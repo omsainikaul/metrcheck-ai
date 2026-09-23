@@ -73,7 +73,8 @@ def repair_mrp(val: str) -> str:
     Contextual MRP repair.
     Ensures currency prefix ₹, cleans punctuation and asterisks (e.g. '* 60.00' -> '₹60.00'),
     cleans comma decimal separator (299,00 -> 299.00), strips trailing slashes (299/- -> ₹299.00).
-    Rejects dates, barcodes, FSSAI licenses, and phone numbers.
+    Rejects dates, barcodes, FSSAI licenses, phone numbers, PIN codes, nutritional values,
+    and unprinted instruction text (e.g., 'SEE BOTTOM OF PACK', 'REFER TO JAR').
     """
     if not val:
         return ""
@@ -86,19 +87,40 @@ def repair_mrp(val: str) -> str:
     if re.search(r'\b\d{8,}\b', val) and '.' not in val:
         return ""
 
-    # Strip existing currency prefixes, asterisks, colons, spaces
-    val = re.sub(r'^(?:M\.?R\.?P\.?|Maximum\s*Retail\s*Price|Retail\s*Price|MRPR)?[\s.:₹RsINR\/\-*~#\'\"\=]*', '', val, flags=re.IGNORECASE).strip()
-    # Remove trailing /- or tax qualifiers
-    val = re.sub(r'\s*(?:/\-|\(.*\)|incl.*|all\s*taxes).*$', '', val, flags=re.IGNORECASE).strip()
-    # Replace comma decimal with period (e.g. 299,00 -> 299.00)
-    val = re.sub(r'(\d+),(\d{2})\b', r'\1.\2', val)
+    # Check for explicit currency indicator before stripping
+    has_explicit_currency = bool(re.search(r'(?:₹|Rs\.?|INR)\s*\d+', val, re.IGNORECASE))
+    raw_has_currency = bool(re.search(r'(?:₹|Rs\.?|INR)', val, re.IGNORECASE))
 
-    # Reject obvious corrupted non-numeric symbols
-    if any(c in val for c in ['■', '█', '▲', '▼', '★', '♦']):
+    # Reject unprinted instructional phrases unless an explicit currency-prefixed number is present
+    has_instruction = bool(re.search(
+        r'\b(?:SEE|BOTTOM|BELOW|CONTAINER|STAMP|PRINTED|SIDE|CAP|NECK|CRIMP|POUCH|LABEL|JAR|CAN|BOX|TOP|REFER|DETAILS|OFPACK|PACKAGE|PANEL|FLAP|BASE|UNDER|OVER|REVERSE|PACK)\b',
+        val,
+        re.IGNORECASE
+    ))
+    if has_instruction and not has_explicit_currency:
         return ""
 
-    # Check for clean decimal number e.g. 10, 10.00, 60.00, 499.00
-    m_clean = re.search(r'(\d{1,5}(?:\.\d{1,2})?)', val)
+    # Reject nutrition / energy / serving context without explicit currency
+    if re.search(r'\b(?:kcal|cal|kj|energy|protein|carb|fat|sodium|serv|serving|portion|g|gm|kg|ml|l)\b', val, re.IGNORECASE) and not has_explicit_currency:
+        return ""
+
+    # Reject batch / mfd / exp / lic / pin code headers without explicit currency
+    if re.search(r'\b(?:batch|lot|mfd|mfg|pkd|exp|lic|pin|pincode|phone|tel|mob)\b', val, re.IGNORECASE) and not has_explicit_currency:
+        return ""
+
+    # Strip existing currency prefixes, asterisks, colons, spaces
+    val_clean = re.sub(r'^(?:M\.?R\.?P\.?|Maximum\s*Retail\s*Price|Retail\s*Price|MRPR)?[\s.:₹RsINR\/\-*~#\'\"\=]*', '', val, flags=re.IGNORECASE).strip()
+    # Remove trailing /- or tax qualifiers
+    val_clean = re.sub(r'\s*(?:/\-|\(.*\)|incl.*|all\s*taxes).*$', '', val_clean, flags=re.IGNORECASE).strip()
+    # Replace comma decimal with period (e.g. 299,00 -> 299.00)
+    val_clean = re.sub(r'(\d+),(\d{2})\b', r'\1.\2', val_clean)
+
+    # Reject obvious corrupted non-numeric symbols
+    if any(c in val_clean for c in ['■', '█', '▲', '▼', '★', '♦']):
+        return ""
+
+    # Check for clean decimal or integer price number e.g. 10, 10.00, 60.00, 499, 1499, 2499.00
+    m_clean = re.search(r'(\d{1,5}(?:\.\d{1,2})?)', val_clean)
     if m_clean:
         try:
             num_val = float(m_clean.group(1))

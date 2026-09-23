@@ -28,7 +28,8 @@ async def analyze_products(
     files: List[UploadFile],
     labels: Optional[List[str]] = None,
     owner_user_id: Optional[str] = None,
-    organization_id: Optional[str] = None
+    organization_id: Optional[str] = None,
+    product_id: Optional[str] = None
 ) -> AnalysisResponse:
     start_total_time = time.perf_counter()
     analysis_id = str(uuid.uuid4())
@@ -232,6 +233,7 @@ async def analyze_products(
         'images': [ev.model_dump() for ev in image_evidences],
         'owner_user_id': owner_user_id or "",
         'organization_id': organization_id or "",
+        'product_id': product_id or "",
         'integrity_hash': integrity_hash,
         'system_version': SYSTEM_VERSION,
         'ocr_engine_version': OCR_PIPELINE_VERSION,
@@ -274,7 +276,12 @@ async def analyze_product(file: UploadFile) -> AnalysisResponse:
     return await analyze_products([file], ["Front"])
 
 
-async def analyze_text(text: str, owner_user_id: Optional[str] = None, organization_id: Optional[str] = None) -> AnalysisResponse:
+async def analyze_text(
+    text: str,
+    owner_user_id: Optional[str] = None,
+    organization_id: Optional[str] = None,
+    product_id: Optional[str] = None
+) -> AnalysisResponse:
     """Analyze raw product listing or label text without images."""
     analysis_id = str(uuid.uuid4())
     
@@ -357,6 +364,7 @@ async def analyze_text(text: str, owner_user_id: Optional[str] = None, organizat
         'images': [],
         'owner_user_id': owner_user_id or "",
         'organization_id': organization_id or "",
+        'product_id': product_id or "",
         'integrity_hash': integrity_hash,
         'system_version': SYSTEM_VERSION,
         'ocr_engine_version': OCR_PIPELINE_VERSION,
@@ -382,3 +390,175 @@ async def analyze_text(text: str, owner_user_id: Optional[str] = None, organizat
         owner_user_id=owner_user_id or "",
         organization_id=organization_id or "",
     )
+
+
+from models.manual_check_schemas import ManualProductCheckRequest
+
+async def analyze_manual(
+    req: ManualProductCheckRequest,
+    owner_user_id: Optional[str] = None,
+    organization_id: Optional[str] = None,
+) -> AnalysisResponse:
+    """Analyze manually entered package declarations without images (NU-06)."""
+    analysis_id = str(uuid.uuid4())
+    is_food = (req.product_type.upper() == "FOOD")
+    
+    # Construct combined manufacturer address if provided
+    mfg_combined = None
+    if req.manufacturer_name or req.manufacturer_address:
+        parts = [p.strip() for p in [req.manufacturer_name, req.manufacturer_address] if p and p.strip()]
+        mfg_combined = ", ".join(parts) if parts else None
+        
+    packer_combined = None
+    if req.packer_name or req.packer_address:
+        parts = [p.strip() for p in [req.packer_name, req.packer_address] if p and p.strip()]
+        packer_combined = ", ".join(parts) if parts else None
+
+    # Construct consumer care summary if phone/email/address provided
+    care_parts = []
+    if req.consumer_care_phone:
+        care_parts.append(f"Phone: {req.consumer_care_phone.strip()}")
+    if req.consumer_care_email:
+        care_parts.append(f"Email: {req.consumer_care_email.strip()}")
+    if req.consumer_care_address:
+        care_parts.append(f"Address: {req.consumer_care_address.strip()}")
+    consumer_care_combined = ", ".join(care_parts) if care_parts else None
+
+    # Clean dates
+    mfg_date = req.manufacture_date.strip() if req.manufacture_date else None
+    exp_date = req.expiry_date.strip() if req.expiry_date else None
+    best_before = req.best_before.strip() if req.best_before else None
+
+    product_info = ProductInfo(
+        product_name=req.product_name.strip(),
+        brand=req.brand.strip() if req.brand else None,
+        category=req.category.strip() if req.category else None,
+        is_food=is_food,
+        net_quantity=req.net_quantity.strip() if req.net_quantity else None,
+        mrp=req.mrp.strip() if req.mrp else None,
+        unit_sale_price=req.unit_sale_price.strip() if req.unit_sale_price else None,
+        manufacture_date=mfg_date,
+        manufacturing_date=mfg_date,
+        expiry_date=exp_date,
+        best_before=best_before,
+        batch_number=req.batch_number.strip() if req.batch_number else None,
+        country_of_origin=req.country_of_origin.strip() if req.country_of_origin else "India",
+        manufacturer=mfg_combined,
+        manufacturer_name=req.manufacturer_name.strip() if req.manufacturer_name else None,
+        manufacturer_address=req.manufacturer_address.strip() if req.manufacturer_address else None,
+        packer=packer_combined,
+        packer_name=req.packer_name.strip() if req.packer_name else None,
+        packer_address=req.packer_address.strip() if req.packer_address else None,
+        consumer_care=consumer_care_combined,
+        consumer_care_phone=req.consumer_care_phone.strip() if req.consumer_care_phone else None,
+        consumer_care_email=req.consumer_care_email.strip() if req.consumer_care_email else None,
+        # Food specific
+        fssai_license=req.fssai_license.strip() if (is_food and req.fssai_license) else None,
+        ingredients=req.ingredients.strip() if (is_food and req.ingredients) else None,
+        allergen_info=req.allergen_info.strip() if (is_food and req.allergen_info) else None,
+        nutritional_info=req.nutritional_info.strip() if (is_food and req.nutritional_info) else None,
+        nutrition_panel_detected=True if (is_food and req.nutritional_info) else None,
+        extraction_mode="manual"
+    )
+
+    # Compliance check on existing authoritative engine
+    comp_result_dict = compliance_engine.check(product_info, ocr_text="", images=[], analysis_id=analysis_id)
+    compliance_result = ComplianceResult(**comp_result_dict)
+
+    # Minimal OCRResult indicating manual entry
+    ocr_res = OCRResult(
+        full_text="[Manual Product Check — User-Provided Package Declarations]",
+        words=[],
+        language="eng",
+        processing_time=0.0,
+        average_confidence=0.0,
+        word_count=0,
+        engine="Manual User Entry",
+        preprocessing_variant="None",
+        regions_processed=0,
+        ocr_passes=0
+    )
+
+    # Font size analysis (returns NOT_ASSESSED for manual mode)
+    font_size_analysis = compute_font_size_and_readability(
+        product_info=product_info,
+        ocr_result=ocr_res,
+        images=[],
+        checks=compliance_result.checks
+    )
+
+    # External Cross-Checking for FSSAI if provided
+    fssai_verification = None
+    if product_info.fssai_license:
+        fssai_verification = await fssai_verifier.verify(product_info.fssai_license)
+
+    external_verification = cross_check_engine.evaluate_all(
+        extracted_data=product_info.model_dump(),
+        fssai_record=fssai_verification,
+        gs1_record=None,
+        qr_payload=None,
+        barcode_detected=None,
+        offline_mode=False
+    )
+
+    created_at = get_current_utc_iso()
+    extracted_dict = product_info.model_dump()
+    compliance_dict = compliance_result.model_dump()
+
+    # Deterministic cryptographic integrity hash
+    integrity_hash = compute_analysis_integrity_hash(
+        analysis_id=analysis_id,
+        created_at=created_at,
+        product_name=product_info.product_name or 'Unknown Product',
+        score=compliance_result.score,
+        status=compliance_result.status,
+        extracted_data=extracted_dict,
+        compliance_result=compliance_dict
+    )
+
+    # Save to database
+    db_data = {
+        'id': analysis_id,
+        'product_name': product_info.product_name or 'Unknown Product',
+        'image_filename': "",
+        'ocr_text': "[Manual Product Check — User-Provided Package Declarations]",
+        'extracted_data': extracted_dict,
+        'compliance_result': compliance_dict,
+        'score': compliance_result.score,
+        'status': compliance_result.status,
+        'created_at': created_at,
+        'images': [],
+        'owner_user_id': owner_user_id or "",
+        'organization_id': organization_id or "",
+        'product_id': "",
+        'integrity_hash': integrity_hash,
+        'system_version': SYSTEM_VERSION,
+        'ocr_engine_version': "None (Manual Entry)",
+        'ruleset_version': COMPLIANCE_RULESET_VERSION,
+    }
+    await save_analysis(db_data)
+
+    return AnalysisResponse(
+        id=analysis_id,
+        product_name=db_data['product_name'],
+        image_url="/placeholder.png",
+        images=[],
+        ocr_result=ocr_res,
+        product_info=product_info,
+        compliance_result=compliance_result,
+        recommendations=compliance_result.recommendations,
+        created_at=created_at,
+        image_quality_warning=None,
+        font_size_analysis=font_size_analysis,
+        fssai_verification=fssai_verification,
+        gs1_verification=None,
+        calibration_result=None,
+        owner_user_id=owner_user_id or "",
+        organization_id=organization_id or "",
+        external_verification=external_verification,
+        integrity_hash=integrity_hash,
+        system_version=SYSTEM_VERSION,
+        ocr_engine_version="None (Manual Entry)",
+        ruleset_version=COMPLIANCE_RULESET_VERSION
+    )
+

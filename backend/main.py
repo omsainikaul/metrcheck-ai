@@ -4,8 +4,8 @@ from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 from config import settings
 from database.db import init_db
-from api import analyze, ocr, extract, compliance_routes, history, demo, health, report, enforcement, integrations, vision, evidence, scoring_routes, preprint_routes, version_routes, review_routes, images
-from auth.routes import router as auth_router, admin_router
+from api import analyze, ocr, extract, compliance_routes, history, demo, health, report, enforcement, integrations, vision, evidence, scoring_routes, preprint_routes, version_routes, review_routes, images, products
+from auth.routes import router as auth_router, admin_router, officer_access_router
 
 from version import get_version_metadata
 from database.db import get_security_audit_logs, verify_security_audit_chain
@@ -56,6 +56,7 @@ app.include_router(health.router, prefix="/api", tags=["Health"])
 app.include_router(report.router, prefix="/api", tags=["Report"])
 app.include_router(auth_router, prefix="/api", tags=["Auth"])
 app.include_router(admin_router, prefix="/api", tags=["Admin"])
+app.include_router(officer_access_router, prefix="/api", tags=["Officer Access"])
 app.include_router(enforcement.router, prefix="/api", tags=["Enforcement"])
 app.include_router(integrations.router, prefix="/api", tags=["Integrations & Metrology"])
 app.include_router(vision.router)
@@ -63,6 +64,7 @@ app.include_router(scoring_routes.router)
 app.include_router(preprint_routes.router)
 app.include_router(version_routes.router)
 app.include_router(review_routes.router)
+app.include_router(products.router, prefix="/api")
 
 @app.get("/api/version", tags=["System Version"])
 def get_system_version():

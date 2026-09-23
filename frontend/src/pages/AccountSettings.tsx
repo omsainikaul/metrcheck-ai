@@ -52,14 +52,16 @@ export default function AccountSettings() {
   };
 
   const roleLabel = user?.role === 'ADMIN' ? 'System Administrator'
-    : user?.role === 'ENFORCEMENT_OFFICER' ? 'Enforcement Officer'
-    : user?.role === 'AUDIT_OFFICER' ? 'Audit Officer'
-    : 'Merchant / Public';
+    : user?.role === 'ENFORCEMENT_OFFICER' ? 'Enforcement Official'
+    : user?.role === 'AUDIT_OFFICER' ? 'Quality & Audit Inspector'
+    : user?.role === 'MERCHANT_PUBLIC' ? 'Brand / Merchant'
+    : 'Normal User';
 
   const roleBadgeColor = user?.role === 'ADMIN' ? 'bg-indigo-500/15 text-indigo-300 border-indigo-500/30'
     : user?.role === 'ENFORCEMENT_OFFICER' ? 'bg-emerald-500/15 text-emerald-300 border-emerald-500/30'
     : user?.role === 'AUDIT_OFFICER' ? 'bg-indigo-500/15 text-indigo-300 border-indigo-500/30'
-    : 'bg-amber-500/15 text-amber-300 border-amber-500/30';
+    : user?.role === 'MERCHANT_PUBLIC' ? 'bg-amber-500/15 text-amber-300 border-amber-500/30'
+    : 'bg-emerald-500/15 text-emerald-300 border-emerald-500/30';
 
   return (
     <div className="p-6 space-y-6 max-w-4xl mx-auto">

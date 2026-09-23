@@ -1,4 +1,4 @@
-import React, { useState, useRef, useEffect } from 'react';
+import React, { useState, useRef, useEffect, useMemo } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { 
   UploadCloud, 
@@ -24,51 +24,20 @@ import {
   SwitchCamera
 } from 'lucide-react';
 import { api } from '../services/api';
+import { useLanguage } from '../context/LanguageContext';
 
 type SlotKey = 'front' | 'back' | 'side1' | 'side2';
 
 interface SlotDefinition {
   key: SlotKey;
-  label: string;
   requirement: 'required' | 'recommended' | 'optional';
-  badgeText: string;
-  description: string;
-  hints: string;
 }
 
-const SLOTS: SlotDefinition[] = [
-  {
-    key: 'front',
-    label: 'Front',
-    requirement: 'required',
-    badgeText: 'Required',
-    description: 'Upload the front label',
-    hints: 'Brand, product name, net quantity & veg/non-veg'
-  },
-  {
-    key: 'back',
-    label: 'Back',
-    requirement: 'recommended',
-    badgeText: 'Recommended',
-    description: 'Upload the back panel',
-    hints: 'MRP, date/expiry, FSSAI lic., mfg address & ingredients'
-  },
-  {
-    key: 'side1',
-    label: 'Side 1',
-    requirement: 'optional',
-    badgeText: 'Optional',
-    description: 'Upload side panel 1',
-    hints: 'Consumer care, nutritional table, batch details'
-  },
-  {
-    key: 'side2',
-    label: 'Side 2',
-    requirement: 'optional',
-    badgeText: 'Optional',
-    description: 'Upload side panel 2',
-    hints: 'Additional declarations, bar code & certifications'
-  }
+const BASE_SLOTS: SlotDefinition[] = [
+  { key: 'front', requirement: 'required' },
+  { key: 'back', requirement: 'recommended' },
+  { key: 'side1', requirement: 'optional' },
+  { key: 'side2', requirement: 'optional' }
 ];
 
 interface UploadedSlotItem {
@@ -78,65 +47,96 @@ interface UploadedSlotItem {
   preview: string;
 }
 
-interface ConceptualStage {
-  id: string;
-  title: string;
-  explanation: string;
-  icon: React.ComponentType<{ className?: string }>;
-}
-
-const CONCEPTUAL_STAGES: ConceptualStage[] = [
-  {
-    id: 'images_received',
-    title: 'Images Received',
-    explanation: 'Package images have been received.',
-    icon: UploadCloud
-  },
-  {
-    id: 'quality_check',
-    title: 'Image Quality Check',
-    explanation: 'Checking image clarity and orientation.',
-    icon: Eye
-  },
-  {
-    id: 'ocr_extraction',
-    title: 'OCR Text Extraction',
-    explanation: 'Reading visible text from the package.',
-    icon: ScanSearch
-  },
-  {
-    id: 'declaration_extraction',
-    title: 'Declaration Extraction',
-    explanation: 'Identifying label declarations such as MRP, quantity and dates.',
-    icon: FileSearch
-  },
-  {
-    id: 'rules_evaluation',
-    title: 'Applicable Rules Evaluation',
-    explanation: 'Determining which Legal Metrology and FSSAI requirements apply.',
-    icon: Settings
-  },
-  {
-    id: 'compliance_screening',
-    title: 'Compliance Screening',
-    explanation: 'Comparing detected declarations with applicable requirements.',
-    icon: ShieldCheck
-  },
-  {
-    id: 'preparing_results',
-    title: 'Preparing Results',
-    explanation: 'Organizing findings, evidence and recommended actions.',
-    icon: FileText
-  }
-];
-
 const MAX_IMAGES = 4;
 const MAX_FILE_SIZE_BYTES = 10 * 1024 * 1024; // 10MB
 const ALLOWED_TYPES = ['image/jpeg', 'image/png', 'image/webp'];
 
 export default function Analyze() {
   const navigate = useNavigate();
-  
+  const { t } = useLanguage();
+
+  // Dynamic slot localized definitions
+  const SLOTS = useMemo(() => [
+    {
+      key: 'front' as SlotKey,
+      label: t('analysis.slots.front_label'),
+      requirement: 'required' as const,
+      badgeText: t('analysis.slots.required'),
+      description: t('analysis.slots.front_desc'),
+      hints: t('analysis.slots.front_hints')
+    },
+    {
+      key: 'back' as SlotKey,
+      label: t('analysis.slots.back_label'),
+      requirement: 'recommended' as const,
+      badgeText: t('analysis.slots.recommended'),
+      description: t('analysis.slots.back_desc'),
+      hints: t('analysis.slots.back_hints')
+    },
+    {
+      key: 'side1' as SlotKey,
+      label: t('analysis.slots.side1_label'),
+      requirement: 'optional' as const,
+      badgeText: t('analysis.slots.optional'),
+      description: t('analysis.slots.side1_desc'),
+      hints: t('analysis.slots.side1_hints')
+    },
+    {
+      key: 'side2' as SlotKey,
+      label: t('analysis.slots.side2_label'),
+      requirement: 'optional' as const,
+      badgeText: t('analysis.slots.optional'),
+      description: t('analysis.slots.side2_desc'),
+      hints: t('analysis.slots.side2_hints')
+    }
+  ], [t]);
+
+  // Dynamic localized conceptual pipeline stages
+  const CONCEPTUAL_STAGES = useMemo(() => [
+    {
+      id: 'images_received',
+      title: t('analysis.stages.images_received_title'),
+      explanation: t('analysis.stages.images_received_desc'),
+      icon: UploadCloud
+    },
+    {
+      id: 'quality_check',
+      title: t('analysis.stages.quality_check_title'),
+      explanation: t('analysis.stages.quality_check_desc'),
+      icon: Eye
+    },
+    {
+      id: 'ocr_extraction',
+      title: t('analysis.stages.ocr_extraction_title'),
+      explanation: t('analysis.stages.ocr_extraction_desc'),
+      icon: ScanSearch
+    },
+    {
+      id: 'declaration_extraction',
+      title: t('analysis.stages.declaration_extraction_title'),
+      explanation: t('analysis.stages.declaration_extraction_desc'),
+      icon: FileSearch
+    },
+    {
+      id: 'rules_evaluation',
+      title: t('analysis.stages.rules_evaluation_title'),
+      explanation: t('analysis.stages.rules_evaluation_desc'),
+      icon: Settings
+    },
+    {
+      id: 'compliance_screening',
+      title: t('analysis.stages.compliance_screening_title'),
+      explanation: t('analysis.stages.compliance_screening_desc'),
+      icon: ShieldCheck
+    },
+    {
+      id: 'preparing_results',
+      title: t('analysis.stages.preparing_results_title'),
+      explanation: t('analysis.stages.preparing_results_desc'),
+      icon: FileText
+    }
+  ], [t]);
+
   // Dedicated file inputs for each slot (Gallery & Native Camera)
   const frontInputRef = useRef<HTMLInputElement>(null);
   const backInputRef = useRef<HTMLInputElement>(null);
@@ -161,6 +161,7 @@ export default function Analyze() {
     side1: side1CameraInputRef,
     side2: side2CameraInputRef
   };
+
   // General multi-file input for bulk drag & drop
   const generalFileInputRef = useRef<HTMLInputElement>(null);
 
@@ -177,10 +178,6 @@ export default function Analyze() {
   const [error, setError] = useState<string | null>(null);
   const [dragOverSlot, setDragOverSlot] = useState<SlotKey | 'general' | null>(null);
   const [demoActiveCase, setDemoActiveCase] = useState<number | null>(null);
-
-  // Top-level Mode Switcher: "image" (default) or "text" (Product Listing text)
-  const [scanMode, setScanMode] = useState<'image' | 'text'>('image');
-  const [listingText, setListingText] = useState<string>('');
 
   // Live Camera Scanner State & Handlers
   const [isCameraOpen, setIsCameraOpen] = useState(false);
@@ -211,7 +208,7 @@ export default function Analyze() {
           setIsCameraReady(true);
         };
       }
-    } catch (err: any) {
+    } catch (_err: any) {
       setCameraError("Camera access denied or unavailable. Please enable camera permissions in your browser.");
     }
   };
@@ -253,6 +250,7 @@ export default function Analyze() {
       stopCamera();
     }, 'image/jpeg', 0.95);
   };
+
   const toggleFacingMode = async () => {
     const nextMode = facingMode === 'environment' ? 'user' : 'environment';
     setFacingMode(nextMode);
@@ -270,10 +268,11 @@ export default function Analyze() {
           videoRef.current?.play();
         };
       }
-    } catch (err) {
+    } catch (_err) {
       // Fallback
     }
   };
+
   const stageIntervalRef = useRef<number | null>(null);
 
   // Clean up object URLs and timers on unmount
@@ -286,7 +285,7 @@ export default function Analyze() {
     };
   }, []);
 
-  const stagedItems = SLOTS
+  const stagedItems = BASE_SLOTS
     .map(slot => slotItems[slot.key])
     .filter((item): item is UploadedSlotItem => item !== null);
 
@@ -310,7 +309,6 @@ export default function Analyze() {
       return;
     }
 
-    // Revoke previous preview if replacing
     if (slotItems[slotKey]?.preview) {
       URL.revokeObjectURL(slotItems[slotKey]!.preview);
     }
@@ -338,8 +336,7 @@ export default function Analyze() {
       return;
     }
 
-    // Find available empty slots in order: front -> back -> side1 -> side2
-    const emptySlotKeys = SLOTS
+    const emptySlotKeys = BASE_SLOTS
       .map(s => s.key)
       .filter(key => slotItems[key] === null);
 
@@ -357,7 +354,7 @@ export default function Analyze() {
         return;
       }
 
-      const targetKey = emptySlotKeys[i] || (SLOTS[i] ? SLOTS[i].key : null);
+      const targetKey = emptySlotKeys[i] || (BASE_SLOTS[i] ? BASE_SLOTS[i].key : null);
       if (targetKey) {
         if (newSlots[targetKey]?.preview) {
           URL.revokeObjectURL(newSlots[targetKey]!.preview);
@@ -438,14 +435,11 @@ export default function Analyze() {
   const startPipelineAnimation = (isDemo = false) => {
     if (stageIntervalRef.current) clearInterval(stageIntervalRef.current);
     
-    // Immediately start with Stage 0 (Images Received) completed, Stage 1 (Quality Check) active
     setActiveStageIndex(1);
     setIsComplete(false);
 
     const stepDuration = isDemo ? 220 : 650;
 
-    // Cycle through conceptual stages up to stage 5 (Compliance Screening),
-    // holding at stage 5 until the real API call finishes.
     stageIntervalRef.current = window.setInterval(() => {
       setActiveStageIndex(prev => {
         if (prev < 5) return prev + 1;
@@ -457,11 +451,9 @@ export default function Analyze() {
   const finishPipelineAndNavigate = async (result: any, isDemo = false, caseNum?: number) => {
     if (stageIntervalRef.current) clearInterval(stageIntervalRef.current);
 
-    // Fast-forward to final stage (Preparing Results)
     setActiveStageIndex(6);
     setIsComplete(true);
 
-    // Brief smooth transition before navigating to results
     await new Promise(resolve => setTimeout(resolve, isDemo ? 250 : 450));
 
     navigate(`/results/${result.id}`, { 
@@ -494,65 +486,6 @@ export default function Analyze() {
     }
   };
 
-  const SAMPLE_LISTING_TEXT = `Product Name: Premium Roasted California Almonds (Lightly Salted)
-Brand: NutriHarvest Organics
-Category: Packaged Food / Dry Fruits
-Net Quantity: 500 g (0.5 kg)
-Maximum Retail Price (MRP): Rs. 499.00 (Inclusive of all taxes)
-Unit Sale Price: Rs. 0.998 / g
-Date of Manufacture: 08/2026
-Best Before: 9 months from date of manufacture
-Batch Number: NH-ALM-2026-08B
-FSSAI License No.: 10020011000123
-Country of Origin: India
-
-Manufactured & Packed by:
-NutriHarvest Foods India Pvt. Ltd.
-Plot No. 45, Sector 8, Industrial Estate,
-Manesar, Gurugram, Haryana - 122050
-
-Marketed by:
-NutriHarvest Global Brands LLP
-12th Floor, Tower B, Cyber City, DLF Phase 2,
-Gurugram, Haryana - 122002
-
-Consumer Care Cell:
-Customer Support Manager, NutriHarvest Foods India Pvt. Ltd.
-Toll-Free Phone: 1800-200-8899
-Email: care@nutriharvest.in
-Website: https://www.nutriharvest.in
-
-Ingredients:
-California Almonds (98%), Edible Common Salt (1.5%), Refined Sunflower Oil (0.5%).
-
-Nutritional Information (per 100g):
-Energy: 579 kcal, Protein: 21.2g, Carbohydrates: 21.6g, Total Fat: 49.9g, Sodium: 380mg.`;
-
-  const handleAnalyzeText = async () => {
-    const trimmed = listingText.trim();
-    if (!trimmed) {
-      setError('Please paste or enter product listing / label text before analyzing.');
-      return;
-    }
-
-    setIsProcessing(true);
-    setError(null);
-    setDemoActiveCase(null);
-    startPipelineAnimation(false);
-
-    try {
-      const result = await api.analyzeText(trimmed);
-      await finishPipelineAndNavigate(result, false);
-    } catch (err: unknown) {
-      if (stageIntervalRef.current) clearInterval(stageIntervalRef.current);
-      console.error('Text analysis submission error:', err);
-      const errorMsg = err instanceof Error ? err.message : 'Listing analysis could not be completed. Something went wrong while processing the text. Please try again.';
-      setError(errorMsg);
-      setIsProcessing(false);
-    }
-  };
-
-
   const runDemo = async (caseNum: number) => {
     if (isProcessing) return;
     setIsProcessing(true);
@@ -572,7 +505,6 @@ Energy: 579 kcal, Protein: 21.2g, Carbohydrates: 21.6g, Total Fat: 49.9g, Sodium
     }
   };
 
-
   const handleBackToAnalyze = () => {
     if (stageIntervalRef.current) clearInterval(stageIntervalRef.current);
     setIsProcessing(false);
@@ -586,7 +518,6 @@ Energy: 579 kcal, Protein: 21.2g, Carbohydrates: 21.6g, Total Fat: 49.9g, Sodium
 
   return (
     <div className="max-w-5xl mx-auto space-y-8 animate-in fade-in duration-300">
-      {/* Hidden File Inputs */}
       {/* Hidden File & Camera Inputs */}
       {SLOTS.map(slot => (
         <React.Fragment key={slot.key}>
@@ -623,37 +554,6 @@ Energy: 579 kcal, Protein: 21.2g, Carbohydrates: 21.6g, Total Fat: 49.9g, Sodium
         className="hidden" 
         aria-label="Upload multiple packaging images"
       />
-      {/* Top-Level Mode Toggle (Image Scan vs Listing Text) */}
-      {!isProcessing && (
-        <div className="flex items-center justify-center">
-          <div className="inline-flex p-1 rounded-xl bg-slate-100 dark:bg-slate-800/90 border border-slate-200/90 dark:border-slate-700 shadow-2xs">
-            <button
-              type="button"
-              onClick={() => { setScanMode('image'); setError(null); }}
-              className={`flex items-center gap-2 px-5 py-2.5 rounded-lg text-xs sm:text-sm font-bold transition-all cursor-pointer ${
-                scanMode === 'image'
-                  ? 'bg-white dark:bg-slate-900 text-indigo-600 dark:text-indigo-400 shadow-xs border border-slate-200/80 dark:border-slate-700'
-                  : 'text-slate-600 dark:text-slate-400 hover:text-slate-900 dark:hover:text-slate-200'
-              }`}
-            >
-              <Camera className="w-4 h-4" />
-              <span>Image Scan</span>
-            </button>
-            <button
-              type="button"
-              onClick={() => { setScanMode('text'); setError(null); }}
-              className={`flex items-center gap-2 px-5 py-2.5 rounded-lg text-xs sm:text-sm font-bold transition-all cursor-pointer ${
-                scanMode === 'text'
-                  ? 'bg-white dark:bg-slate-900 text-indigo-600 dark:text-indigo-400 shadow-xs border border-slate-200/80 dark:border-slate-700'
-                  : 'text-slate-600 dark:text-slate-400 hover:text-slate-900 dark:hover:text-slate-200'
-              }`}
-            >
-              <FileText className="w-4 h-4" />
-              <span>Listing Text</span>
-            </button>
-          </div>
-        </div>
-      )}
 
       {/* Error Alert Banner when not on processing screen */}
       {!isProcessing && error && (
@@ -663,16 +563,16 @@ Energy: 579 kcal, Protein: 21.2g, Carbohydrates: 21.6g, Total Fat: 49.9g, Sodium
         >
           <AlertTriangle className="w-5 h-5 text-red-600 dark:text-red-400 shrink-0 mt-0.5" />
           <div className="flex-1 space-y-1">
-            <p className="font-semibold text-red-950 dark:text-red-100">Action Needed</p>
+            <p className="font-semibold text-red-950 dark:text-red-100">{t('common.error')}</p>
             <p className="text-xs text-red-800 dark:text-red-300 leading-relaxed">{error}</p>
           </div>
-          {(scanMode === 'image' ? stagedCount > 0 : Boolean(listingText.trim())) && (
+          {stagedCount > 0 && (
             <button
-              onClick={scanMode === 'image' ? startAnalysis : handleAnalyzeText}
+              onClick={startAnalysis}
               className="px-2.5 py-1 bg-red-100 dark:bg-red-900/60 hover:bg-red-200 dark:hover:bg-red-800/60 text-red-900 dark:text-red-100 rounded-lg text-xs font-semibold flex items-center gap-1 transition-colors cursor-pointer"
             >
               <RefreshCw className="w-3 h-3" />
-              <span>Retry</span>
+              <span>{t('common.retry')}</span>
             </button>
           )}
           <button 
@@ -686,8 +586,7 @@ Energy: 579 kcal, Protein: 21.2g, Carbohydrates: 21.6g, Total Fat: 49.9g, Sodium
       )}
 
       {!isProcessing ? (
-        scanMode === 'image' ? (
-          <>
+        <>
           {/* Main Hero & Upload Workflow Section */}
           <div className="bg-white dark:bg-slate-900 rounded-2xl border border-slate-200/90 dark:border-slate-800 shadow-2xs overflow-hidden">
             {/* Header / Hero */}
@@ -696,13 +595,13 @@ Energy: 579 kcal, Protein: 21.2g, Carbohydrates: 21.6g, Total Fat: 49.9g, Sodium
                 <div className="space-y-1.5 max-w-2xl">
                   <div className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-xs font-semibold bg-indigo-50 dark:bg-indigo-950/60 text-indigo-700 dark:text-indigo-300 border border-indigo-200/80 dark:border-indigo-800/80 mb-1 shadow-2xs">
                     <Sparkles className="w-3.5 h-3.5 text-indigo-600 dark:text-indigo-400" />
-                    <span>AI-Assisted Compliance Screening</span>
+                    <span>{t('analysis.ai_badge')}</span>
                   </div>
                   <h2 className="text-2xl sm:text-3xl font-black text-slate-900 dark:text-slate-100 tracking-tight">
-                    Analyze Package
+                    {t('analysis.analyze_package')}
                   </h2>
                   <p className="text-xs sm:text-sm text-slate-600 dark:text-slate-400 leading-relaxed">
-                    Upload clear images of the package to screen its label declarations for compliance.
+                    {t('analysis.upload_instruction')}
                   </p>
                 </div>
 
@@ -715,7 +614,7 @@ Energy: 579 kcal, Protein: 21.2g, Carbohydrates: 21.6g, Total Fat: 49.9g, Sodium
                       aria-label="Clear all uploaded images"
                     >
                       <X className="w-3.5 h-3.5" />
-                      <span>Clear All ({stagedCount})</span>
+                      <span>{t('analysis.clear_all')} ({stagedCount})</span>
                     </button>
                   </div>
                 )}
@@ -726,20 +625,20 @@ Energy: 579 kcal, Protein: 21.2g, Carbohydrates: 21.6g, Total Fat: 49.9g, Sodium
             <div className="px-6 py-4 bg-slate-50/70 dark:bg-slate-800/40 border-b border-slate-100 dark:border-slate-800 flex flex-col md:flex-row md:items-center justify-between gap-3 text-xs">
               <div className="flex items-center gap-2 text-slate-700 dark:text-slate-300">
                 <Info className="w-4 h-4 text-indigo-600 dark:text-indigo-400 shrink-0" />
-                <span className="font-semibold text-slate-900 dark:text-slate-100">Upload 1–4 images of the same package.</span>
+                <span className="font-semibold text-slate-900 dark:text-slate-100">{t('analysis.banner_upload_guide')}</span>
               </div>
               <div className="flex flex-wrap items-center gap-2 font-medium">
                 <span className="px-2 py-0.5 rounded-md bg-indigo-50 dark:bg-indigo-950/60 text-indigo-700 dark:text-indigo-300 border border-indigo-200 dark:border-indigo-800/80 text-[11px] font-semibold">
-                  Front — Required
+                  {t('analysis.banner_front_required')}
                 </span>
                 <span className="px-2 py-0.5 rounded-md bg-sky-50 dark:bg-sky-950/60 text-sky-700 dark:text-sky-300 border border-sky-200 dark:border-sky-800/80 text-[11px] font-semibold">
-                  Back — Recommended
+                  {t('analysis.banner_back_recommended')}
                 </span>
                 <span className="px-2 py-0.5 rounded-md bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-400 border border-slate-200 dark:border-slate-700 text-[11px]">
-                  Side 1 — Optional
+                  {t('analysis.banner_side1_optional')}
                 </span>
                 <span className="px-2 py-0.5 rounded-md bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-400 border border-slate-200 dark:border-slate-700 text-[11px]">
-                  Side 2 — Optional
+                  {t('analysis.banner_side2_optional')}
                 </span>
               </div>
             </div>
@@ -786,7 +685,7 @@ Energy: 579 kcal, Protein: 21.2g, Carbohydrates: 21.6g, Total Fat: 49.9g, Sodium
                         {item && (
                           <span className="inline-flex items-center gap-1 text-[11px] font-semibold text-emerald-700 dark:text-emerald-300 bg-emerald-50 dark:bg-emerald-950/60 px-2 py-0.5 rounded-md border border-emerald-200 dark:border-emerald-800/80">
                             <Check className="w-3 h-3 text-emerald-600 dark:text-emerald-400" />
-                            <span>Image added</span>
+                            <span>{t('analysis.image_added')}</span>
                           </span>
                         )}
                       </div>
@@ -825,7 +724,7 @@ Energy: 579 kcal, Protein: 21.2g, Carbohydrates: 21.6g, Total Fat: 49.9g, Sodium
                                     }
                                   }}
                                   className="p-1.5 text-indigo-600 dark:text-indigo-400 hover:bg-indigo-50 dark:hover:bg-indigo-950/60 rounded-lg border border-indigo-200 dark:border-indigo-800 transition-colors cursor-pointer"
-                                  title="Retake live photo with camera"
+                                  title={t('analysis.retake_camera_title')}
                                 >
                                   <Camera className="w-4 h-4" />
                                 </button>
@@ -835,7 +734,7 @@ Energy: 579 kcal, Protein: 21.2g, Carbohydrates: 21.6g, Total Fat: 49.9g, Sodium
                                   className="px-2.5 py-1 text-xs font-semibold text-slate-700 dark:text-slate-300 bg-slate-50 dark:bg-slate-800 hover:bg-slate-100 dark:hover:bg-slate-750 border border-slate-200 dark:border-slate-700 rounded-lg transition-colors cursor-pointer"
                                   aria-label={`Replace ${slot.label} from Gallery`}
                                 >
-                                  Gallery
+                                  {t('analysis.gallery')}
                                 </button>
                                 <button
                                   type="button"
@@ -843,7 +742,7 @@ Energy: 579 kcal, Protein: 21.2g, Carbohydrates: 21.6g, Total Fat: 49.9g, Sodium
                                   className="px-2.5 py-1 text-xs font-semibold text-red-600 dark:text-red-400 hover:text-red-700 dark:hover:text-red-300 hover:bg-red-50 dark:hover:bg-red-950/60 border border-slate-200 dark:border-slate-700 rounded-lg transition-colors cursor-pointer"
                                   aria-label={`Remove ${slot.label} image`}
                                 >
-                                  Remove
+                                  {t('analysis.remove')}
                                 </button>
                               </div>
                             </div>
@@ -891,7 +790,7 @@ Energy: 579 kcal, Protein: 21.2g, Carbohydrates: 21.6g, Total Fat: 49.9g, Sodium
                                 title={`Take live photo with camera for ${slot.label}`}
                               >
                                 <Camera className="w-4 h-4" />
-                                <span>Live Camera</span>
+                                <span>{t('analysis.live_camera')}</span>
                               </button>
 
                               {/* Option 2: Gallery / Files Picker */}
@@ -899,10 +798,10 @@ Energy: 579 kcal, Protein: 21.2g, Carbohydrates: 21.6g, Total Fat: 49.9g, Sodium
                                 type="button"
                                 onClick={() => slotInputRefs[slot.key].current?.click()}
                                 className="w-full sm:w-auto flex-1 inline-flex items-center justify-center gap-1.5 px-3.5 py-2 text-xs font-semibold text-slate-700 dark:text-slate-200 bg-white dark:bg-slate-800 hover:bg-slate-50 dark:hover:bg-slate-750 border border-slate-300 dark:border-slate-700 rounded-xl transition-colors cursor-pointer"
-                                title={`Choose photo from phone gallery or files`}
+                                title="Choose photo from phone gallery or files"
                               >
                                 <UploadCloud className="w-4 h-4 text-slate-500" />
-                                <span>Gallery / Files</span>
+                                <span>{t('analysis.gallery_files')}</span>
                               </button>
                             </div>
                           </div>
@@ -920,14 +819,15 @@ Energy: 579 kcal, Protein: 21.2g, Carbohydrates: 21.6g, Total Fat: 49.9g, Sodium
                   {stagedCount === 0 ? (
                     <div className="flex items-center gap-2 text-slate-500 dark:text-slate-400">
                       <Info className="w-4 h-4 text-amber-500 dark:text-amber-400 shrink-0" />
-                      <span>Add at least one package image to continue.</span>
+                      <span>{t('analysis.validation_add_image')}</span>
                     </div>
                   ) : (
                     <div className="flex items-center gap-2 text-emerald-700 dark:text-emerald-400 font-medium">
                       <CheckCircle2 className="w-4 h-4 text-emerald-600 dark:text-emerald-400 shrink-0" />
                       <span>
-                        {stagedCount} {stagedCount === 1 ? 'image' : 'images'} staged for compliance screening
-                        {stagedCount === 1 && ' (Front + Back recommended)'}
+                        {stagedCount === 1 
+                          ? t('analysis.staged_count_single') 
+                          : t('analysis.staged_count_multiple', { count: stagedCount })}
                       </span>
                     </div>
                   )}
@@ -943,10 +843,10 @@ Energy: 579 kcal, Protein: 21.2g, Carbohydrates: 21.6g, Total Fat: 49.9g, Sodium
                       ? 'bg-slate-200 dark:bg-slate-800 text-slate-400 dark:text-slate-600 cursor-not-allowed shadow-none border border-transparent dark:border-slate-700/50'
                       : 'bg-indigo-600 hover:bg-indigo-700 text-white shadow-indigo-500/25 active:scale-98'
                   }`}
-                  aria-label="Analyze Package"
+                  aria-label={t('analysis.btn_analyze')}
                 >
                   <ScanSearch className="w-4 h-4" />
-                  <span>Analyze Package {stagedCount > 0 ? `(${stagedCount} Image${stagedCount > 1 ? 's' : ''})` : ''}</span>
+                  <span>{t('analysis.btn_analyze')} {stagedCount > 0 ? `(${stagedCount})` : ''}</span>
                 </button>
               </div>
             </div>
@@ -958,28 +858,28 @@ Energy: 579 kcal, Protein: 21.2g, Carbohydrates: 21.6g, Total Fat: 49.9g, Sodium
             <div className="bg-white dark:bg-slate-900 rounded-2xl border border-slate-200/90 dark:border-slate-800 p-5 shadow-2xs space-y-3">
               <div className="flex items-center gap-2 text-slate-900 dark:text-slate-100 font-bold text-xs uppercase tracking-wider">
                 <ShieldCheck className="w-4 h-4 text-indigo-600 dark:text-indigo-400" />
-                <span>For Better Screening Accuracy</span>
+                <span>{t('analysis.accuracy_title')}</span>
               </div>
               <div className="grid grid-cols-2 gap-2 text-xs text-slate-600 dark:text-slate-300">
                 <div className="flex items-center gap-2 bg-slate-50 dark:bg-slate-800/60 p-2 rounded-lg border border-slate-100 dark:border-slate-700/60">
                   <Check className="w-3.5 h-3.5 text-emerald-600 dark:text-emerald-400 shrink-0" />
-                  <span>Keep package flat</span>
+                  <span>{t('analysis.accuracy_flat')}</span>
                 </div>
                 <div className="flex items-center gap-2 bg-slate-50 dark:bg-slate-800/60 p-2 rounded-lg border border-slate-100 dark:border-slate-700/60">
                   <Check className="w-3.5 h-3.5 text-emerald-600 dark:text-emerald-400 shrink-0" />
-                  <span>Use good lighting</span>
+                  <span>{t('analysis.accuracy_lighting')}</span>
                 </div>
                 <div className="flex items-center gap-2 bg-slate-50 dark:bg-slate-800/60 p-2 rounded-lg border border-slate-100 dark:border-slate-700/60">
                   <Check className="w-3.5 h-3.5 text-emerald-600 dark:text-emerald-400 shrink-0" />
-                  <span>Avoid glare &amp; reflections</span>
+                  <span>{t('analysis.accuracy_glare')}</span>
                 </div>
                 <div className="flex items-center gap-2 bg-slate-50 dark:bg-slate-800/60 p-2 rounded-lg border border-slate-100 dark:border-slate-700/60">
                   <Check className="w-3.5 h-3.5 text-emerald-600 dark:text-emerald-400 shrink-0" />
-                  <span>Capture complete label</span>
+                  <span>{t('analysis.accuracy_complete')}</span>
                 </div>
               </div>
               <p className="text-[11px] text-slate-500 dark:text-slate-400 leading-relaxed pt-1">
-                For best results, ensure declarations like MRP, Net Quantity, Batch, and FSSAI License are in sharp focus.
+                {t('analysis.accuracy_footer')}
               </p>
             </div>
 
@@ -988,16 +888,16 @@ Energy: 579 kcal, Protein: 21.2g, Carbohydrates: 21.6g, Total Fat: 49.9g, Sodium
               <div>
                 <div className="flex items-center gap-2 text-slate-900 dark:text-slate-100 font-bold text-xs uppercase tracking-wider mb-3">
                   <Info className="w-4 h-4 text-sky-600 dark:text-sky-400" />
-                  <span>File Specifications</span>
+                  <span>{t('analysis.specs_title')}</span>
                 </div>
                 <div className="space-y-1.5 text-xs text-slate-600 dark:text-slate-300">
-                  <p><strong className="text-slate-900 dark:text-slate-100">Supported formats:</strong> JPG, JPEG, PNG, WEBP</p>
-                  <p><strong className="text-slate-900 dark:text-slate-100">File size limit:</strong> Up to 10 MB per image</p>
-                  <p><strong className="text-slate-900 dark:text-slate-100">Capacity:</strong> 1 to 4 images per package</p>
+                  <p><strong className="text-slate-900 dark:text-slate-100">{t('analysis.specs_formats_label')}</strong> JPG, JPEG, PNG, WEBP</p>
+                  <p><strong className="text-slate-900 dark:text-slate-100">{t('analysis.specs_size_label')}</strong> {t('analysis.specs_size_val')}</p>
+                  <p><strong className="text-slate-900 dark:text-slate-100">{t('analysis.specs_capacity_label')}</strong> {t('analysis.specs_capacity_val')}</p>
                 </div>
               </div>
               <div className="pt-2 text-[11px] text-slate-400 dark:text-slate-500 border-t border-slate-100 dark:border-slate-800">
-                Statutory analysis is evaluated under Legal Metrology Rules 2011 &amp; FSSAI Regulations.
+                {t('analysis.statutory_footer')}
               </div>
             </div>
           </div>
@@ -1008,7 +908,7 @@ Energy: 579 kcal, Protein: 21.2g, Carbohydrates: 21.6g, Total Fat: 49.9g, Sodium
               <div className="flex items-center gap-2">
                 <Sparkles className="w-4 h-4 text-amber-500" />
                 <h3 className="text-xs font-bold text-slate-700 dark:text-slate-300 uppercase tracking-wider">
-                  Instant Demonstration Benchmarks (SIH 2026)
+                  {t('analysis.benchmarks_title')}
                 </h3>
               </div>
               <button
@@ -1016,7 +916,7 @@ Energy: 579 kcal, Protein: 21.2g, Carbohydrates: 21.6g, Total Fat: 49.9g, Sodium
                 onClick={() => navigate('/demo')}
                 className="text-xs font-semibold text-indigo-600 dark:text-indigo-400 hover:text-indigo-800 dark:hover:text-indigo-300 flex items-center gap-1 transition-colors cursor-pointer"
               >
-                <span>Full Benchmark Guide</span>
+                <span>{t('analysis.benchmarks_full_guide')}</span>
                 <ArrowRight className="w-3.5 h-3.5" />
               </button>
             </div>
@@ -1031,19 +931,19 @@ Energy: 579 kcal, Protein: 21.2g, Carbohydrates: 21.6g, Total Fat: 49.9g, Sodium
                 <div className="space-y-1.5">
                   <div className="flex items-center justify-between">
                     <span className="text-[10px] font-bold px-2 py-0.5 rounded-md bg-emerald-100 dark:bg-emerald-950/80 text-emerald-800 dark:text-emerald-300">
-                      COMPLIANT (95.5%)
+                      {t('status.compliant')} (95.5%)
                     </span>
                     <ShieldCheck className="w-4 h-4 text-emerald-600 dark:text-emerald-400" />
                   </div>
                   <h4 className="font-bold text-xs sm:text-sm text-slate-900 dark:text-slate-100 group-hover:text-indigo-600 dark:group-hover:text-indigo-400 transition-colors">
-                    Basmati Rice (1kg)
+                    {t('analysis.benchmarks_case1_title')}
                   </h4>
                   <p className="text-[11px] text-slate-500 dark:text-slate-400 leading-relaxed">
-                    Full statutory compliance across all Legal Metrology &amp; FSSAI mandatory declarations.
+                    {t('analysis.benchmarks_case1_desc')}
                   </p>
                 </div>
                 <div className="mt-3 pt-2 border-t border-slate-100 dark:border-slate-800 flex items-center justify-between text-xs font-semibold text-emerald-700 dark:text-emerald-400">
-                  <span>Load Benchmark</span>
+                  <span>{t('analysis.benchmarks_load')}</span>
                   <ArrowRight className="w-3.5 h-3.5 group-hover:translate-x-0.5 transition-transform" />
                 </div>
               </div>
@@ -1057,19 +957,19 @@ Energy: 579 kcal, Protein: 21.2g, Carbohydrates: 21.6g, Total Fat: 49.9g, Sodium
                 <div className="space-y-1.5">
                   <div className="flex items-center justify-between">
                     <span className="text-[10px] font-bold px-2 py-0.5 rounded-md bg-amber-100 dark:bg-amber-950/80 text-amber-800 dark:text-amber-300">
-                      REVIEW REQUIRED (76.9%)
+                      {t('status.needs_review')} (76.9%)
                     </span>
                     <AlertTriangle className="w-4 h-4 text-amber-600 dark:text-amber-400" />
                   </div>
                   <h4 className="font-bold text-xs sm:text-sm text-slate-900 dark:text-slate-100 group-hover:text-indigo-600 dark:group-hover:text-indigo-400 transition-colors">
-                    Mixed Fruit Juice (1L)
+                    {t('analysis.benchmarks_case2_title')}
                   </h4>
                   <p className="text-[11px] text-slate-500 dark:text-slate-400 leading-relaxed">
-                    Demonstrates expiry date review and customer care contact verification.
+                    {t('analysis.benchmarks_case2_desc')}
                   </p>
                 </div>
                 <div className="mt-3 pt-2 border-t border-slate-100 dark:border-slate-800 flex items-center justify-between text-xs font-semibold text-amber-700 dark:text-amber-400">
-                  <span>Load Benchmark</span>
+                  <span>{t('analysis.benchmarks_load')}</span>
                   <ArrowRight className="w-3.5 h-3.5 group-hover:translate-x-0.5 transition-transform" />
                 </div>
               </div>
@@ -1083,196 +983,28 @@ Energy: 579 kcal, Protein: 21.2g, Carbohydrates: 21.6g, Total Fat: 49.9g, Sodium
                 <div className="space-y-1.5">
                   <div className="flex items-center justify-between">
                     <span className="text-[10px] font-bold px-2 py-0.5 rounded-md bg-red-100 dark:bg-red-950/80 text-red-800 dark:text-red-300">
-                      NON-COMPLIANT (37.9%)
+                      {t('status.fail')} (37.9%)
                     </span>
                     <X className="w-4 h-4 text-red-600 dark:text-red-400" />
                   </div>
                   <h4 className="font-bold text-xs sm:text-sm text-slate-900 dark:text-slate-100 group-hover:text-indigo-600 dark:group-hover:text-indigo-400 transition-colors">
-                    Instant Noodles (70g)
+                    {t('analysis.benchmarks_case3_title')}
                   </h4>
                   <p className="text-[11px] text-slate-500 dark:text-slate-400 leading-relaxed">
-                    Critical missing declarations with prioritized manufacturer corrective actions.
+                    {t('analysis.benchmarks_case3_desc')}
                   </p>
                 </div>
                 <div className="mt-3 pt-2 border-t border-slate-100 dark:border-slate-800 flex items-center justify-between text-xs font-semibold text-red-700 dark:text-red-400">
-                  <span>Load Benchmark</span>
+                  <span>{t('analysis.benchmarks_load')}</span>
                   <ArrowRight className="w-3.5 h-3.5 group-hover:translate-x-0.5 transition-transform" />
                 </div>
               </div>
             </div>
           </div>
-          </>
-        ) : (
-          <>
-            {/* Main Listing Text Scanning Section */}
-            <div className="bg-white dark:bg-slate-900 rounded-2xl border border-slate-200/90 dark:border-slate-800 shadow-2xs overflow-hidden">
-              {/* Header / Hero */}
-              <div className="p-6 sm:p-8 border-b border-slate-100 dark:border-slate-800 bg-gradient-to-b from-slate-50/50 dark:from-slate-800/40 to-white dark:to-slate-900 text-center sm:text-left">
-                <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
-                  <div className="space-y-1.5 max-w-2xl">
-                    <div className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-xs font-semibold bg-indigo-50 dark:bg-indigo-950/60 text-indigo-700 dark:text-indigo-300 border border-indigo-200/80 dark:border-indigo-800/80 mb-1 shadow-2xs">
-                      <Sparkles className="w-3.5 h-3.5 text-indigo-600 dark:text-indigo-400" />
-                      <span>AI-Assisted Listing Text Screening</span>
-                    </div>
-                    <h2 className="text-2xl sm:text-3xl font-black text-slate-900 dark:text-slate-100 tracking-tight">
-                      Analyze Product Listing
-                    </h2>
-                    <p className="text-xs sm:text-sm text-slate-600 dark:text-slate-400 leading-relaxed">
-                      Paste e-commerce catalog text or product label descriptions to screen mandatory Legal Metrology &amp; FSSAI declarations.
-                    </p>
-                  </div>
-
-                  {/* Actions */}
-                  <div className="flex items-center justify-center sm:justify-end gap-2 shrink-0">
-                    <button
-                      type="button"
-                      onClick={() => {
-                        setListingText(SAMPLE_LISTING_TEXT);
-                        setError(null);
-                      }}
-                      className="inline-flex items-center gap-1.5 px-3 py-1.5 text-xs font-semibold text-indigo-600 dark:text-indigo-400 hover:bg-indigo-50 dark:hover:bg-indigo-950/50 rounded-lg border border-indigo-200 dark:border-indigo-800/80 transition-colors cursor-pointer"
-                    >
-                      <Sparkles className="w-3.5 h-3.5" />
-                      <span>Load Sample</span>
-                    </button>
-                    {listingText && (
-                      <button
-                        type="button"
-                        onClick={() => {
-                          setListingText('');
-                          setError(null);
-                        }}
-                        className="inline-flex items-center gap-1.5 px-3 py-1.5 text-xs font-semibold text-slate-500 dark:text-slate-400 hover:text-red-600 dark:hover:text-red-400 hover:bg-red-50 dark:hover:bg-red-950/50 rounded-lg border border-slate-200 dark:border-slate-700 transition-colors cursor-pointer"
-                      >
-                        <X className="w-3.5 h-3.5" />
-                        <span>Clear</span>
-                      </button>
-                    )}
-                  </div>
-                </div>
-              </div>
-
-              {/* Text Input Content */}
-              <div className="p-6 sm:p-8 space-y-4">
-                <div className="space-y-2">
-                  <div className="flex items-center justify-between text-xs text-slate-500 dark:text-slate-400">
-                    <label htmlFor="listing-text-input" className="font-semibold text-slate-700 dark:text-slate-300">
-                      Product Listing / Label Content
-                    </label>
-                    <span className="font-mono text-[11px]">
-                      {listingText.length} characters • {listingText.trim() ? listingText.trim().split(/\s+/).length : 0} words
-                    </span>
-                  </div>
-                  <textarea
-                    id="listing-text-input"
-                    value={listingText}
-                    onChange={(e) => {
-                      setListingText(e.target.value);
-                      if (error) setError(null);
-                    }}
-                    rows={10}
-                    placeholder={`Paste product listing or packaging text here...\n\nExample:\nProduct Name: Roasted California Almonds\nBrand: NutriHarvest Organics\nNet Quantity: 500 g\nMRP: Rs. 499.00 (incl. of all taxes)\nDate of Mfg: 08/2026\nBest Before: 9 months from mfg\nBatch No: NH-ALM-2026-08B\nFSSAI Lic: 10020011000123\nCountry of Origin: India\nMfg by: NutriHarvest Foods India Pvt. Ltd., Manesar, Haryana\nCustomer Care: 1800-200-8899, care@nutriharvest.in`}
-                    className="w-full p-4 rounded-xl border border-slate-300 dark:border-slate-700 bg-slate-50/50 dark:bg-slate-800/40 text-slate-900 dark:text-slate-100 placeholder-slate-400 dark:placeholder-slate-500 focus:outline-none focus:ring-2 focus:ring-indigo-500/50 focus:border-indigo-500 transition-all font-mono text-xs sm:text-sm resize-y leading-relaxed"
-                  />
-                </div>
-
-                {/* Example Hint */}
-                <div className="p-4 rounded-xl bg-slate-50 dark:bg-slate-800/50 border border-slate-200/80 dark:border-slate-700/80 flex items-start gap-3 text-xs text-slate-600 dark:text-slate-300">
-                  <Info className="w-4 h-4 text-indigo-600 dark:text-indigo-400 shrink-0 mt-0.5" />
-                  <div className="space-y-1">
-                    <p className="font-semibold text-slate-900 dark:text-slate-100">Recommended Declarations to Include:</p>
-                    <p className="text-slate-500 dark:text-slate-400 leading-relaxed">
-                      Product name, brand, net quantity, MRP (inclusive of all taxes), unit sale price, manufacturing/packaging/expiry dates, batch number, FSSAI license, complete manufacturer &amp; marketer addresses, customer care telephone &amp; email, country of origin, ingredients, and nutrition facts.
-                    </p>
-                  </div>
-                </div>
-
-                {/* Bottom Action Bar */}
-                <div className="pt-4 border-t border-slate-100 dark:border-slate-800 flex flex-col sm:flex-row items-stretch sm:items-center justify-between gap-4">
-                  <div className="text-xs">
-                    {!listingText.trim() ? (
-                      <div className="flex items-center gap-2 text-slate-500 dark:text-slate-400">
-                        <Info className="w-4 h-4 text-amber-500 dark:text-amber-400 shrink-0" />
-                        <span>Paste or enter listing text above, or click "Load Sample".</span>
-                      </div>
-                    ) : (
-                      <div className="flex items-center gap-2 text-emerald-700 dark:text-emerald-400 font-medium">
-                        <CheckCircle2 className="w-4 h-4 text-emerald-600 dark:text-emerald-400 shrink-0" />
-                        <span>Ready for Legal Metrology &amp; FSSAI compliance evaluation</span>
-                      </div>
-                    )}
-                  </div>
-
-                  <button
-                    type="button"
-                    onClick={handleAnalyzeText}
-                    disabled={!listingText.trim() || isProcessing}
-                    className={`px-8 py-3 rounded-xl font-bold text-xs sm:text-sm shadow-2xs transition-all flex items-center justify-center gap-2 cursor-pointer ${
-                      !listingText.trim() || isProcessing
-                        ? 'bg-slate-200 dark:bg-slate-800 text-slate-400 dark:text-slate-600 cursor-not-allowed shadow-none border border-transparent dark:border-slate-700/50'
-                        : 'bg-indigo-600 hover:bg-indigo-700 text-white shadow-indigo-500/25 active:scale-98'
-                    }`}
-                    aria-label="Analyze Listing"
-                  >
-                    <ScanSearch className="w-4 h-4" />
-                    <span>Analyze Listing</span>
-                  </button>
-                </div>
-              </div>
-            </div>
-
-            {/* Statutory Guidance Grid for Listing Text Mode */}
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-              <div className="bg-white dark:bg-slate-900 rounded-2xl border border-slate-200/90 dark:border-slate-800 p-5 shadow-2xs space-y-3">
-                <div className="flex items-center gap-2 text-slate-900 dark:text-slate-100 font-bold text-xs uppercase tracking-wider">
-                  <ShieldCheck className="w-4 h-4 text-indigo-600 dark:text-indigo-400" />
-                  <span>Statutory Coverage (PS 26034)</span>
-                </div>
-                <div className="grid grid-cols-2 gap-2 text-xs text-slate-600 dark:text-slate-300">
-                  <div className="flex items-center gap-2 bg-slate-50 dark:bg-slate-800/60 p-2 rounded-lg border border-slate-100 dark:border-slate-700/60">
-                    <Check className="w-3.5 h-3.5 text-emerald-600 dark:text-emerald-400 shrink-0" />
-                    <span>Legal Metrology (PCR) 2011</span>
-                  </div>
-                  <div className="flex items-center gap-2 bg-slate-50 dark:bg-slate-800/60 p-2 rounded-lg border border-slate-100 dark:border-slate-700/60">
-                    <Check className="w-3.5 h-3.5 text-emerald-600 dark:text-emerald-400 shrink-0" />
-                    <span>FSSAI Labelling 2020</span>
-                  </div>
-                  <div className="flex items-center gap-2 bg-slate-50 dark:bg-slate-800/60 p-2 rounded-lg border border-slate-100 dark:border-slate-700/60">
-                    <Check className="w-3.5 h-3.5 text-emerald-600 dark:text-emerald-400 shrink-0" />
-                    <span>Unit Sale Price &amp; MRP</span>
-                  </div>
-                  <div className="flex items-center gap-2 bg-slate-50 dark:bg-slate-800/60 p-2 rounded-lg border border-slate-100 dark:border-slate-700/60">
-                    <Check className="w-3.5 h-3.5 text-emerald-600 dark:text-emerald-400 shrink-0" />
-                    <span>Consumer Care Contact</span>
-                  </div>
-                </div>
-                <p className="text-[11px] text-slate-500 dark:text-slate-400 leading-relaxed pt-1">
-                  Evaluates mandatory declaration fields, formatting requirements, and calculates statutory penalty estimates for non-compliance.
-                </p>
-              </div>
-
-              <div className="bg-white dark:bg-slate-900 rounded-2xl border border-slate-200/90 dark:border-slate-800 p-5 shadow-2xs space-y-3 flex flex-col justify-between">
-                <div>
-                  <div className="flex items-center gap-2 text-slate-900 dark:text-slate-100 font-bold text-xs uppercase tracking-wider mb-3">
-                    <Info className="w-4 h-4 text-sky-600 dark:text-sky-400" />
-                    <span>Listing Text Guidelines</span>
-                  </div>
-                  <div className="space-y-1.5 text-xs text-slate-600 dark:text-slate-300">
-                    <p><strong className="text-slate-900 dark:text-slate-100">Input formats:</strong> Plain text, key-value specifications, catalog descriptions</p>
-                    <p><strong className="text-slate-900 dark:text-slate-100">Recommended fields:</strong> MRP, Net Quantity, Mfg Date, FSSAI Lic, Origin</p>
-                    <p><strong className="text-slate-900 dark:text-slate-100">Audit trail:</strong> Saved permanently to screening history database</p>
-                  </div>
-                </div>
-                <div className="pt-2 text-[11px] text-slate-400 dark:text-slate-500 border-t border-slate-100 dark:border-slate-800">
-                  Screening outputs include prioritized corrective actions and legal notices.
-                </div>
-              </div>
-            </div>
-          </>
-        )
+        </>
       ) : (
         /* ========================================================================= */
-        /* PHASE 2: PROFESSIONAL PROCESSING / SCANNING SCREEN                        */
+        /* PHASE 2: PROCESSING / SCANNING SCREEN                                     */
         /* ========================================================================= */
         <div className="bg-white dark:bg-slate-900 rounded-2xl border border-slate-200/90 dark:border-slate-800 shadow-sm overflow-hidden animate-in fade-in zoom-in-98 duration-200">
           {/* Top Processing Header */}
@@ -1281,10 +1013,10 @@ Energy: 579 kcal, Protein: 21.2g, Carbohydrates: 21.6g, Total Fat: 49.9g, Sodium
               <div className="space-y-1.5 max-w-2xl">
                 <div className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-xs font-semibold bg-indigo-50 dark:bg-indigo-950/60 text-indigo-700 dark:text-indigo-300 border border-indigo-200/80 dark:border-indigo-800/80 mb-1 shadow-2xs">
                   <Sparkles className="w-3.5 h-3.5 text-indigo-600 dark:text-indigo-400" />
-                  <span>AI-Assisted Compliance Screening</span>
+                  <span>{t('analysis.ai_badge')}</span>
                 </div>
                 <h2 className="text-2xl sm:text-3xl font-black text-slate-900 dark:text-slate-100 tracking-tight flex items-center gap-3">
-                  <span>{error ? 'Screening Paused' : isComplete ? 'Screening Complete' : 'Analyzing Package'}</span>
+                  <span>{error ? t('analysis.processing_paused') : isComplete ? t('analysis.processing_complete') : t('analysis.processing_active')}</span>
                   {!error && !isComplete && (
                     <Loader2 className="w-6 h-6 text-indigo-600 dark:text-indigo-400 animate-spin shrink-0" />
                   )}
@@ -1294,10 +1026,10 @@ Energy: 579 kcal, Protein: 21.2g, Carbohydrates: 21.6g, Total Fat: 49.9g, Sodium
                 </h2>
                 <p className="text-xs sm:text-sm text-slate-600 dark:text-slate-300 leading-relaxed">
                   {error 
-                    ? 'An issue was encountered during package analysis.' 
+                    ? t('analysis.processing_err_desc') 
                     : isComplete 
-                      ? 'Organizing findings and opening statutory results...' 
-                      : 'MetrCheck AI is screening the uploaded package images and checking label declarations.'}
+                      ? t('analysis.processing_complete_desc') 
+                      : t('analysis.processing_active_desc')}
                 </p>
               </div>
 
@@ -1307,8 +1039,8 @@ Energy: 579 kcal, Protein: 21.2g, Carbohydrates: 21.6g, Total Fat: 49.9g, Sodium
                   <Zap className="w-3.5 h-3.5 text-indigo-600 dark:text-indigo-400" />
                   <span>
                     {demoActiveCase 
-                      ? `SIH Demo Case ${demoActiveCase}` 
-                      : `Analyzing ${stagedCount} package image${stagedCount > 1 ? 's' : ''}`}
+                      ? t('analysis.processing_demo_badge', { case: demoActiveCase }) 
+                      : t('analysis.processing_images_badge', { count: stagedCount })}
                   </span>
                 </span>
               </div>
@@ -1324,14 +1056,16 @@ Energy: 579 kcal, Protein: 21.2g, Carbohydrates: 21.6g, Total Fat: 49.9g, Sodium
               </div>
               <div className="space-y-2">
                 <h3 className="text-lg sm:text-xl font-bold text-slate-900 dark:text-slate-100">
-                  Analysis could not be completed
+                  {t('analysis.error_failed_title')}
                 </h3>
                 <p className="text-xs sm:text-sm text-slate-600 dark:text-slate-300 leading-relaxed">
                   {error}
                 </p>
                 {stagedCount > 0 && (
                   <p className="text-xs text-slate-400 dark:text-slate-500">
-                    {stagedCount} package image{stagedCount > 1 ? 's' : ''} remain staged in memory.
+                    {stagedCount === 1 
+                      ? t('analysis.staged_count_single') 
+                      : t('analysis.staged_count_multiple', { count: stagedCount })}
                   </p>
                 )}
               </div>
@@ -1343,7 +1077,7 @@ Energy: 579 kcal, Protein: 21.2g, Carbohydrates: 21.6g, Total Fat: 49.9g, Sodium
                   className="w-full sm:w-auto px-6 py-2.5 rounded-xl font-semibold bg-indigo-600 hover:bg-indigo-700 text-white text-xs sm:text-sm flex items-center justify-center gap-2 shadow-2xs cursor-pointer active:scale-98 transition-all"
                 >
                   <RefreshCw className="w-4 h-4" />
-                  <span>Try Again</span>
+                  <span>{t('analysis.try_again')}</span>
                 </button>
                 <button
                   type="button"
@@ -1351,7 +1085,7 @@ Energy: 579 kcal, Protein: 21.2g, Carbohydrates: 21.6g, Total Fat: 49.9g, Sodium
                   className="w-full sm:w-auto px-6 py-2.5 rounded-xl font-semibold bg-slate-100 dark:bg-slate-800 hover:bg-slate-200 dark:hover:bg-slate-700 text-slate-700 dark:text-slate-300 border border-slate-200 dark:border-slate-700 text-xs sm:text-sm flex items-center justify-center gap-2 cursor-pointer transition-colors"
                 >
                   <ArrowLeft className="w-4 h-4" />
-                  <span>Back to Analyze</span>
+                  <span>{t('analysis.back_to_analyze')}</span>
                 </button>
               </div>
             </div>
@@ -1365,7 +1099,7 @@ Energy: 579 kcal, Protein: 21.2g, Carbohydrates: 21.6g, Total Fat: 49.9g, Sodium
                   <div className="p-4 rounded-2xl bg-slate-50/80 dark:bg-slate-800/50 border border-slate-200/90 dark:border-slate-700/80 shadow-2xs space-y-3">
                     <div className="flex items-center justify-between">
                       <span className="text-xs font-bold text-slate-700 dark:text-slate-300 uppercase tracking-wider">
-                        Package Being Analyzed
+                        {t('analysis.package_being_analyzed')}
                       </span>
                       <span className="text-[11px] font-semibold text-slate-500 dark:text-slate-400 font-mono">
                         {demoActiveCase ? 'Demo Benchmark' : `${stagedCount} Panel${stagedCount > 1 ? 's' : ''}`}
@@ -1398,7 +1132,6 @@ Energy: 579 kcal, Protein: 21.2g, Carbohydrates: 21.6g, Total Fat: 49.9g, Sodium
                           </div>
                         ))
                       ) : (
-                        /* Fallback when running benchmark without upload state */
                         <div className="h-36 rounded-xl border border-slate-200 dark:border-slate-700 bg-slate-100 dark:bg-slate-800 flex flex-col items-center justify-center text-slate-400 dark:text-slate-500 space-y-1">
                           <ScanSearch className="w-8 h-8 text-indigo-500 animate-pulse" />
                           <span className="text-xs font-semibold">Benchmark Package Panels</span>
@@ -1418,12 +1151,12 @@ Energy: 579 kcal, Protein: 21.2g, Carbohydrates: 21.6g, Total Fat: 49.9g, Sodium
                         )}
                       </div>
                       <span className="text-xs font-bold uppercase tracking-wider">
-                        {isComplete ? 'Screening Complete' : currentStage.title}
+                        {isComplete ? t('analysis.processing_complete') : currentStage.title}
                       </span>
                     </div>
                     <p className="text-xs text-indigo-950 dark:text-indigo-200 font-medium leading-relaxed">
                       {isComplete 
-                        ? 'Findings, evidence and recommended actions have been structured.' 
+                        ? t('analysis.stages.preparing_results_desc') 
                         : currentStage.explanation}
                     </p>
                   </div>
@@ -1435,11 +1168,11 @@ Energy: 579 kcal, Protein: 21.2g, Carbohydrates: 21.6g, Total Fat: 49.9g, Sodium
                     <div className="flex items-center gap-2">
                       <Clock className="w-4 h-4 text-indigo-600 dark:text-indigo-400" />
                       <h3 className="text-xs font-bold text-slate-900 dark:text-slate-100 uppercase tracking-wider">
-                        Compliance Screening Pipeline
+                        {t('analysis.pipeline_title')}
                       </h3>
                     </div>
                     <span className="text-xs font-semibold text-slate-500 dark:text-slate-400 font-mono">
-                      Stage {activeStageIndex + 1} of {CONCEPTUAL_STAGES.length}
+                      {t('analysis.stage_progress', { current: activeStageIndex + 1, total: CONCEPTUAL_STAGES.length })}
                     </span>
                   </div>
 
@@ -1503,7 +1236,7 @@ Energy: 579 kcal, Protein: 21.2g, Carbohydrates: 21.6g, Total Fat: 49.9g, Sodium
                                     ? 'bg-indigo-50 dark:bg-indigo-950/60 text-indigo-700 dark:text-indigo-300 border-indigo-200 dark:border-indigo-800/80' 
                                     : 'bg-slate-50 dark:bg-slate-800 text-slate-400 dark:text-slate-500 border-slate-200 dark:border-slate-700'
                               }`}>
-                                {isPast ? 'Completed' : isCurrent ? 'In Progress' : 'Pending'}
+                                {isPast ? t('analysis.stage_completed') : isCurrent ? t('analysis.stage_in_progress') : t('analysis.stage_pending')}
                               </span>
                             </div>
 
@@ -1524,7 +1257,7 @@ Energy: 579 kcal, Protein: 21.2g, Carbohydrates: 21.6g, Total Fat: 49.9g, Sodium
               <div className="mt-8 pt-4 border-t border-slate-100 dark:border-slate-800 flex flex-col sm:flex-row items-center justify-between gap-3 text-xs text-slate-500 dark:text-slate-400">
                 <div className="flex items-center gap-2">
                   <ShieldCheck className="w-4 h-4 text-emerald-600 dark:text-emerald-400 shrink-0" />
-                  <span>Images are processed by the MetrCheck AI screening pipeline.</span>
+                  <span>{t('analysis.privacy_pipeline_notice')}</span>
                 </div>
                 <div className="font-mono text-[11px] text-slate-400 dark:text-slate-500">
                   Legal Metrology Rules 2011 &amp; FSSAI
@@ -1534,12 +1267,13 @@ Energy: 579 kcal, Protein: 21.2g, Carbohydrates: 21.6g, Total Fat: 49.9g, Sodium
           )}
         </div>
       )}
+
       {/* Live Camera Scanner Modal */}
       {isCameraOpen && (
         <div 
           role="dialog"
           aria-modal="true"
-          aria-label="Live Packaging Camera Scanner"
+          aria-label={t('analysis.camera_title')}
           className="fixed inset-0 z-50 flex items-center justify-center bg-slate-950/90 backdrop-blur-md p-4 animate-in fade-in duration-200"
         >
           <div className="bg-slate-900 rounded-3xl shadow-2xl max-w-2xl w-full p-5 sm:p-6 space-y-4 border border-slate-700 flex flex-col items-center">
@@ -1551,12 +1285,12 @@ Energy: 579 kcal, Protein: 21.2g, Carbohydrates: 21.6g, Total Fat: 49.9g, Sodium
                 </div>
                 <div>
                   <div className="flex items-center gap-2">
-                    <h3 className="text-base font-bold text-white">Live Packaging Camera</h3>
+                    <h3 className="text-base font-bold text-white">{t('analysis.camera_title')}</h3>
                     <span className="px-2 py-0.5 rounded-full text-[10px] font-bold bg-indigo-500/20 text-indigo-300 border border-indigo-500/30 uppercase">
-                      Target: {SLOTS.find(s => s.key === activeCameraSlot)?.label} Panel
+                      {t('analysis.camera_target', { panel: SLOTS.find(s => s.key === activeCameraSlot)?.label || '' })}
                     </span>
                   </div>
-                  <p className="text-xs text-slate-400">Position the commodity label flat inside the guide frame</p>
+                  <p className="text-xs text-slate-400">{t('analysis.camera_instruction')}</p>
                 </div>
               </div>
               <button
@@ -1620,7 +1354,7 @@ Energy: 579 kcal, Protein: 21.2g, Carbohydrates: 21.6g, Total Fat: 49.9g, Sodium
                     </div>
                     <div className="text-center">
                       <span className="bg-slate-900/80 backdrop-blur-xs text-emerald-300 font-mono text-[10px] font-bold px-2.5 py-1 rounded-full border border-emerald-500/40">
-                        Align MRP / Net Qty / FSSAI Text Here
+                        {t('analysis.camera_align_guide')}
                       </span>
                     </div>
                     <div className="flex justify-between">
@@ -1642,7 +1376,7 @@ Energy: 579 kcal, Protein: 21.2g, Carbohydrates: 21.6g, Total Fat: 49.9g, Sodium
                 aria-label="Switch between front and back camera"
               >
                 <SwitchCamera className="w-4 h-4 text-indigo-400" />
-                <span className="hidden sm:inline">Flip Camera</span>
+                <span className="hidden sm:inline">{t('analysis.camera_flip')}</span>
               </button>
 
               {/* Big Shutter Capture Button */}
@@ -1665,7 +1399,7 @@ Energy: 579 kcal, Protein: 21.2g, Carbohydrates: 21.6g, Total Fat: 49.9g, Sodium
                 className="px-3.5 py-2 bg-slate-800 hover:bg-slate-700 text-slate-300 rounded-xl text-xs font-semibold border border-slate-700 transition cursor-pointer"
                 aria-label="Cancel and close camera"
               >
-                Cancel
+                {t('common.cancel')}
               </button>
             </div>
           </div>

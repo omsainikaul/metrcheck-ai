@@ -4,6 +4,12 @@ import {
   type HistoryItem, 
   type ComplianceRule, 
   type AuthUser, 
+  type RegisterUserPayload,
+  type RegisterMerchantPayload,
+  type OfficerAccessRequestPayload,
+  type OfficerAccessRequestItem,
+  type OfficerAccessRequestPublicStatus,
+  type AdminApproveOfficerResponse,
   type TrendPoint, 
   type StatusBreakdown, 
   type PenaltyEstimate, 
@@ -28,7 +34,20 @@ import {
   type ReviewItem,
   type ReviewDetailResponse,
   type AIvsHumanComparison,
-  type ReviewHistoryEvent
+  type ReviewHistoryEvent,
+  type Product,
+  type ProductCreateInput,
+  type ProductUpdateInput,
+  type ProductListResponse,
+  type ProductHistoryItem,
+  type ProductArtworkSummary,
+  type ProductComplianceSummary,
+  type MerchantDashboardStats,
+  type EnforcementDashboardMetrics,
+  type EnforcementCaseSummary,
+  type EnforcementCaseDetail,
+  type PenaltyCalculationRecord,
+  type EnforcementNotice
 } from '../types';
 
 const API_HOST = (import.meta.env.VITE_API_URL || '').replace(/\/$/, '');
@@ -60,14 +79,45 @@ async function fetchJSON<T>(url: string, options?: RequestInit): Promise<T> {
   };
   const response = await fetch(url, { ...options, headers });
   if (!response.ok) {
-    const detail = await response.json().catch(() => null);
+    const errorBody = await response.json().catch(() => null);
+    let errorMessage = '';
+
+    if (errorBody?.detail) {
+      if (typeof errorBody.detail === 'string') {
+        if (errorBody.detail === 'Not Found' && response.status === 404) {
+          errorMessage = 'The requested service endpoint was not found. Please verify the backend server is running and up to date.';
+        } else {
+          errorMessage = errorBody.detail;
+        }
+      } else if (Array.isArray(errorBody.detail)) {
+        errorMessage = errorBody.detail
+          .map((err: any) => (err?.loc ? `${err.loc.slice(-1)}: ${err.msg}` : err.msg || JSON.stringify(err)))
+          .join(', ');
+      } else if (typeof errorBody.detail === 'object') {
+        errorMessage = JSON.stringify(errorBody.detail);
+      }
+    } else if (errorBody?.message && typeof errorBody.message === 'string') {
+      errorMessage = errorBody.message;
+    }
+
+    if (!errorMessage) {
+      if (response.status === 404) {
+        errorMessage = 'Endpoint not found (404). Please ensure the backend server is running.';
+      } else if (response.status === 500) {
+        errorMessage = 'Internal server error (500). Please try again later.';
+      } else {
+        errorMessage = `API error: ${response.status} ${response.statusText}`;
+      }
+    }
+
     if (response.status === 401) {
       if (!url.includes('/auth/login')) {
         tokenStore.clear();
       }
-      throw new Error(detail?.detail || 'Authentication required. Please log in again.');
+      throw new Error(errorMessage || 'Authentication required. Please log in again.');
     }
-    throw new Error(detail?.detail || `API error: ${response.status} ${response.statusText}`);
+
+    throw new Error(errorMessage);
   }
   return response.json();
 }
@@ -81,12 +131,13 @@ export const api = {
       body: JSON.stringify({ username, password }),
     }),
 
-  forgotPassword: (identifier: string): Promise<{ message: string; dev_token?: string }> =>
-    fetchJSON<{ message: string; dev_token?: string }>(`${BASE_URL}/auth/forgot-password`, {
+  forgotPassword: (identifier: string): Promise<{ message: string }> =>
+    fetchJSON<{ message: string }>(`${BASE_URL}/auth/forgot-password`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ identifier }),
     }),
+
 
   verifyResetToken: (token: string): Promise<{ valid: boolean; username?: string }> =>
     fetchJSON<{ valid: boolean; username?: string }>(`${BASE_URL}/auth/verify-reset-token`, {
@@ -114,6 +165,20 @@ export const api = {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ token, password }),
+    }),
+
+  registerUser: (body: RegisterUserPayload): Promise<{ token: string; user: AuthUser }> =>
+    fetchJSON<{ token: string; user: AuthUser }>(`${BASE_URL}/auth/register-user`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(body),
+    }),
+
+  registerMerchant: (body: RegisterMerchantPayload): Promise<{ token: string; user: AuthUser }> =>
+    fetchJSON<{ token: string; user: AuthUser }>(`${BASE_URL}/auth/register-merchant`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(body),
     }),
 
   register: (body: { username: string; email: string; password: string; full_name?: string; role?: string }): Promise<{ token: string; user: AuthUser }> =>
@@ -197,6 +262,42 @@ export const api = {
   adminGetAuditLogs: (limit = 50): Promise<import('../types').AccountAuditLog[]> =>
     fetchJSON<import('../types').AccountAuditLog[]>(`${BASE_URL}/admin/audit-logs?limit=${limit}`),
 
+  // ── Officer Access Requests ───────────────────────────────────────────
+  submitOfficerAccessRequest: (payload: OfficerAccessRequestPayload): Promise<OfficerAccessRequestItem> =>
+    fetchJSON<OfficerAccessRequestItem>(`${BASE_URL}/officer-access/requests`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(payload),
+    }),
+
+  getOfficerAccessRequestStatus: (requestId: string): Promise<OfficerAccessRequestPublicStatus> =>
+    fetchJSON<OfficerAccessRequestPublicStatus>(`${BASE_URL}/officer-access/requests/${encodeURIComponent(requestId)}`),
+
+  // ── Admin Officer Requests Management ──────────────────────────────────
+  adminGetOfficerRequests: (status?: string, search?: string): Promise<OfficerAccessRequestItem[]> => {
+    const params = new URLSearchParams();
+    if (status && status !== 'ALL') params.append('status', status);
+    if (search) params.append('search', search);
+    const qs = params.toString() ? `?${params.toString()}` : '';
+    return fetchJSON<OfficerAccessRequestItem[]>(`${BASE_URL}/admin/officer-requests${qs}`);
+  },
+
+  adminGetOfficerRequestDetail: (requestId: string): Promise<OfficerAccessRequestItem> =>
+    fetchJSON<OfficerAccessRequestItem>(`${BASE_URL}/admin/officer-requests/${encodeURIComponent(requestId)}`),
+
+  adminApproveOfficerRequest: (requestId: string): Promise<AdminApproveOfficerResponse> =>
+    fetchJSON<AdminApproveOfficerResponse>(`${BASE_URL}/admin/officer-requests/${encodeURIComponent(requestId)}/approve`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+    }),
+
+  adminRejectOfficerRequest: (requestId: string, rejectionReason: string): Promise<OfficerAccessRequestItem> =>
+    fetchJSON<OfficerAccessRequestItem>(`${BASE_URL}/admin/officer-requests/${encodeURIComponent(requestId)}/reject`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ rejection_reason: rejectionReason }),
+    }),
+
   // Legacy User APIs
   getUsers: (): Promise<AuthUser[]> => fetchJSON<AuthUser[]>(`${BASE_URL}/auth/users`),
 
@@ -236,17 +337,20 @@ export const api = {
   },
 
   // ── Analyses ──────────────────────────────────────────────────────────
-  analyzeProduct: async (file: File): Promise<AnalysisResponse> => {
+  analyzeProduct: async (file: File, productId?: string): Promise<AnalysisResponse> => {
     const formData = new FormData();
     formData.append('files', file);
     formData.append('labels', JSON.stringify(['Front']));
+    if (productId) {
+      formData.append('product_id', productId);
+    }
     return fetchJSON<AnalysisResponse>(`${BASE_URL}/analyze`, {
       method: 'POST',
       body: formData,
     });
   },
 
-  analyzeProducts: async (items: { file: File; label: string }[]): Promise<AnalysisResponse> => {
+  analyzeProducts: async (items: { file: File; label: string }[], productId?: string): Promise<AnalysisResponse> => {
     const formData = new FormData();
     const labels: string[] = [];
     items.forEach((item) => {
@@ -254,17 +358,27 @@ export const api = {
       labels.push(item.label || 'Front');
     });
     formData.append('labels', JSON.stringify(labels));
+    if (productId) {
+      formData.append('product_id', productId);
+    }
     return fetchJSON<AnalysisResponse>(`${BASE_URL}/analyze`, {
       method: 'POST',
       body: formData,
     });
   },
 
-  analyzeText: (text: string): Promise<AnalysisResponse> =>
+  analyzeText: (text: string, productId?: string): Promise<AnalysisResponse> =>
     fetchJSON<AnalysisResponse>(`${BASE_URL}/analyze/text`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ text }),
+      body: JSON.stringify({ text, product_id: productId || null }),
+    }),
+
+  analyzeManual: (payload: import('../types').ManualProductCheckPayload): Promise<AnalysisResponse> =>
+    fetchJSON<AnalysisResponse>(`${BASE_URL}/analyze/manual`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(payload),
     }),
 
   getDashboardStats: (): Promise<DashboardStats> => {
@@ -386,6 +500,47 @@ export const api = {
   getJsonReportUrl: (id: string, ticket?: string): string => {
     return `${BASE_URL}/report/${encodeURIComponent(id)}/json${ticket ? `?ticket=${encodeURIComponent(ticket)}` : ''}`;
   },
+  downloadReportFile: async (id: string, format: 'pdf' | 'csv' | 'xlsx' | 'json', lang?: string): Promise<void> => {
+    let url = '';
+    let ext = format;
+    if (format === 'pdf') {
+      url = api.getReportUrl(id, lang);
+    } else if (format === 'csv') {
+      url = api.getCsvReportUrl(id);
+    } else if (format === 'xlsx') {
+      url = api.getXlsxReportUrl(id);
+    } else if (format === 'json') {
+      url = api.getJsonReportUrl(id);
+    }
+
+    const token = tokenStore.get();
+    try {
+      const headers: Record<string, string> = token ? { Authorization: `Bearer ${token}` } : {};
+      const res = await fetch(url, { headers });
+      if (res.ok) {
+        const blob = await res.blob();
+        const blobUrl = URL.createObjectURL(blob);
+        const a = document.createElement('a');
+        a.href = blobUrl;
+        a.download = `metrcheck-compliance-report-${id}.${ext}`;
+        document.body.appendChild(a);
+        a.click();
+        document.body.removeChild(a);
+        setTimeout(() => URL.revokeObjectURL(blobUrl), 1000);
+        return;
+      }
+    } catch {
+      // Fallback with download ticket
+    }
+
+    try {
+      const ticket = await api.requestDownloadTicket('report', id);
+      const ticketUrl = url.includes('?') ? `${url}&ticket=${encodeURIComponent(ticket)}` : `${url}?ticket=${encodeURIComponent(ticket)}`;
+      window.open(ticketUrl, '_blank');
+    } catch {
+      window.open(url, '_blank');
+    }
+  },
   getAssetUrl: (url: string, ticket?: string): string => {
     if (!url) return '';
     if (url.startsWith('data:')) return url;
@@ -398,6 +553,27 @@ export const api = {
       return `${fullUrl}${sep}ticket=${encodeURIComponent(ticket)}`;
     }
     return fullUrl;
+  },
+
+  fetchImageBlobUrl: async (url: string): Promise<string> => {
+    if (!url) return '';
+    if (url.startsWith('data:') || url.startsWith('blob:')) return url;
+    let cleanUrl = url.startsWith('/uploads/') ? url.replace('/uploads/', '/api/images/') : url;
+    let fullUrl = (cleanUrl.startsWith('http://') || cleanUrl.startsWith('https://'))
+      ? cleanUrl
+      : (API_HOST ? `${API_HOST}${cleanUrl}` : cleanUrl);
+    try {
+      const token = tokenStore.get();
+      const headers: Record<string, string> = token ? { Authorization: `Bearer ${token}` } : {};
+      const res = await fetch(fullUrl, { headers });
+      if (!res.ok) {
+        return fullUrl;
+      }
+      const blob = await res.blob();
+      return URL.createObjectURL(blob);
+    } catch {
+      return fullUrl;
+    }
   },
   extractText: (text: string): Promise<ProductInfo> =>
     fetchJSON<ProductInfo>(`${BASE_URL}/extract`, {
@@ -436,13 +612,16 @@ export const api = {
   },
 
   // ── Pre-Print Packaging Compliance (Section 8) ──────────────────────────
-  uploadArtwork: async (file: File, parentArtworkId?: string, iterationNumber = 1): Promise<PreprintUploadResponse> => {
+  uploadArtwork: async (file: File, parentArtworkId?: string, iterationNumber = 1, productId?: string): Promise<PreprintUploadResponse> => {
     const formData = new FormData();
     formData.append('file', file);
     if (parentArtworkId) {
       formData.append('parent_artwork_id', parentArtworkId);
     }
     formData.append('iteration_number', String(iterationNumber));
+    if (productId) {
+      formData.append('product_id', productId);
+    }
     return fetchJSON<PreprintUploadResponse>(`${BASE_URL}/preprint/upload`, {
       method: 'POST',
       body: formData,
@@ -627,6 +806,156 @@ export const api = {
 
   getReviewHistory: (reviewId: string): Promise<{ review_id: string; history: ReviewHistoryEvent[]; total: number }> =>
     fetchJSON<{ review_id: string; history: ReviewHistoryEvent[]; total: number }>(`${BASE_URL}/reviews/${encodeURIComponent(reviewId)}/history`),
+
+  // ── Merchant Product Catalog & Workspace ────────────────────────────────
+  createProduct: (data: ProductCreateInput): Promise<Product> =>
+    fetchJSON<Product>(`${BASE_URL}/products`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(data),
+    }),
+
+  getProducts: (params?: { q?: string; status?: string; category?: string; limit?: number; offset?: number }): Promise<ProductListResponse> => {
+    const query = new URLSearchParams();
+    if (params?.q) query.append('q', params.q);
+    if (params?.status) query.append('status', params.status);
+    if (params?.category) query.append('category', params.category);
+    if (params?.limit !== undefined) query.append('limit', String(params.limit));
+    if (params?.offset !== undefined) query.append('offset', String(params.offset));
+    const qs = query.toString() ? `?${query.toString()}` : '';
+    return fetchJSON<ProductListResponse>(`${BASE_URL}/products${qs}`);
+  },
+
+  getProductStats: (): Promise<MerchantDashboardStats> =>
+    fetchJSON<MerchantDashboardStats>(`${BASE_URL}/products/stats`),
+
+  getProduct: (id: string): Promise<Product> =>
+    fetchJSON<Product>(`${BASE_URL}/products/${encodeURIComponent(id)}`),
+
+  updateProduct: (id: string, data: ProductUpdateInput): Promise<Product> =>
+    fetchJSON<Product>(`${BASE_URL}/products/${encodeURIComponent(id)}`, {
+      method: 'PATCH',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(data),
+    }),
+
+  archiveProduct: (id: string): Promise<{ message: string; id: string }> =>
+    fetchJSON<{ message: string; id: string }>(`${BASE_URL}/products/${encodeURIComponent(id)}`, {
+      method: 'DELETE',
+    }),
+
+  deleteProduct: (id: string): Promise<{ message: string; id: string }> =>
+    fetchJSON<{ message: string; id: string }>(`${BASE_URL}/products/${encodeURIComponent(id)}?hard_delete=true`, {
+      method: 'DELETE',
+    }),
+
+  getProductHistory: (id: string): Promise<{ product_id: string; analyses: ProductHistoryItem[]; total: number }> =>
+    fetchJSON<{ product_id: string; analyses: ProductHistoryItem[]; total: number }>(`${BASE_URL}/products/${encodeURIComponent(id)}/history`),
+
+  getProductArtworks: (id: string): Promise<{ product_id: string; artworks: ProductArtworkSummary[]; total: number }> =>
+    fetchJSON<{ product_id: string; artworks: ProductArtworkSummary[]; total: number }>(`${BASE_URL}/products/${encodeURIComponent(id)}/artworks`),
+
+  getProductSummary: (id: string): Promise<ProductComplianceSummary> =>
+    fetchJSON<ProductComplianceSummary>(`${BASE_URL}/products/${encodeURIComponent(id)}/summary`),
+
+  // ── Phase 4B: Enforcement Case Management & Statutory Notices ─────────────
+  getEnforcementDashboard: (): Promise<EnforcementDashboardMetrics> =>
+    fetchJSON<EnforcementDashboardMetrics>(`${BASE_URL}/enforcement/dashboard`),
+
+  listEnforcementCases: (params?: {
+    status?: string;
+    severity?: string;
+    assigned_officer?: string;
+    jurisdiction_state?: string;
+    jurisdiction_district?: string;
+    merchant_organization_id?: string;
+    search?: string;
+    page?: number;
+    page_size?: number;
+  }): Promise<{ cases: EnforcementCaseSummary[]; total: number; page: number; page_size: number }> => {
+    const q = new URLSearchParams();
+    if (params?.status && params.status !== 'ALL') q.append('status', params.status);
+    if (params?.severity && params.severity !== 'ALL') q.append('severity', params.severity);
+    if (params?.assigned_officer && params.assigned_officer !== 'ALL') q.append('assigned_officer', params.assigned_officer);
+    if (params?.jurisdiction_state) q.append('jurisdiction_state', params.jurisdiction_state);
+    if (params?.jurisdiction_district) q.append('jurisdiction_district', params.jurisdiction_district);
+    if (params?.merchant_organization_id) q.append('merchant_organization_id', params.merchant_organization_id);
+    if (params?.search) q.append('search', params.search);
+    if (params?.page) q.append('page', String(params.page));
+    if (params?.page_size) q.append('page_size', String(params.page_size));
+    const qs = q.toString() ? `?${q.toString()}` : '';
+    return fetchJSON<{ cases: EnforcementCaseSummary[]; total: number; page: number; page_size: number }>(`${BASE_URL}/enforcement/cases${qs}`);
+  },
+
+  getEnforcementCase: (caseIdOrRef: string): Promise<EnforcementCaseDetail> =>
+    fetchJSON<EnforcementCaseDetail>(`${BASE_URL}/enforcement/cases/${encodeURIComponent(caseIdOrRef)}`),
+
+  createEnforcementCase: (data: {
+    analysis_id: string;
+    review_id?: string;
+    product_id?: string;
+    merchant_organization_id?: string;
+    violation_summary?: string;
+    severity?: string;
+    initial_notes?: string;
+  }): Promise<EnforcementCaseDetail> =>
+    fetchJSON<EnforcementCaseDetail>(`${BASE_URL}/enforcement/cases`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(data),
+    }),
+
+  assignEnforcementCase: (caseIdOrRef: string, assignedOfficer: string, comments?: string): Promise<EnforcementCaseDetail> =>
+    fetchJSON<EnforcementCaseDetail>(`${BASE_URL}/enforcement/cases/${encodeURIComponent(caseIdOrRef)}/assign`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ assigned_officer: assignedOfficer, comments }),
+    }),
+
+  transitionEnforcementCase: (caseIdOrRef: string, toStatus: string, reason: string, comments?: string): Promise<EnforcementCaseDetail> =>
+    fetchJSON<EnforcementCaseDetail>(`${BASE_URL}/enforcement/cases/${encodeURIComponent(caseIdOrRef)}/transition`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ to_status: toStatus, reason, comments }),
+    }),
+
+  calculateCasePenalty: (caseIdOrRef: string, repeatOffence = false, priorNotices = 0, reason?: string): Promise<PenaltyCalculationRecord> =>
+    fetchJSON<PenaltyCalculationRecord>(`${BASE_URL}/enforcement/cases/${encodeURIComponent(caseIdOrRef)}/calculate-penalty`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ repeat_offence: repeatOffence, prior_notices: priorNotices, reason }),
+    }),
+
+  issueCaseNotice: (caseIdOrRef: string, req: {
+    notice_type?: string;
+    subject?: string;
+    officer_name?: string;
+    officer_designation?: string;
+    jurisdiction?: string;
+    deadline_days?: number;
+    recipient_name?: string;
+    recipient_organization_id?: string;
+    custom_content?: string;
+  }): Promise<EnforcementNotice> =>
+    fetchJSON<EnforcementNotice>(`${BASE_URL}/enforcement/cases/${encodeURIComponent(caseIdOrRef)}/notices`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(req),
+    }),
+
+  closeEnforcementCase: (caseIdOrRef: string, closureReason: string, resolutionType = 'COMPOUNDED', comments?: string): Promise<EnforcementCaseDetail> =>
+    fetchJSON<EnforcementCaseDetail>(`${BASE_URL}/enforcement/cases/${encodeURIComponent(caseIdOrRef)}/close`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ closure_reason: closureReason, resolution_type: resolutionType, comments }),
+    }),
+
+  reopenEnforcementCase: (caseIdOrRef: string, reopenReason: string, comments?: string): Promise<EnforcementCaseDetail> =>
+    fetchJSON<EnforcementCaseDetail>(`${BASE_URL}/enforcement/cases/${encodeURIComponent(caseIdOrRef)}/reopen`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ reopen_reason: reopenReason, comments }),
+    }),
 };
 
-export default api;
+export default api;

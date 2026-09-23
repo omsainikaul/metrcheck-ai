@@ -13,7 +13,7 @@ from compliance.rules.legal_metrology import compute_font_size_and_readability
 from integrations.fssai.verifier import fssai_verifier
 from integrations.gs1.verifier import gs1_verifier
 from api.demo import build_demo_response
-from auth.security import get_current_user, public_user, check_tenant_access, ROLE_ADMIN, ROLE_ENFORCEMENT, ROLE_AUDIT, ROLE_MERCHANT
+from auth.security import get_current_user, public_user, check_tenant_access, ROLE_ADMIN, ROLE_ENFORCEMENT, ROLE_AUDIT, ROLE_MERCHANT, ROLE_USER
 from services.integrity_service import verify_analysis_integrity
 
 router = APIRouter()
@@ -239,9 +239,9 @@ async def get_history_item(id: str, user: dict = Depends(get_current_user)):
         try:
             raw_imgs = json.loads(data['images']) if isinstance(data['images'], str) else data['images']
             for img in raw_imgs:
-                if isinstance(img, dict) and img.get('filename'):
+                if isinstance(img, dict) and (img.get('filename') or img.get('image_url')):
                     images_list.append(ProductImageEvidence(**img))
-                elif isinstance(img, ProductImageEvidence) and img.filename:
+                elif isinstance(img, ProductImageEvidence):
                     images_list.append(img)
         except Exception:
             images_list = []
@@ -281,11 +281,18 @@ async def get_history_item(id: str, user: dict = Depends(get_current_user)):
         if ev.words:
             aggregated_words.extend(ev.words)
 
+    avg_conf = 85.0
+    if images_list:
+        confs = [ev.average_confidence for ev in images_list if ev.average_confidence and ev.average_confidence > 0]
+        if confs:
+            avg_conf = sum(confs) / len(confs)
+
     mock_ocr = OCRResult(
         full_text=data['ocr_text'],
         words=aggregated_words,
         language="eng",
-        processing_time=0.0
+        processing_time=0.0,
+        average_confidence=round(avg_conf, 1)
     )
 
     font_size_analysis = compute_font_size_and_readability(
@@ -340,16 +347,17 @@ async def delete_history_item(id: str, user: dict = Depends(get_current_user)):
     if user_role in (ROLE_ADMIN, ROLE_ENFORCEMENT):
         # Privileged roles can delete screening records within their jurisdiction/tenant
         pass
-    elif user_role == ROLE_MERCHANT:
+    elif user_role in (ROLE_MERCHANT, ROLE_USER, "NORMAL_USER"):
         owner = data.get("owner_user_id") or ""
-        username = user.get("username") or ""
+        username = (user.get("username") or "").lower()
         user_id_str = str(user.get("id", "")) if user.get("id") is not None else ""
         
-        is_owner = bool(owner) and (owner == username or (user_id_str and owner == user_id_str))
+        is_owner = bool(owner) and (owner.lower() == username or (user_id_str and str(owner) == user_id_str))
         if not is_owner:
+            role_label = "Merchants" if user_role == ROLE_MERCHANT else "Users"
             raise HTTPException(
                 status_code=403,
-                detail="You do not have permission to delete this screening record. Merchants can only delete their own records."
+                detail=f"You do not have permission to delete this screening record. {role_label} can only delete their own records."
             )
     else:
         raise HTTPException(
@@ -433,6 +441,17 @@ async def get_stats_by_status(user: dict = Depends(get_current_user)):
         analyses = await get_analyses(organization_id=org_id)
     elif role == "MERCHANT_PUBLIC":
         analyses = await get_analyses(organization_id=org_id)
+        username = (user.get("username") or "").lower()
+        user_id_str = str(user.get("id", "")) if user.get("id") is not None else ""
+        analyses = [
+            a for a in analyses
+            if a.get("owner_user_id") and (
+                a.get("owner_user_id", "").lower() == username or
+                (user_id_str and str(a.get("owner_user_id", "")) == user_id_str)
+            )
+        ]
+    elif role in ("PUBLIC_USER", "NORMAL_USER"):
+        analyses = await get_analyses(organization_id=org_id) if org_id else await get_analyses()
         username = (user.get("username") or "").lower()
         user_id_str = str(user.get("id", "")) if user.get("id") is not None else ""
         analyses = [

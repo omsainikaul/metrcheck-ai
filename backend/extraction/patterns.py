@@ -2,7 +2,7 @@ import re
 
 PATTERNS = {
     'mrp': re.compile(
-        r'(?:M\.?R\.?P\.?|Maximum\s*Retail\s*Price|Retail\s*Price|MRP\s*₹|MRP\s*Rs\.?|MRPR|एम\.?आर\.?पी\.?|अधिकतम\s*खुदरा\s*मूल्य|खुदरा\s*मूल्य|मूल्य)[\s.:₹RsINR\/\-*~#\'\"\=]*([0-9]{1,5}(?:\.[0-9]{1,2})?)',
+        r'(?:M\.?R\.?P\.?|Maximum\s*Retail\s*Price|Retail\s*Price|MRP\s*₹|MRP\s*Rs\.?|MRPR|एम\.?आर\.?पी\.?|अधिकतम\s*खुदरा\s*मूल्य|खुदरा\s*मूल्य|मूल्य)[^\S\r\n.:₹RsINR\/\-*~#\'\"\=]*([0-9]{1,5}(?:\.[0-9]{1,2})?)',
         re.IGNORECASE
     ),
     'net_quantity': re.compile(
@@ -48,7 +48,7 @@ PATTERNS = {
 }
 
 FALLBACK_PATTERNS = {
-    'mrp': re.compile(r'(?:\bRs\.?|₹)\s*([\d,]+(?:\.\d{2})?)', re.IGNORECASE),
+    'mrp': re.compile(r'(?:₹|Rs\.|\bRs\b|INR)[^\S\r\n]*([0-9]{1,5}(?:\.[0-9]{1,2})?)', re.IGNORECASE),
     'fssai_license': re.compile(r'\b(1\d{13}|2\d{13})\b'),
     'email': re.compile(r'[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}'),
     'phone': re.compile(r'(?:\+91[\s\-]?)?[6-9]\d{4}[\s\-]?\d{5}|1800[\s\-]?(?:\d{3}[\s\-]?\d{3,4}|\d{2}[\s\-]?\d{2}[\s\-]?\d{3,4}|\d{6,8})|0\d{2,4}[-\s]?\d{6,8}'),

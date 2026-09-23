@@ -25,6 +25,7 @@ import { formatAnalysisDateTime } from '../utils/datetime';
 import { useAuth } from '../context/AuthContext';
 import { useRole } from '../context/RoleContext';
 import { useWorkspace } from '../context/WorkspaceContext';
+import { useLanguage } from '../context/LanguageContext';
 
 // Results sub-components
 import ResultsHeader from '../components/results/ResultsHeader';
@@ -179,6 +180,8 @@ export default function Results() {
     return normalized;
   }, [data]);
 
+  const { t } = useLanguage();
+
   if (loading) {
     return (
       <div className="p-8 max-w-5xl mx-auto">
@@ -190,7 +193,7 @@ export default function Results() {
   if (error || !data) {
     return (
       <div className="max-w-2xl mx-auto my-12 p-8 bg-white dark:bg-slate-900 rounded-2xl shadow-sm border border-slate-200 dark:border-slate-800 text-center space-y-4">
-        <h2 className="text-xl font-bold text-slate-800 dark:text-slate-100">Unable to Load Analysis</h2>
+        <h2 className="text-xl font-bold text-slate-800 dark:text-slate-100">{t('results.unable_to_load')}</h2>
         <p className="text-slate-600 dark:text-slate-400 text-sm">{error || 'No analysis data found for this product.'}</p>
         <div className="pt-4 flex flex-wrap justify-center gap-3">
           <button
@@ -198,19 +201,19 @@ export default function Results() {
             className="inline-flex items-center gap-2 px-5 py-2.5 bg-indigo-600 text-white rounded-lg font-medium hover:bg-indigo-700 transition-colors text-sm shadow-sm cursor-pointer"
           >
             <Sparkles className="w-4 h-4 text-amber-300" />
-            <span>Open Demo Benchmarks</span>
+            <span>{t('results.open_demo_benchmarks')}</span>
           </button>
           <button
             onClick={() => navigate('/analyze')}
             className="px-5 py-2.5 bg-slate-100 dark:bg-slate-800 text-slate-700 dark:text-slate-300 rounded-lg font-medium hover:bg-slate-200 dark:hover:bg-slate-700 transition-colors text-sm cursor-pointer"
           >
-            Upload Real Images
+            {t('results.upload_real_images')}
           </button>
           <button
             onClick={() => navigate('/history')}
             className="px-5 py-2.5 bg-slate-100 dark:bg-slate-800 text-slate-700 dark:text-slate-300 rounded-lg font-medium hover:bg-slate-200 dark:hover:bg-slate-700 transition-colors text-sm cursor-pointer"
           >
-            View History
+            {t('results.view_history')}
           </button>
         </div>
       </div>
@@ -263,22 +266,25 @@ export default function Results() {
   // Status explanation derived strictly from backend results
   const getStatusExplanation = () => {
     if (isCompliant) {
-      return "All applicable checks passed the current automated screening.";
+      return t('results.status_all_passed');
     }
     if (isReviewRequired) {
       if (failedCount === 0) {
-        return `No confirmed screening failures were detected, but ${needsReviewCount} applicable check${needsReviewCount > 1 ? 's require' : ' requires'} manual verification.`;
+        if (needsReviewCount === 1) {
+          return t('results.status_review_single', { count: 1 });
+        }
+        return t('results.status_review_multiple', { count: needsReviewCount });
       }
-      return "No confirmed failures were detected, but one or more applicable checks require manual verification.";
+      return t('results.status_review_general');
     }
-    return "One or more applicable requirements have a confirmed screening failure and should be reviewed.";
+    return t('results.status_fail_general');
   };
 
   const getCleanProductName = () => {
     if (data.product_name && data.product_name.trim()) {
       return data.product_name;
     }
-    return 'Product name not reliably extracted';
+    return t('results.product_name_fallback');
   };
 
   const handleViewEvidence = (ruleId?: string | null, _imageLabel?: string | null) => {
@@ -310,17 +316,17 @@ export default function Results() {
 
   // ── Sticky section nav config ──────────────────────────────────────
   const sectionNavItems = [
-    { id: 'section-summary', label: 'Summary' },
-    ...((cr.risk_assessment || cr.category_scores) ? [{ id: 'section-risk', label: 'Risk Factors' }] : []),
-    ...(imageList.length > 0 ? [{ id: 'section-preview', label: 'Package Preview' }] : []),
-    ...(failedChecks.length > 0 || reviewChecks.length > 0 ? [{ id: 'section-attention', label: 'Attention' }] : []),
-    ...(actionableRecs.length > 0 ? [{ id: 'section-actions', label: 'Actions' }] : []),
-    { id: 'section-requirements', label: 'Requirements' },
-    { id: 'section-package-data', label: 'Package Data' },
-    ...(data.font_size_analysis ? [{ id: 'section-rule12', label: 'Rule 12' }] : []),
-    ...((data.vision_analysis || imageList.some(img => img.vision_analysis)) ? [{ id: 'section-vision', label: 'Computer Vision' }] : []),
-    ...((data.fssai_verification || data.gs1_verification) ? [{ id: 'section-verification', label: 'Verification' }] : []),
-    { id: 'section-evidence', label: 'Evidence' },
+    { id: 'section-summary', label: t('results.nav_summary') },
+    ...((cr.risk_assessment || cr.category_scores) ? [{ id: 'section-risk', label: t('results.nav_risk') }] : []),
+    ...(imageList.length > 0 ? [{ id: 'section-preview', label: t('results.nav_preview') }] : []),
+    ...(failedChecks.length > 0 || reviewChecks.length > 0 ? [{ id: 'section-attention', label: t('results.nav_attention') }] : []),
+    ...(actionableRecs.length > 0 ? [{ id: 'section-actions', label: t('results.nav_actions') }] : []),
+    { id: 'section-requirements', label: t('results.nav_requirements') },
+    { id: 'section-package-data', label: t('results.nav_package_data') },
+    ...(data.font_size_analysis ? [{ id: 'section-rule12', label: t('results.nav_rule12') }] : []),
+    ...((data.vision_analysis || imageList.some(img => img.vision_analysis)) ? [{ id: 'section-vision', label: t('results.nav_vision') }] : []),
+    ...((data.fssai_verification || data.gs1_verification) ? [{ id: 'section-verification', label: t('results.nav_verification') }] : []),
+    { id: 'section-evidence', label: t('results.nav_evidence') },
   ];
 
   return (
@@ -333,6 +339,7 @@ export default function Results() {
         createdAt={data.created_at}
         isDemo={isDemo}
         imageCount={imageList.length}
+        extractionMode={product_info.extraction_mode}
         frontImageUrl={imageList[0]?.image_url}
         canDelete={!isDemo && (canDeleteAnalyses || Boolean(data.owner_user_id && user?.username && data.owner_user_id.toLowerCase() === user.username.toLowerCase()))}
         canUseEnforcement={canUseEnforcementFeatures}
@@ -355,9 +362,9 @@ export default function Results() {
           <div className="flex items-center gap-2.5">
             <Sparkles className="w-4 h-4 text-amber-600 dark:text-amber-400 shrink-0" />
             <div>
-              <span className="font-bold text-xs">SIH Demonstration Benchmark</span>
+              <span className="font-bold text-xs">{t('results.sih_demo_benchmark')}</span>
               <span className="text-[10px] font-bold px-1.5 py-0.5 rounded-full bg-amber-200 dark:bg-amber-900/60 text-amber-800 dark:text-amber-200 uppercase tracking-wider ml-2">
-                Fixture
+                {t('results.fixture_badge')}
               </span>
             </div>
           </div>
@@ -366,7 +373,7 @@ export default function Results() {
             className="inline-flex items-center gap-1 px-2.5 py-1 bg-white dark:bg-slate-900 border border-amber-300 dark:border-amber-700 hover:bg-amber-50 dark:hover:bg-amber-950/40 text-amber-900 dark:text-amber-200 rounded-lg text-[11px] font-semibold transition-all shrink-0 cursor-pointer"
           >
             <Info className="w-3 h-3" />
-            <span>{showDemoGuide ? 'Hide' : 'Guide'}</span>
+            <span>{showDemoGuide ? t('results.guide_btn_hide') : t('results.guide_btn_guide')}</span>
             {showDemoGuide ? <ChevronUp className="w-3 h-3" /> : <ChevronDown className="w-3 h-3" />}
           </button>
         </div>
@@ -376,7 +383,13 @@ export default function Results() {
       {isDemo && showDemoGuide && (
         <div className="bg-indigo-50/40 dark:bg-indigo-950/30 rounded-xl border border-indigo-100 dark:border-indigo-900/60 p-4">
           <div className="grid grid-cols-2 sm:grid-cols-5 gap-2 text-[11px]">
-            {['1. Product Context', '2. Screening Score', '3. Review Items', '4. Inspect Evidence', '5. Enforcement Tools'].map(step => (
+            {[
+              t('results.guide_step_1'),
+              t('results.guide_step_2'),
+              t('results.guide_step_3'),
+              t('results.guide_step_4'),
+              t('results.guide_step_5'),
+            ].map(step => (
               <div key={step} className="bg-white dark:bg-slate-900 p-2.5 rounded-lg border border-indigo-100 dark:border-indigo-900/50">
                 <span className="font-bold text-indigo-900 dark:text-indigo-300">{step}</span>
               </div>
@@ -525,9 +538,9 @@ export default function Results() {
       <div className="bg-slate-900 text-slate-200 rounded-xl p-4 border border-slate-800 flex items-start gap-3 text-[11px] leading-relaxed">
         <ShieldCheck className="w-5 h-5 text-indigo-400 shrink-0 mt-0.5" />
         <div className="space-y-1">
-          <h4 className="text-xs font-semibold text-white">Automated Statutory Compliance Screening</h4>
+          <h4 className="text-xs font-semibold text-white">{t('results.screening_notice_title')}</h4>
           <p className="text-slate-400">
-            MetrCheck AI evaluates labels against the <strong className="text-slate-300">Legal Metrology (Packaged Commodities) Rules, 2011</strong> and <strong className="text-slate-300">FSSAI Labelling Regulations, 2020</strong>. Non-detection does not confirm physical absence. Declarations marked <span className="text-indigo-400 font-semibold">NEEDS REVIEW</span> must be verified manually.
+            {t('results.screening_notice_desc')}
           </p>
         </div>
       </div>
@@ -537,7 +550,7 @@ export default function Results() {
         <div 
           role="dialog"
           aria-modal="true"
-          aria-label="Delete Analysis Record Confirmation"
+          aria-label={t('results.delete_modal_title')}
           className="fixed inset-0 z-50 flex items-center justify-center bg-slate-900/50 dark:bg-slate-950/80 backdrop-blur-xs p-4 animate-in fade-in duration-200"
         >
           <div className="bg-white dark:bg-slate-900 rounded-2xl shadow-xl max-w-md w-full p-6 space-y-4 border border-slate-200 dark:border-slate-800">
@@ -547,8 +560,8 @@ export default function Results() {
                   <AlertCircle className="w-6 h-6" />
                 </div>
                 <div>
-                  <h3 className="text-base font-bold text-slate-900 dark:text-slate-100">Delete Analysis Record?</h3>
-                  <p className="text-xs text-slate-500 dark:text-slate-400">This action is permanent and cannot be undone</p>
+                  <h3 className="text-base font-bold text-slate-900 dark:text-slate-100">{t('results.delete_modal_title')}</h3>
+                  <p className="text-xs text-slate-500 dark:text-slate-400">{t('results.delete_modal_subtitle')}</p>
                 </div>
               </div>
               <button
@@ -563,21 +576,21 @@ export default function Results() {
 
             <div className="p-3 bg-slate-50 dark:bg-slate-800/60 rounded-xl border border-slate-200/80 dark:border-slate-700/60 text-xs space-y-1.5">
               <div className="flex justify-between">
-                <span className="text-slate-500 dark:text-slate-400 font-medium">Product:</span>
+                <span className="text-slate-500 dark:text-slate-400 font-medium">{t('dashboard.table.product')}:</span>
                 <span className="text-slate-800 dark:text-slate-200 font-bold line-clamp-1">{data?.product_name || 'Unknown Product'}</span>
               </div>
               <div className="flex justify-between">
-                <span className="text-slate-500 dark:text-slate-400 font-medium">Screening Date:</span>
+                <span className="text-slate-500 dark:text-slate-400 font-medium">{t('results.screening_date_label')}:</span>
                 <span className="text-slate-800 dark:text-slate-200">{formatAnalysisDateTime(data?.created_at)}</span>
               </div>
               <div className="flex justify-between">
-                <span className="text-slate-500 dark:text-slate-400 font-medium">Status / Score:</span>
+                <span className="text-slate-500 dark:text-slate-400 font-medium">{t('results.status_score_label')}:</span>
                 <span className="font-semibold text-slate-800 dark:text-slate-200">{cr.status} ({Number(cr.score).toFixed(1)} / 100)</span>
               </div>
             </div>
 
             <p className="text-xs text-slate-600 dark:text-slate-400">
-              This will permanently delete the compliance screening record and its uploaded images. You will be redirected to the History page.
+              {t('results.delete_modal_desc')}
             </p>
 
             {deleteError && (
@@ -594,7 +607,7 @@ export default function Results() {
                 disabled={isDeleting}
                 className="px-4 py-2 bg-slate-100 dark:bg-slate-800 hover:bg-slate-200 dark:hover:bg-slate-700 text-slate-700 dark:text-slate-300 rounded-lg font-semibold text-xs transition-colors cursor-pointer"
               >
-                Cancel
+                {t('common.cancel') || 'Cancel'}
               </button>
               <button
                 type="button"
@@ -605,12 +618,12 @@ export default function Results() {
                 {isDeleting ? (
                   <>
                     <Loader2 className="w-3.5 h-3.5 animate-spin" />
-                    <span>Deleting...</span>
+                    <span>{t('results.deleting_btn')}</span>
                   </>
                 ) : (
                   <>
                     <Trash2 className="w-3.5 h-3.5" />
-                    <span>Delete Record</span>
+                    <span>{t('results.delete_record_btn')}</span>
                   </>
                 )}
               </button>

@@ -26,14 +26,17 @@ ROLE_ADMIN = "ADMIN"
 ROLE_ENFORCEMENT = "ENFORCEMENT_OFFICER"
 ROLE_AUDIT = "AUDIT_OFFICER"
 ROLE_MERCHANT = "MERCHANT_PUBLIC"
+ROLE_USER = "PUBLIC_USER"
 
-ALL_ROLES = [ROLE_ADMIN, ROLE_ENFORCEMENT, ROLE_AUDIT, ROLE_MERCHANT]
+ALL_ROLES = [ROLE_ADMIN, ROLE_ENFORCEMENT, ROLE_AUDIT, ROLE_MERCHANT, ROLE_USER]
 
 ROLE_LABELS = {
     ROLE_ADMIN: "Administrator",
     ROLE_ENFORCEMENT: "Enforcement Official",
     ROLE_AUDIT: "Quality & Audit Inspector",
     ROLE_MERCHANT: "Brand / Merchant",
+    ROLE_USER: "Normal User",
+    "NORMAL_USER": "Normal User",
 }
 
 
@@ -127,7 +130,7 @@ class DevLoggerDeliveryProvider(PasswordResetDeliveryProvider):
             "email": email or "",
         }
         logger.info(
-            f"[PASSWORD RESET] Dev delivery for '{username}' (email: '{email or 'none'}'): Reset URL = {reset_url} (Token = {raw_token})"
+            f"[PASSWORD RESET] Password reset instructions generated for account '{username}' (target: '{email or 'unspecified'}')."
         )
         return True
 
@@ -154,9 +157,10 @@ class DevLoggerDeliveryProvider(PasswordResetDeliveryProvider):
             "email": email or "",
         }
         logger.info(
-            f"[ACCOUNT INVITATION] Dev delivery for '{username}' ({role}, email: '{email or 'none'}'): Activation URL = {activation_url} (Token = {raw_token})"
+            f"[ACCOUNT INVITATION] Account invitation generated for account '{username}' ({role}, target: '{email or 'unspecified'}')."
         )
         return True
+
 
 
 class SMTPDeliveryProvider(PasswordResetDeliveryProvider):
@@ -648,6 +652,20 @@ def check_tenant_access(user: Optional[dict], resource: Optional[dict], allow_pu
                 raise HTTPException(
                     status_code=status.HTTP_403_FORBIDDEN,
                     detail="Access denied: Resource does not belong to your organization or organization is not assigned."
+                )
+            return False
+        return True
+
+    # Normal Users (ROLE_USER / NORMAL_USER / USER / PUBLIC_USER) - strictly fail-closed (personal scan ownership)
+    if user_role in (ROLE_USER, "NORMAL_USER", "USER", "PUBLIC_USER"):
+        is_owner = False
+        if owner:
+            is_owner = (owner.lower() == username.lower()) or (bool(uid) and owner == uid)
+        if not is_owner:
+            if raise_exception:
+                raise HTTPException(
+                    status_code=status.HTTP_403_FORBIDDEN,
+                    detail="Access denied: You do not have permission to access this resource."
                 )
             return False
         return True

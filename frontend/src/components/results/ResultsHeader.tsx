@@ -7,6 +7,7 @@ import {
 import { formatAnalysisDateTime } from '../../utils/datetime';
 import { type MultilingualMetadata, SUPPORTED_REPORT_LANGUAGES } from '../../types';
 import { useLanguage } from '../../context/LanguageContext';
+import { api } from '../../services/api';
 
 interface ResultsHeaderProps {
   productName: string;
@@ -15,6 +16,7 @@ interface ResultsHeaderProps {
   createdAt: string;
   isDemo: boolean;
   imageCount: number;
+  extractionMode?: string;
   frontImageUrl?: string | null;
   canDelete: boolean;
   canUseEnforcement: boolean;
@@ -23,7 +25,7 @@ interface ResultsHeaderProps {
   onNavigateAnalyze: () => void;
   onShowNotice: () => void;
   onShowDelete: () => void;
-  exportUrls: {
+  exportUrls?: {
     csv: string;
     xlsx: string;
     json: string;
@@ -38,6 +40,7 @@ const ResultsHeader: React.FC<ResultsHeaderProps> = ({
   createdAt,
   isDemo,
   imageCount,
+  extractionMode,
   frontImageUrl,
   canDelete,
   canUseEnforcement,
@@ -46,11 +49,32 @@ const ResultsHeader: React.FC<ResultsHeaderProps> = ({
   onNavigateAnalyze,
   onShowNotice,
   onShowDelete,
-  exportUrls,
+  exportUrls: _exportUrls,
 }) => {
   const [showExport, setShowExport] = useState(false);
+  const [resolvedFrontImg, setResolvedFrontImg] = useState<string>(frontImageUrl || '');
   const { selectedLanguage: selectedReportLang, setLanguage: setSelectedReportLang, t } = useLanguage();
   const dropdownRef = useRef<HTMLDivElement>(null);
+
+  useEffect(() => {
+    let isCancelled = false;
+    if (frontImageUrl && frontImageUrl !== '/placeholder.png') {
+      api.fetchImageBlobUrl(frontImageUrl).then((blobUrl) => {
+        if (!isCancelled && blobUrl) {
+          setResolvedFrontImg(blobUrl);
+        }
+      }).catch(() => {
+        if (!isCancelled) {
+          setResolvedFrontImg(api.getAssetUrl(frontImageUrl));
+        }
+      });
+    } else {
+      setResolvedFrontImg(frontImageUrl || '');
+    }
+    return () => {
+      isCancelled = true;
+    };
+  }, [frontImageUrl]);
 
   useEffect(() => {
     const handleClickOutside = (event: MouseEvent) => {
@@ -71,9 +95,16 @@ const ResultsHeader: React.FC<ResultsHeaderProps> = ({
     };
   }, []);
 
-  const getPdfUrlWithLang = (lang: string) => {
-    const base = exportUrls.pdf.split('?')[0];
-    return lang === 'en' ? base : `${base}?lang=${encodeURIComponent(lang)}`;
+  const [downloadingFormat, setDownloadingFormat] = useState<string | null>(null);
+
+  const handleDownload = async (format: 'pdf' | 'csv' | 'xlsx' | 'json', lang?: string) => {
+    setDownloadingFormat(format);
+    try {
+      await api.downloadReportFile(analysisId, format, lang || selectedReportLang);
+    } finally {
+      setDownloadingFormat(null);
+      setShowExport(false);
+    }
   };
 
   const selectedLangObj = SUPPORTED_REPORT_LANGUAGES.find(l => l.code === selectedReportLang) || SUPPORTED_REPORT_LANGUAGES[0];
@@ -114,16 +145,16 @@ const ResultsHeader: React.FC<ResultsHeaderProps> = ({
           </div>
 
           {/* Quick PDF Report Download Button in Selected Language */}
-          <a
-            href={getPdfUrlWithLang(selectedReportLang)}
-            target="_blank"
-            rel="noopener noreferrer"
-            className="inline-flex items-center gap-1.5 px-3 py-1.5 text-xs font-semibold text-white bg-indigo-600 hover:bg-indigo-700 dark:bg-indigo-600 dark:hover:bg-indigo-500 rounded-lg shadow-2xs transition-colors cursor-pointer"
+          <button
+            type="button"
+            onClick={() => handleDownload('pdf', selectedReportLang)}
+            disabled={downloadingFormat === 'pdf'}
+            className="inline-flex items-center gap-1.5 px-3 py-1.5 text-xs font-semibold text-white bg-indigo-600 hover:bg-indigo-700 dark:bg-indigo-600 dark:hover:bg-indigo-500 rounded-lg shadow-2xs transition-colors cursor-pointer disabled:opacity-50"
             title={`${t('results.download_pdf')} (${selectedLangObj.label})`}
           >
             <FileText className="w-3.5 h-3.5 shrink-0" />
-            <span>{t('results.download_pdf')}</span>
-          </a>
+            <span>{downloadingFormat === 'pdf' ? 'Downloading...' : t('results.download_pdf')}</span>
+          </button>
 
           <button
             type="button"
@@ -171,30 +202,30 @@ const ResultsHeader: React.FC<ResultsHeaderProps> = ({
 
             {showExport && (
               <div className="absolute right-0 top-full mt-2 w-64 bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-xl shadow-xl py-2 z-50 ring-1 ring-black/5 animate-in fade-in duration-150">
-                <a
-                  href={exportUrls.csv}
-                  onClick={() => setShowExport(false)}
-                  className="flex items-center px-3.5 py-2 text-xs sm:text-sm font-medium text-slate-700 dark:text-slate-200 hover:bg-slate-100 dark:hover:bg-slate-800 transition-colors cursor-pointer"
+                <button
+                  type="button"
+                  onClick={() => handleDownload('csv')}
+                  className="w-full text-left flex items-center px-3.5 py-2 text-xs sm:text-sm font-medium text-slate-700 dark:text-slate-200 hover:bg-slate-100 dark:hover:bg-slate-800 transition-colors cursor-pointer"
                 >
                   <FileSpreadsheet className="w-4 h-4 mr-2.5 text-emerald-600 dark:text-emerald-400 shrink-0" />
                   <span>{t('reports.csv_report')}</span>
-                </a>
-                <a
-                  href={exportUrls.xlsx}
-                  onClick={() => setShowExport(false)}
-                  className="flex items-center px-3.5 py-2 text-xs sm:text-sm font-medium text-slate-700 dark:text-slate-200 hover:bg-slate-100 dark:hover:bg-slate-800 transition-colors cursor-pointer"
+                </button>
+                <button
+                  type="button"
+                  onClick={() => handleDownload('xlsx')}
+                  className="w-full text-left flex items-center px-3.5 py-2 text-xs sm:text-sm font-medium text-slate-700 dark:text-slate-200 hover:bg-slate-100 dark:hover:bg-slate-800 transition-colors cursor-pointer"
                 >
                   <FileSpreadsheet className="w-4 h-4 mr-2.5 text-blue-600 dark:text-blue-400 shrink-0" />
                   <span>{t('reports.xlsx_report')}</span>
-                </a>
-                <a
-                  href={exportUrls.json}
-                  onClick={() => setShowExport(false)}
-                  className="flex items-center px-3.5 py-2 text-xs sm:text-sm font-medium text-slate-700 dark:text-slate-200 hover:bg-slate-100 dark:hover:bg-slate-800 transition-colors cursor-pointer"
+                </button>
+                <button
+                  type="button"
+                  onClick={() => handleDownload('json')}
+                  className="w-full text-left flex items-center px-3.5 py-2 text-xs sm:text-sm font-medium text-slate-700 dark:text-slate-200 hover:bg-slate-100 dark:hover:bg-slate-800 transition-colors cursor-pointer"
                 >
                   <FileJson className="w-4 h-4 mr-2.5 text-amber-600 dark:text-amber-400 shrink-0" />
                   <span>{t('reports.json_report')}</span>
-                </a>
+                </button>
 
                 <div className="border-t border-slate-100 dark:border-slate-800 mt-1.5 pt-2 px-3.5">
                   <div className="flex items-center justify-between mb-1.5">
@@ -213,14 +244,14 @@ const ResultsHeader: React.FC<ResultsHeaderProps> = ({
                       ))}
                     </select>
                   </div>
-                  <a
-                    href={getPdfUrlWithLang(selectedReportLang)}
-                    onClick={() => setShowExport(false)}
-                    className="flex items-center py-1.5 text-xs sm:text-sm font-medium text-red-600 dark:text-red-400 hover:text-red-700 dark:hover:text-red-300 transition-colors cursor-pointer"
+                  <button
+                    type="button"
+                    onClick={() => handleDownload('pdf', selectedReportLang)}
+                    className="w-full text-left flex items-center py-1.5 text-xs sm:text-sm font-medium text-red-600 dark:text-red-400 hover:text-red-700 dark:hover:text-red-300 transition-colors cursor-pointer"
                   >
                     <FileText className="w-4 h-4 mr-2.5 shrink-0" />
                     <span>{t('reports.download_pdf')} ({selectedLangObj.label})</span>
-                  </a>
+                  </button>
                 </div>
               </div>
             )}
@@ -232,9 +263,9 @@ const ResultsHeader: React.FC<ResultsHeaderProps> = ({
       <div className="flex items-center gap-3.5 sm:gap-4 pt-2 border-t border-slate-100 dark:border-slate-800/80">
         {/* Product Front Thumbnail */}
         <div className="w-14 sm:w-16 h-16 sm:h-20 shrink-0 rounded-lg bg-slate-950 border border-slate-800 flex items-center justify-center overflow-hidden shadow-2xs">
-          {frontImageUrl && frontImageUrl !== '/placeholder.png' ? (
+          {resolvedFrontImg && resolvedFrontImg !== '/placeholder.png' ? (
             <img
-              src={frontImageUrl}
+              src={resolvedFrontImg}
               alt={productName}
               className="w-full h-full object-contain p-1"
               onError={(e) => {
@@ -270,9 +301,15 @@ const ResultsHeader: React.FC<ResultsHeaderProps> = ({
               {formatAnalysisDateTime(createdAt)}
             </span>
             <span className="text-slate-300 dark:text-slate-700 select-none">•</span>
-            <span className="px-2 py-0.5 bg-indigo-50 dark:bg-indigo-950/60 text-indigo-700 dark:text-indigo-300 rounded text-[11px] font-semibold border border-indigo-200/60 dark:border-indigo-900/60">
-              {imageCount} Panel{imageCount !== 1 ? 's' : ''}
-            </span>
+            {extractionMode === 'manual' ? (
+              <span className="px-2 py-0.5 bg-amber-50 dark:bg-amber-950/60 text-amber-700 dark:text-amber-300 rounded text-[11px] font-semibold border border-amber-200/60 dark:border-amber-900/60">
+                Manual Product Check
+              </span>
+            ) : (
+              <span className="px-2 py-0.5 bg-indigo-50 dark:bg-indigo-950/60 text-indigo-700 dark:text-indigo-300 rounded text-[11px] font-semibold border border-indigo-200/60 dark:border-indigo-900/60">
+                {imageCount} Panel{imageCount !== 1 ? 's' : ''}
+              </span>
+            )}
 
             {/* Multilingual Detected Languages Badge */}
             {multilingual?.detected_languages && multilingual.detected_languages.length > 0 && (

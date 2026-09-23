@@ -2,12 +2,14 @@ import React, { useState } from 'react';
 import { Eye, ChevronDown } from 'lucide-react';
 import { type ProductInfo } from '../../types';
 import ConfidenceBar from '../ui/ConfidenceBar';
+import { useLanguage } from '../../context/LanguageContext';
 
 interface ConfidencePanelProps {
   productInfo: ProductInfo;
 }
 
 const ConfidencePanel: React.FC<ConfidencePanelProps> = ({ productInfo = {} as any }) => {
+  const { t } = useLanguage();
   const [expanded, setExpanded] = useState(false);
   const info = productInfo || ({} as any);
 
@@ -51,15 +53,15 @@ const ConfidencePanel: React.FC<ConfidencePanelProps> = ({ productInfo = {} as a
           </div>
           <div>
             <h3 className="font-bold text-xs sm:text-sm text-slate-900 dark:text-slate-100 uppercase tracking-wider">
-              Data Extraction Confidence
+              {t('results.data_confidence')}
             </h3>
             <span className="text-[11px] text-slate-500 dark:text-slate-400">
-              Confidence scores for detected packaging declarations
+              {t('results.subtitle')}
             </span>
           </div>
         </div>
         <span className="text-[11px] font-mono text-slate-500 dark:text-slate-400 font-semibold px-2.5 py-1 rounded-full bg-slate-100 dark:bg-slate-800 border border-slate-200 dark:border-slate-700">
-          {confidenceData.length} Fields
+          {confidenceData.length}
         </span>
       </div>
 
@@ -79,7 +81,7 @@ const ConfidencePanel: React.FC<ConfidencePanelProps> = ({ productInfo = {} as a
             className="w-full border-t border-slate-100 dark:border-slate-800/80 p-3 text-xs font-semibold text-indigo-600 dark:text-indigo-400 hover:text-indigo-700 dark:hover:text-indigo-300 hover:bg-slate-50/80 dark:hover:bg-slate-800/40 flex items-center justify-center gap-1.5 transition-colors cursor-pointer select-none"
             aria-expanded={expanded}
           >
-            <span>{expanded ? 'Hide Confidence Details' : 'Show Confidence Details'}</span>
+            <span>{expanded ? t('results.hide_confidence_details') : t('results.show_confidence_details')}</span>
             <ChevronDown className={`w-4 h-4 transition-transform duration-200 ${expanded ? 'rotate-180' : ''}`} />
           </button>
           
@@ -94,7 +96,7 @@ const ConfidencePanel: React.FC<ConfidencePanelProps> = ({ productInfo = {} as a
       )}
 
       <div className="p-3 bg-slate-50/50 dark:bg-slate-800/40 border-t border-slate-200/80 dark:border-slate-800 text-[11px] text-center text-slate-500 dark:text-slate-400">
-        Confidence reflects optical character recognition extraction certainty and does not determine legal statutory validity.
+        {t('results.confidence_footer_note')}
       </div>
     </div>
   );

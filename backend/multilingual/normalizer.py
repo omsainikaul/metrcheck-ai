@@ -24,7 +24,7 @@ INDIC_DIGIT_TRANSLATOR = str.maketrans(ALL_INDIC_DIGIT_MAP)
 
 # Multilingual Currency Words / Symbols to ₹
 CURRENCY_PATTERNS = [
-    (re.compile(r'(?:INR|Rs\.?|Rupees?|Rupaye|रु\.?|रू\.?|টাকা|ਰੁ\.?|ரூ\.?|ரூபாய்|రూ\.?|రూపాయలు|ರೂ\.?|ರೂಪಾಯಿ|രൂപ)\s*', re.IGNORECASE), '₹'),
+    (re.compile(r'\b(?:INR|Rs\.?|Rupees?|Rupaye|रु\.?|रू\.?|টাকা|ਰੁ\.?|ரூ\.?|ரூபாய்|రూ\.?|రూపాయలు|ರೂ\.?|ರೂಪಾಯಿ|രൂപ)[^\S\r\n]*(?=\d)', re.IGNORECASE), '₹'),
     (re.compile(r'₹+', re.UNICODE), '₹'),
 ]
 
@@ -41,7 +41,7 @@ def normalize_currency(text: str) -> str:
     if not text:
         return ""
     t = normalize_indic_digits(text)
-    t = re.sub(r'(?:INR|Rupees?|Rupaye|ரூபாய்|రూపాయలు|ರೂಪಾಯಿ|രൂപ|Rs\.?|रु\.?|रू\.?|টাকা|ਰੁ\.?|ரூ\.?|రూ\.?|ರೂ\.?)\s*', '₹', t, flags=re.IGNORECASE)
+    t = re.sub(r'\b(?:INR|Rupees?|Rupaye|ரூபாய்|రూపాయలు|ರೂಪಾಯಿ|രൂപ|Rs\.?|रु\.?|रू\.?|টাকা|ਰੁ\.?|ரூ\.?|రూ\.?|ರೂ\.?)[^\S\r\n]*(?=\d)', '₹', t, flags=re.IGNORECASE)
     t = re.sub(r'₹+', '₹', t)
     return t
 

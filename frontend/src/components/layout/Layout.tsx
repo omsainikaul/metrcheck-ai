@@ -36,8 +36,8 @@ export default function Layout() {
     }
     if (path.startsWith('/analyze')) {
       return { 
-        title: currentWorkspace === 'MERCHANT' ? t('navigation.analyze_package') : currentWorkspace === 'AUDIT' ? 'Technical Packaging Verification' : 'Statutory Compliance Inspection', 
-        subtitle: 'Upload multi-angle packaging artwork for AI statutory verification',
+        title: currentWorkspace === 'MERCHANT' ? t('navigation.analyze_package') : currentWorkspace === 'AUDIT' ? t('navigation.technical_packaging_verification') : t('navigation.statutory_compliance_inspection'), 
+        subtitle: t('analysis.subtitle'),
         breadcrumb: t('navigation.screening')
       };
     }
@@ -67,6 +67,13 @@ export default function Layout() {
         title: t('navigation.user_management'), 
         subtitle: 'Provision authorized officers, manage roles, and enforce workspace access',
         breadcrumb: `${t('navigation.administration')} / ${t('navigation.user_management')}`
+      };
+    }
+    if (path.startsWith('/admin/officer-requests')) {
+      return { 
+        title: 'Officer Access Requests', 
+        subtitle: 'Review, approve, or reject official Audit & Enforcement credential requests',
+        breadcrumb: `${t('navigation.administration')} / Officer Requests`
       };
     }
     if (path.startsWith('/admin/audit-logs')) {
@@ -105,7 +112,7 @@ export default function Layout() {
     <div className="flex h-screen bg-slate-50/70 dark:bg-slate-950 overflow-hidden font-sans text-slate-900 dark:text-slate-100 antialiased transition-colors duration-200">
       {/* Skip to Main Content Link for Keyboard / Screen Reader Accessibility */}
       <a href="#main-content" className="skip-to-content">
-        Skip to main content
+        {t('layout.skip_to_content')}
       </a>
 
       {/* Sidebar Navigation */}
@@ -187,9 +194,9 @@ export default function Layout() {
                   />
                   <div className="absolute right-0 mt-2 w-80 rounded-2xl bg-white dark:bg-slate-900 border border-slate-200/90 dark:border-slate-800 shadow-2xl p-2.5 z-50 space-y-1.5 ring-1 ring-black/5 animate-in fade-in duration-150">
                     <div className="px-3 py-1.5 border-b border-slate-100 dark:border-slate-800 flex items-center justify-between">
-                      <span className="text-[10px] font-bold text-slate-400 dark:text-slate-500 uppercase tracking-wider block">Active Workspace</span>
+                      <span className="text-[10px] font-bold text-slate-400 dark:text-slate-500 uppercase tracking-wider block">{t('layout.active_workspace')}</span>
                       <span className="text-[10px] text-slate-400 font-mono font-semibold">
-                        Role: {user?.role === 'ADMIN' ? 'Admin' : user?.role === 'ENFORCEMENT_OFFICER' ? 'Officer' : user?.role === 'AUDIT_OFFICER' ? 'Audit Officer' : 'Merchant'}
+                        {t('layout.role')}: {user?.role === 'ADMIN' ? t('roles.admin') : user?.role === 'ENFORCEMENT_OFFICER' ? t('roles.enforcement_officer') : user?.role === 'AUDIT_OFFICER' ? t('roles.audit_officer') : t('roles.merchant')}
                       </span>
                     </div>
 
@@ -217,7 +224,7 @@ export default function Layout() {
                                 {info.label}
                               </span>
                               <span className="text-[10px] font-semibold text-slate-400 flex items-center gap-1">
-                                <Lock className="w-3 h-3" /> Locked
+                                <Lock className="w-3 h-3" /> {t('layout.locked')}
                               </span>
                             </div>
                             <span className="text-[11px] text-slate-400 dark:text-slate-500 leading-tight">
@@ -259,7 +266,7 @@ export default function Layout() {
                               </span>
                               {isSelected && (
                                 <span className="text-[10px] font-bold text-indigo-600 dark:text-indigo-400 px-1.5 py-0.5 rounded bg-indigo-100/60 dark:bg-indigo-900/40 flex items-center gap-0.5">
-                                  <Check className="w-3 h-3" /> ACTIVE
+                                  <Check className="w-3 h-3" /> {t('layout.active')}
                                 </span>
                               )}
                             </div>
@@ -275,13 +282,15 @@ export default function Layout() {
               )}
             </div>
 
-            <Link
-              to="/demo"
-              className="hidden sm:inline-flex items-center gap-1.5 px-2.5 py-1 text-xs font-semibold rounded-lg bg-indigo-50 dark:bg-indigo-950/60 text-indigo-700 dark:text-indigo-300 border border-indigo-200/80 dark:border-indigo-800/80 hover:bg-indigo-100/70 dark:hover:bg-indigo-900/60 transition-colors"
-            >
-              <Sparkles className="w-3.5 h-3.5 text-indigo-600 dark:text-indigo-400" />
-              <span>SIH Demo</span>
-            </Link>
+            {import.meta.env.VITE_METRCHECK_DEMO_MODE === 'true' && (
+              <Link
+                to="/demo"
+                className="hidden sm:inline-flex items-center gap-1.5 px-2.5 py-1 text-xs font-semibold rounded-lg bg-indigo-50 dark:bg-indigo-950/60 text-indigo-700 dark:text-indigo-300 border border-indigo-200/80 dark:border-indigo-800/80 hover:bg-indigo-100/70 dark:hover:bg-indigo-900/60 transition-colors"
+              >
+                <Sparkles className="w-3.5 h-3.5 text-indigo-600 dark:text-indigo-400" />
+                <span>{t('layout.sih_demo')}</span>
+              </Link>
+            )}
 
             {/* Theme Toggle Button */}
             <ThemeToggle />

@@ -291,7 +291,7 @@ class MultilingualExtractor:
                         return repaired, raw_line, lang, 94.0
 
         # Pattern fallback across text for localized price formats (e.g. ₹ 120, रु 500, Rs. 99)
-        mrp_fallback = re.search(r'(?:₹|Rs\.?|INR|रु\.?|रू\.?|টাকা|ਰੁ\.?|ரூ\.?|రూ\.?|ರೂ\.?|രൂപ)\s*(\d+(?:\.\d{1,2})?)', norm_text, re.IGNORECASE)
+        mrp_fallback = re.search(r'(?:₹|Rs\.|\bRs\b|INR|रु\.?|रू\.?|টাকা|ਰੁ\.?|ரூ\.?|రూ\.?|ರೂ\.?|രൂപ)[^\S\r\n]*(\d+(?:\.\d{1,2})?)', norm_text, re.IGNORECASE)
         if mrp_fallback:
             val = f"₹{mrp_fallback.group(1)}"
             return val, mrp_fallback.group(0), "neutral", 88.0

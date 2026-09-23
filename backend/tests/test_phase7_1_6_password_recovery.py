@@ -43,6 +43,7 @@ from auth.security import (
     hash_reset_token,
     generate_password_reset_token,
     get_delivery_provider,
+    set_delivery_provider,
     DevLoggerDeliveryProvider,
     ROLE_ADMIN,
     ROLE_ENFORCEMENT,
@@ -57,6 +58,15 @@ from database.db import (
     apply_password_reset,
     get_db,
 )
+
+
+@pytest.fixture(autouse=True)
+def setup_delivery_provider():
+    provider = DevLoggerDeliveryProvider()
+    set_delivery_provider(provider)
+    yield provider
+    set_delivery_provider(None)
+
 
 
 @pytest.fixture(autouse=True)
@@ -119,7 +129,10 @@ async def test_reset_token_secure_random_and_hashed_in_db():
     
     resp = client.post("/api/auth/forgot-password", json={"identifier": "merchant"})
     assert resp.status_code == 200
-    raw_token = resp.json().get("dev_token")
+    assert resp.json().get("dev_token") is None
+    provider = get_delivery_provider()
+    assert provider.last_sent is not None
+    raw_token = provider.last_sent["raw_token"]
     assert raw_token is not None
     assert len(raw_token) >= 32
 
@@ -175,7 +188,8 @@ async def test_reset_token_single_use_enforcement():
     await create_user("test_singleuse_user", pwh, salt, ROLE_MERCHANT, "Single Use Test")
 
     forgot_resp = client.post("/api/auth/forgot-password", json={"identifier": "test_singleuse_user"})
-    raw_token = forgot_resp.json()["dev_token"]
+    assert forgot_resp.json().get("dev_token") is None
+    raw_token = get_delivery_provider().last_sent["raw_token"]
 
     # First use -> Success
     res1 = client.post("/api/auth/reset-password", json={"token": raw_token, "new_password": "FreshPassword12345!"})
@@ -195,10 +209,12 @@ async def test_previous_token_invalidation_on_new_request():
     await create_user("test_invalidation_user", pwh, salt, ROLE_MERCHANT, "Invalidation Test")
 
     resp1 = client.post("/api/auth/forgot-password", json={"identifier": "test_invalidation_user"})
-    token1 = resp1.json()["dev_token"]
+    assert resp1.json().get("dev_token") is None
+    token1 = get_delivery_provider().last_sent["raw_token"]
 
     resp2 = client.post("/api/auth/forgot-password", json={"identifier": "test_invalidation_user"})
-    token2 = resp2.json()["dev_token"]
+    assert resp2.json().get("dev_token") is None
+    token2 = get_delivery_provider().last_sent["raw_token"]
 
     assert token1 != token2
 
@@ -231,7 +247,8 @@ async def test_password_policy_7_chars_rejected():
     await create_user("test_short_user", pwh, salt, ROLE_MERCHANT, "Short Test")
 
     forgot_resp = client.post("/api/auth/forgot-password", json={"identifier": "test_short_user"})
-    raw_token = forgot_resp.json()["dev_token"]
+    assert forgot_resp.json().get("dev_token") is None
+    raw_token = get_delivery_provider().last_sent["raw_token"]
     reset_resp = client.post("/api/auth/reset-password", json={"token": raw_token, "new_password": "1234567"})
     assert reset_resp.status_code in (400, 422)
 
@@ -251,7 +268,8 @@ async def test_password_policy_8_chars_accepted():
 
     # Reset with 8 chars
     forgot_resp = client.post("/api/auth/forgot-password", json={"identifier": "valid_8char_user"})
-    raw_token = forgot_resp.json()["dev_token"]
+    assert forgot_resp.json().get("dev_token") is None
+    raw_token = get_delivery_provider().last_sent["raw_token"]
     reset_resp = client.post("/api/auth/reset-password", json={"token": raw_token, "new_password": "new8CharPass"})
     assert reset_resp.status_code == 200
 
@@ -267,7 +285,8 @@ async def test_password_reset_preserves_merchant_role_and_workspaces():
     await create_user("test_pw_merchant", pwh, salt, ROLE_MERCHANT, "Test Merchant PW")
 
     forgot_resp = client.post("/api/auth/forgot-password", json={"identifier": "test_pw_merchant"})
-    raw_token = forgot_resp.json()["dev_token"]
+    assert forgot_resp.json().get("dev_token") is None
+    raw_token = get_delivery_provider().last_sent["raw_token"]
 
     new_pw = "BrandNewMerchantPass2026!"
     reset_resp = client.post("/api/auth/reset-password", json={"token": raw_token, "new_password": new_pw})
@@ -298,7 +317,8 @@ async def test_password_reset_preserves_officer_role_and_workspaces():
     await create_user("test_pw_officer", pwh, salt, ROLE_ENFORCEMENT, "Test Officer PW", organization_id="org_ministry")
 
     forgot_resp = client.post("/api/auth/forgot-password", json={"identifier": "test_pw_officer"})
-    raw_token = forgot_resp.json()["dev_token"]
+    assert forgot_resp.json().get("dev_token") is None
+    raw_token = get_delivery_provider().last_sent["raw_token"]
 
     new_pw = "BrandNewOfficerPass2026!"
     reset_resp = client.post("/api/auth/reset-password", json={"token": raw_token, "new_password": new_pw})
@@ -318,7 +338,8 @@ async def test_password_reset_preserves_admin_role_and_workspaces():
     await create_user("test_pw_admin", pwh, salt, ROLE_ADMIN, "Test Admin PW")
 
     forgot_resp = client.post("/api/auth/forgot-password", json={"identifier": "test_pw_admin"})
-    raw_token = forgot_resp.json()["dev_token"]
+    assert forgot_resp.json().get("dev_token") is None
+    raw_token = get_delivery_provider().last_sent["raw_token"]
 
     new_pw = "BrandNewAdminPass2026!"
     reset_resp = client.post("/api/auth/reset-password", json={"token": raw_token, "new_password": new_pw})
@@ -334,17 +355,14 @@ async def test_password_reset_preserves_admin_role_and_workspaces():
 
 @pytest.mark.asyncio
 async def test_production_environment_suppresses_dev_token():
-    """21 & 22. In production (METRCHECK_ENV=production), dev_token is strictly omitted from API response."""
+    """21 & 22. dev_token is strictly omitted from API response across all modes."""
     client = TestClient(app)
     
-    os.environ["METRCHECK_ENV"] = "production"
-    try:
-        resp = client.post("/api/auth/forgot-password", json={"identifier": "merchant"})
-        assert resp.status_code == 200
-        # Under production mode, dev_token MUST NOT be returned
-        assert resp.json().get("dev_token") is None
-    finally:
-        os.environ["METRCHECK_ENV"] = "development"
+    resp = client.post("/api/auth/forgot-password", json={"identifier": "merchant"})
+    assert resp.status_code == 200
+    assert resp.json().get("dev_token") is None
+    assert "dev_token" not in resp.json()
+
 
 
 # ── 23: Login Brute-Force Rate Limiting ───────────────────────────────────

@@ -1,5 +1,6 @@
 import os
 import uuid
+import logging
 from fastapi import APIRouter, UploadFile, File, HTTPException, Request, status
 from models.schemas import OCRResult
 from ocr.factory import get_ocr_engine
@@ -8,6 +9,7 @@ from config import settings
 from services.image_service import process_and_save_image
 from auth.ratelimit import get_client_ip, check_ocr_rate_limit
 
+logger = logging.getLogger(__name__)
 router = APIRouter()
 
 @router.post("/ocr", response_model=OCRResult)
@@ -23,14 +25,16 @@ async def ocr_endpoint(request: Request, file: UploadFile = File(...)):
     validate_image_file(file)
     temp_id = str(uuid.uuid4())
     image_path = os.path.join(settings.UPLOAD_DIR, f"temp_{temp_id}_{file.filename}")
-    
+
     try:
         await process_and_save_image(file, image_path)
         engine = get_ocr_engine()
         result = await engine.extract(image_path)
         return result
     except Exception as e:
-        raise HTTPException(status_code=500, detail=str(e))
+        logger.exception("OCR endpoint processing failed: %s", e)
+        raise HTTPException(status_code=500, detail="An internal server error occurred during OCR processing.")
     finally:
         if os.path.exists(image_path):
             os.remove(image_path)
+

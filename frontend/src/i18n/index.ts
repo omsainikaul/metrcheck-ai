@@ -66,7 +66,7 @@ function getNestedValue(obj: Record<string, any>, path: string): string | undefi
 
 export function formatTranslation(template: string, params?: Record<string, string | number>): string {
   if (!params) return template;
-  return template.replace(/\{(\w+)\}/g, (match, key) => {
+  return template.replace(/\{{1,2}(\w+)\}{1,2}/g, (match, key) => {
     return params[key] !== undefined ? String(params[key]) : match;
   });
 }

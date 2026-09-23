@@ -116,29 +116,29 @@ def _build_styles():
 
     styles.add(ParagraphStyle(
         'ReportTitle', parent=styles['Title'],
-        fontName=_FONT_BOLD, fontSize=18, leading=22,
+        fontName=_FONT_BOLD, fontSize=17, leading=21,
         textColor=INDIGO_DARK, spaceAfter=1*mm, alignment=TA_LEFT,
     ))
     styles.add(ParagraphStyle(
         'ReportSubtitle', parent=styles['Normal'],
         fontName=_FONT_REGULAR, fontSize=9, leading=12,
-        textColor=SLATE_500, spaceAfter=3*mm, alignment=TA_LEFT,
+        textColor=SLATE_500, spaceAfter=2.5*mm, alignment=TA_LEFT,
     ))
     styles.add(ParagraphStyle(
         'SectionHeading', parent=styles['Heading2'],
-        fontName=_FONT_BOLD, fontSize=11, leading=14,
-        textColor=INDIGO_DARK, spaceBefore=4*mm, spaceAfter=2*mm,
+        fontName=_FONT_BOLD, fontSize=10.5, leading=13.5,
+        textColor=INDIGO_DARK, spaceBefore=3.5*mm, spaceAfter=2*mm,
         borderWidth=0, borderPadding=0,
     ))
     styles.add(ParagraphStyle(
         'SubHeading', parent=styles['Heading3'],
-        fontName=_FONT_BOLD, fontSize=9.5, leading=12,
+        fontName=_FONT_BOLD, fontSize=9, leading=11.5,
         textColor=SLATE_800, spaceBefore=2.5*mm, spaceAfter=1.5*mm,
     ))
     styles.add(ParagraphStyle(
         'BodyText2', parent=styles['Normal'],
-        fontName=_FONT_REGULAR, fontSize=8.5, leading=11.5,
-        textColor=SLATE_700, spaceAfter=2*mm,
+        fontName=_FONT_REGULAR, fontSize=8, leading=11,
+        textColor=SLATE_700, spaceAfter=1.5*mm,
         alignment=TA_JUSTIFY,
     ))
     styles.add(ParagraphStyle(
@@ -148,39 +148,59 @@ def _build_styles():
     ))
     styles.add(ParagraphStyle(
         'TableCell', parent=styles['Normal'],
-        fontName=_FONT_REGULAR, fontSize=7.5, leading=10,
+        fontName=_FONT_REGULAR, fontSize=7.5, leading=9.5,
         textColor=SLATE_700,
     ))
     styles.add(ParagraphStyle(
         'TableCellBold', parent=styles['Normal'],
-        fontName=_FONT_BOLD, fontSize=7.5, leading=10,
+        fontName=_FONT_BOLD, fontSize=7.5, leading=9.5,
         textColor=SLATE_800,
     ))
     styles.add(ParagraphStyle(
         'TableCellCenter', parent=styles['Normal'],
-        fontName=_FONT_REGULAR, fontSize=7.5, leading=10,
+        fontName=_FONT_REGULAR, fontSize=7.5, leading=9.5,
         textColor=SLATE_700, alignment=TA_CENTER,
     ))
     styles.add(ParagraphStyle(
         'TableCellBoldCenter', parent=styles['Normal'],
-        fontName=_FONT_BOLD, fontSize=7.5, leading=10,
+        fontName=_FONT_BOLD, fontSize=7.5, leading=9.5,
         textColor=SLATE_800, alignment=TA_CENTER,
+    ))
+    styles.add(ParagraphStyle(
+        'AttentionTitle', parent=styles['Normal'],
+        fontName=_FONT_BOLD, fontSize=8.5, leading=11,
+        textColor=SLATE_900,
+    ))
+    styles.add(ParagraphStyle(
+        'AttentionBody', parent=styles['Normal'],
+        fontName=_FONT_REGULAR, fontSize=7.5, leading=10,
+        textColor=SLATE_700,
+    ))
+    styles.add(ParagraphStyle(
+        'AttentionAction', parent=styles['Normal'],
+        fontName=_FONT_BOLD, fontSize=7.5, leading=10,
+        textColor=INDIGO_DARK,
     ))
     styles.add(ParagraphStyle(
         'Disclaimer', parent=styles['Normal'],
         fontName=_FONT_REGULAR, fontSize=7, leading=9,
         textColor=SLATE_600, spaceAfter=2*mm,
         alignment=TA_JUSTIFY, borderWidth=0.5, borderColor=SLATE_200,
-        borderPadding=5,
+        borderPadding=4,
+    ))
+    styles.add(ParagraphStyle(
+        'ScoreNote', parent=styles['Normal'],
+        fontName=_FONT_REGULAR, fontSize=7, leading=9,
+        textColor=SLATE_500, alignment=TA_CENTER,
     ))
     styles.add(ParagraphStyle(
         'ScoreText', parent=styles['Normal'],
-        fontName=_FONT_BOLD, fontSize=26, leading=30,
+        fontName=_FONT_BOLD, fontSize=24, leading=28,
         textColor=INDIGO_DARK, alignment=TA_CENTER,
     ))
     styles.add(ParagraphStyle(
         'StatusText', parent=styles['Normal'],
-        fontName=_FONT_BOLD, fontSize=12, leading=15,
+        fontName=_FONT_BOLD, fontSize=11.5, leading=14,
         alignment=TA_CENTER,
     ))
     styles.add(ParagraphStyle(
@@ -210,7 +230,7 @@ def _header_footer(canvas, doc):
 
     canvas.setFont(_FONT_REGULAR, 7)
     canvas.setFillColor(SLATE_400)
-    canvas.drawRightString(w - 15*mm, h - 10.5*mm, 'AI-Assisted Legal Metrology Compliance Dossier')
+    canvas.drawRightString(w - 15*mm, h - 10.5*mm, 'AI-Assisted Legal Metrology Compliance Screening')
 
     # Footer
     canvas.setStrokeColor(SLATE_200)
@@ -279,6 +299,7 @@ def generate_pdf_report(
     """
     Generate a professional multi-page PDF report from an existing AnalysisResponse in any of 10 languages.
     Returns the PDF as bytes.
+    Does NOT re-calculate scores or mutate analysis state.
     """
     effective_lang = target_language or language or lang or "en"
     canon_lang = normalize_language_code(effective_lang)
@@ -290,8 +311,8 @@ def generate_pdf_report(
     doc = SimpleDocTemplate(
         buf,
         pagesize=A4,
-        topMargin=18*mm,
-        bottomMargin=18*mm,
+        topMargin=16*mm,
+        bottomMargin=16*mm,
         leftMargin=15*mm,
         rightMargin=15*mm,
         title=f'MetrCheck AI Report — {analysis.product_name}',
@@ -299,34 +320,37 @@ def generate_pdf_report(
     )
 
     story = []
-    w_avail = A4[0] - 30*mm  # Available content width
+    w_avail = A4[0] - 30*mm  # 180mm Available content width
 
     cr = analysis.compliance_result
     product_info = analysis.product_info
     images_list = analysis.images or []
     recommendations = analysis.recommendations or (cr.recommendations if cr else []) or []
+    checks = cr.checks if cr else []
 
     # ══════════════════════════════════════════════════════════════
-    # PART I — EXECUTIVE SUMMARY & OVERVIEW
+    # SECTION 1 — HEADER & EXECUTIVE PRODUCT SUMMARY
     # ══════════════════════════════════════════════════════════════
-    story.append(Spacer(1, 2*mm))
+    story.append(Spacer(1, 1*mm))
     story.append(Paragraph('METRCHECK AI', styles['ReportTitle']))
     story.append(Paragraph(
-        ui_labels.get("report_title", 'Legal Metrology Compliance Screening Report'),
+        ui_labels.get("report_title", 'AI-Assisted Product Compliance Screening Report'),
         styles['ReportSubtitle']
     ))
 
     story.append(HRFlowable(
-        width='100%', thickness=1, color=INDIGO, spaceAfter=3*mm
+        width='100%', thickness=1.2, color=INDIGO, spaceAfter=2.5*mm
     ))
 
-    story.append(Paragraph(ui_labels.get("statutory_declarations", 'EXECUTIVE SUMMARY & ANALYSIS OVERVIEW'), styles['SectionHeading']))
+    story.append(Paragraph(
+        ui_labels.get("executive_summary", 'EXECUTIVE SUMMARY & PRODUCT OVERVIEW'),
+        styles['SectionHeading']
+    ))
 
-    # Metadata table
-    date_str = format_ist_datetime(analysis.created_at, '%d %B %Y, %H:%M')
+    date_str = format_ist_datetime(analysis.created_at, '%d %B %Y, %H:%M IST')
     generated_at_str = format_ist_datetime(get_current_ist_datetime(), '%d %B %Y, %H:%M IST')
 
-    # Detect packaging languages from analysis
+    # Detect packaging languages
     detected_lang_str = "English (Latin)"
     multi_meta = getattr(analysis, 'multilingual', None) or getattr(product_info, 'multilingual', None)
     if multi_meta and hasattr(multi_meta, 'detected_languages') and multi_meta.detected_languages:
@@ -334,38 +358,48 @@ def generate_pdf_report(
         detected_lang_str = ", ".join(parts)
 
     risk_lvl = "LOW"
-    if cr and cr.risk_assessment:
-        risk_lvl = cr.risk_assessment.risk_level.upper()
+    if cr and cr.risk_assessment and hasattr(cr.risk_assessment, 'risk_level'):
+        risk_lvl = str(cr.risk_assessment.risk_level).upper()
+
+    brand_val = product_info.brand if product_info else None
+
+    is_manual = (
+        getattr(product_info, 'extraction_mode', None) == 'manual'
+        or (analysis.ocr_result and getattr(analysis.ocr_result, 'engine', '') == 'Manual User Entry')
+        or not images_list
+    )
+    analysis_mode_label = ui_labels.get("manual_mode", "MANUAL PRODUCT CHECK") if is_manual else ui_labels.get("image_mode", "AI IMAGE & OCR SCREENING")
+    info_source_label = ui_labels.get("manual_source", "USER-PROVIDED PACKAGE DECLARATIONS") if is_manual else ui_labels.get("image_source", "PACKAGE ARTWORK OCR & COMPUTER VISION")
 
     meta_data = [
-        ['Analysis ID:', analysis.id],
-        ['Inspection Timestamp:', date_str],
-        ['Report Generated At:', generated_at_str],
-        [f'{ui_labels.get("product_name", "Product")}:', _safe_str(analysis.product_name, 'Unknown Product')],
-        ['Product Risk Tier:', f'{risk_lvl} RISK'],
-        ['Images Analyzed:', str(len(images_list))],
-        [f'{ui_labels.get("detected_languages", "Packaging Languages")}:', detected_lang_str]
+        [Paragraph(f'<b>{ui_labels.get("analysis_id", "Analysis ID")}:</b>', styles['TableCellBold']), Paragraph(str(analysis.id), styles['TableCell'])],
+        [Paragraph(f'<b>{ui_labels.get("analysis_mode", "Analysis Mode")}:</b>', styles['TableCellBold']), Paragraph(analysis_mode_label, styles['TableCell'])],
+        [Paragraph(f'<b>{ui_labels.get("info_source", "Information Source")}:</b>', styles['TableCellBold']), Paragraph(info_source_label, styles['TableCell'])],
+        [Paragraph(f'<b>{ui_labels.get("inspection_timestamp", "Inspection Timestamp")}:</b>', styles['TableCellBold']), Paragraph(date_str, styles['TableCell'])],
+        [Paragraph(f'<b>{ui_labels.get("generated_at", "Report Generated At")}:</b>', styles['TableCellBold']), Paragraph(generated_at_str, styles['TableCell'])],
+        [Paragraph(f'<b>{ui_labels.get("product_name", "Product")}:</b>', styles['TableCellBold']), Paragraph(_safe_str(analysis.product_name, 'Unknown Product'), styles['TableCell'])],
+        [Paragraph(f'<b>{ui_labels.get("brand", "Brand")}:</b>', styles['TableCellBold']), Paragraph(_safe_str(brand_val, 'Not detected'), styles['TableCell'])],
+        [Paragraph(f'<b>{ui_labels.get("product_risk_tier", "Product Risk Tier")}:</b>', styles['TableCellBold']), Paragraph(f'{localize_status(risk_lvl, canon_lang)}', styles['TableCell'])],
+        [Paragraph(f'<b>{ui_labels.get("images_analyzed", "Images Analyzed")}:</b>', styles['TableCellBold']), Paragraph(f'{len(images_list)} panel(s)' if images_list else f'0 ({analysis_mode_label})', styles['TableCell'])],
+        [Paragraph(f'<b>{ui_labels.get("detected_languages", "Packaging Languages")}:</b>', styles['TableCellBold']), Paragraph(detected_lang_str, styles['TableCell'])]
     ]
-    meta_table = Table(meta_data, colWidths=[44*mm, w_avail - 44*mm])
+    meta_table = Table(meta_data, colWidths=[45*mm, w_avail - 45*mm])
     meta_table.setStyle(TableStyle([
-        ('FONTNAME', (0, 0), (0, -1), _FONT_BOLD),
-        ('FONTNAME', (1, 0), (1, -1), _FONT_REGULAR),
-        ('FONTSIZE', (0, 0), (-1, -1), 8),
-        ('TEXTCOLOR', (0, 0), (0, -1), SLATE_600),
-        ('TEXTCOLOR', (1, 0), (1, -1), SLATE_800),
         ('VALIGN', (0, 0), (-1, -1), 'TOP'),
-        ('BOTTOMPADDING', (0, 0), (-1, -1), 2),
-        ('TOPPADDING', (0, 0), (-1, -1), 2),
+        ('BOTTOMPADDING', (0, 0), (-1, -1), 1.5),
+        ('TOPPADDING', (0, 0), (-1, -1), 1.5),
         ('LEFTPADDING', (0, 0), (-1, -1), 0),
         ('RIGHTPADDING', (0, 0), (-1, -1), 0),
     ]))
     story.append(meta_table)
-    story.append(Spacer(1, 3*mm))
+    story.append(Spacer(1, 2.5*mm))
 
-    # ── Screening Result Table ─────────────────────────────────────
+    # ══════════════════════════════════════════════════════════════
+    # SECTION 2 — OVERALL SCREENING RESULT & TRIAGE
+    # ══════════════════════════════════════════════════════════════
     score_val = cr.score if cr else 0.0
     status_val = cr.status if cr else "UNKNOWN"
-    fg, _ = _status_color(status_val)
+    fg, bg = _status_color(status_val)
     loc_status = localize_status(status_val, canon_lang)
 
     passed_cnt = cr.passed_rules if cr else 0
@@ -374,14 +408,14 @@ def generate_pdf_report(
     fail_cnt = cr.failed_rules if cr else 0
     na_cnt = cr.not_applicable_rules if cr else 0
 
+    bd_w = w_avail / 5.0
     breakdown_cells = [
-        Paragraph(f'<b>{passed_cnt}</b> {localize_status("PASS", canon_lang)}', styles['TableCellCenter']),
-        Paragraph(f'<b>{review_cnt}</b> {localize_status("NEEDS_REVIEW", canon_lang)}', styles['TableCellCenter']),
-        Paragraph(f'<b>{warn_cnt}</b> {localize_status("WARNING", canon_lang)}', styles['TableCellCenter']),
-        Paragraph(f'<b>{fail_cnt}</b> {localize_status("FAIL", canon_lang)}', styles['TableCellCenter']),
-        Paragraph(f'<b>{na_cnt}</b> {localize_status("NOT_APPLICABLE", canon_lang)}', styles['TableCellCenter']),
+        Paragraph(f'<b>{passed_cnt}</b><br/>{localize_status("PASS", canon_lang)}', styles['TableCellCenter']),
+        Paragraph(f'<b>{review_cnt}</b><br/>{localize_status("NEEDS_REVIEW", canon_lang)}', styles['TableCellCenter']),
+        Paragraph(f'<b>{warn_cnt}</b><br/>{localize_status("WARNING", canon_lang)}', styles['TableCellCenter']),
+        Paragraph(f'<b>{fail_cnt}</b><br/>{localize_status("FAIL", canon_lang)}', styles['TableCellCenter']),
+        Paragraph(f'<b>{na_cnt}</b><br/>{localize_status("NOT_APPLICABLE", canon_lang)}', styles['TableCellCenter']),
     ]
-    bd_w = (w_avail - 12*mm) / 5
     inner_breakdown = Table([breakdown_cells], colWidths=[bd_w]*5)
     inner_breakdown.setStyle(TableStyle([
         ('ALIGN', (0, 0), (-1, -1), 'CENTER'),
@@ -393,21 +427,31 @@ def generate_pdf_report(
         ('BACKGROUND', (4, 0), (4, 0), SLATE_100),
         ('BOX', (0, 0), (-1, -1), 0.5, SLATE_200),
         ('INNERGRID', (0, 0), (-1, -1), 0.5, SLATE_200),
-        ('TOPPADDING', (0, 0), (-1, -1), 2.5),
-        ('BOTTOMPADDING', (0, 0), (-1, -1), 2.5),
+        ('TOPPADDING', (0, 0), (-1, -1), 2),
+        ('BOTTOMPADDING', (0, 0), (-1, -1), 2),
     ]))
 
     card_header = Paragraph(
         f'<b>{ui_labels.get("overall_status", "STATUTORY COMPLIANCE SCREENING RESULT").upper()}</b>',
         ParagraphStyle(
             'CardHead', parent=styles['Normal'], fontName=_FONT_BOLD,
-            fontSize=9, leading=11, textColor=INDIGO_DARK, alignment=TA_CENTER
+            fontSize=8.5, leading=11, textColor=INDIGO_DARK, alignment=TA_CENTER
         )
     )
     score_para = Paragraph(
-        f'<b>{score_val}</b> <font size=12 color="{SLATE_500.hexval()}">/ 100</font>',
+        f'<b>{ui_labels.get("screening_score", "SCREENING SCORE")}: {score_val:.1f}</b> <font size=11 color="{SLATE_500.hexval()}">/ 100</font>',
         styles['ScoreText']
     )
+    if is_manual:
+        score_note_para = Paragraph(
+            f'<i>{ui_labels.get("manual_score_note", "This screening is based on declarations manually provided by the consumer. Some declaration information in this report was provided manually and was not independently verified against package artwork.")}</i>',
+            styles['ScoreNote']
+        )
+    else:
+        score_note_para = Paragraph(
+            f'<i>{ui_labels.get("automated_score_note", "This score is a weighted automated screening score across applicable checks. It is not an official legal compliance percentage or enforcement determination.")}</i>',
+            styles['ScoreNote']
+        )
     status_para = Paragraph(
         f'<b>{loc_status}</b>',
         ParagraphStyle('CardStat', parent=styles['StatusText'], textColor=fg)
@@ -415,8 +459,9 @@ def generate_pdf_report(
 
     card_table = Table([
         [card_header],
-        [score_para],
         [status_para],
+        [score_para],
+        [score_note_para],
         [inner_breakdown],
     ], colWidths=[w_avail])
     card_table.setStyle(TableStyle([
@@ -424,124 +469,139 @@ def generate_pdf_report(
         ('VALIGN', (0, 0), (-1, -1), 'MIDDLE'),
         ('BACKGROUND', (0, 0), (-1, -1), SLATE_50),
         ('BOX', (0, 0), (-1, -1), 1, INDIGO_LIGHT),
-        ('TOPPADDING', (0, 0), (0, 0), 4),
+        ('TOPPADDING', (0, 0), (0, 0), 3),
         ('BOTTOMPADDING', (0, 0), (0, 0), 2),
         ('TOPPADDING', (0, 1), (0, 1), 2),
         ('BOTTOMPADDING', (0, 1), (0, 1), 2),
         ('TOPPADDING', (0, 2), (0, 2), 2),
-        ('BOTTOMPADDING', (0, 2), (0, 2), 4),
-        ('TOPPADDING', (0, 3), (0, 3), 3),
-        ('BOTTOMPADDING', (0, 3), (0, 3), 5),
-        ('LEFTPADDING', (0, 0), (-1, -1), 4*mm),
-        ('RIGHTPADDING', (0, 0), (-1, -1), 4*mm),
+        ('BOTTOMPADDING', (0, 2), (0, 2), 1),
+        ('TOPPADDING', (0, 3), (0, 3), 1),
+        ('BOTTOMPADDING', (0, 3), (0, 3), 3),
+        ('TOPPADDING', (0, 4), (0, 4), 2),
+        ('BOTTOMPADDING', (0, 4), (0, 4), 3),
+        ('LEFTPADDING', (0, 0), (-1, -1), 3*mm),
+        ('RIGHTPADDING', (0, 0), (-1, -1), 3*mm),
     ]))
     story.append(card_table)
     story.append(Spacer(1, 2.5*mm))
 
     # ══════════════════════════════════════════════════════════════
-    # PACKAGE INFORMATION TABLE
+    # SECTION 3 — ATTENTION ITEMS & PLAIN LANGUAGE "WHAT THIS MEANS"
     # ══════════════════════════════════════════════════════════════
-    story.append(Paragraph(ui_labels.get("statutory_declarations", 'PACKAGE INFORMATION'), styles['SectionHeading']))
+    attention_checks = [
+        c for c in checks
+        if (c.status or '').upper() in ('NEEDS_REVIEW', 'WARNING', 'INSUFFICIENT_EVIDENCE', 'FAIL', 'NON_COMPLIANCE')
+    ]
+
+    if attention_checks:
+        story.append(Paragraph(ui_labels.get("items_requiring_attention", 'ITEMS REQUIRING ATTENTION & WHAT THIS MEANS'), styles['SectionHeading']))
+        for ac in attention_checks:
+            st_upper = (ac.status or 'NEEDS_REVIEW').upper()
+            fg_col, bg_col = _status_color(st_upper)
+            loc_st = localize_status(st_upper, canon_lang)
+            loc_lbl = localize_rule_label(ac.rule_id, canon_lang)
+            
+            # Plain explanation
+            loc_expl = localize_explanation(ac.rule_id, st_upper, ac.detected_value, canon_lang)
+            
+            # Evidence location
+            ev_loc = f"{ac.evidence_image_label or 'Package Artwork'}"
+            if ac.evidence_region:
+                ev_loc += f" → {ac.evidence_region}"
+
+            det_val_str = _safe_str(ac.detected_value, 'No declaration detected')
+
+            # Find matching recommendation if any
+            rec_match = next((r for r in recommendations if r.rule_id == ac.rule_id), None)
+            rec_action_text = rec_match.recommended_action if rec_match else "Verify physical packaging text against statutory requirements."
+
+            att_content = [
+                Paragraph(f'<b>{ac.rule_id} — {loc_lbl}</b> &nbsp;&nbsp; <font color="{fg_col.hexval()}">[{loc_st}]</font>', styles['AttentionTitle']),
+                Paragraph(f'<b>{ui_labels.get("detected", "Detected")}:</b> {det_val_str} &nbsp;|&nbsp; <b>{ui_labels.get("evidence", "Evidence")}:</b> {ev_loc}', styles['AttentionBody']),
+                Paragraph(f'<b>{ui_labels.get("what_this_means", "What this means")}:</b> {loc_expl}', styles['AttentionBody']),
+                Paragraph(f'<b>{ui_labels.get("recommended_check", "Recommended Check")}:</b> {rec_action_text}', styles['AttentionAction']),
+            ]
+
+            att_tbl = Table([[Paragraph(c, styles['AttentionBody']) if isinstance(c, str) else c] for c in att_content], colWidths=[w_avail])
+            att_tbl.setStyle(TableStyle([
+                ('BACKGROUND', (0, 0), (-1, -1), bg_col),
+                ('BOX', (0, 0), (-1, -1), 0.75, fg_col),
+                ('TOPPADDING', (0, 0), (-1, -1), 2),
+                ('BOTTOMPADDING', (0, 0), (-1, -1), 2),
+                ('LEFTPADDING', (0, 0), (-1, -1), 3*mm),
+                ('RIGHTPADDING', (0, 0), (-1, -1), 3*mm),
+            ]))
+            story.append(att_tbl)
+            story.append(Spacer(1, 1.8*mm))
+    else:
+        # All clean
+        all_pass_para = Paragraph(
+            f'<b>{ui_labels.get("all_pass_msg", "All statutory packaging declarations analyzed meet automated screening criteria. No items require immediate attention.")}</b>',
+            ParagraphStyle('AllPass', parent=styles['TableCellBoldCenter'], textColor=EMERALD)
+        )
+        all_pass_tbl = Table([[all_pass_para]], colWidths=[w_avail])
+        all_pass_tbl.setStyle(TableStyle([
+            ('BACKGROUND', (0, 0), (-1, -1), EMERALD_LIGHT),
+            ('BOX', (0, 0), (-1, -1), 0.75, EMERALD),
+            ('TOPPADDING', (0, 0), (-1, -1), 2.5),
+            ('BOTTOMPADDING', (0, 0), (-1, -1), 2.5),
+        ]))
+        story.append(all_pass_tbl)
+        story.append(Spacer(1, 2*mm))
+
+    # ══════════════════════════════════════════════════════════════
+    # SECTION 4 — PACKAGE INFORMATION SUMMARY
+    # ══════════════════════════════════════════════════════════════
+    story.append(Paragraph(ui_labels.get("package_information_summary", 'PACKAGE INFORMATION SUMMARY'), styles['SectionHeading']))
 
     pi = product_info
+    mrp_disp = _safe_str(pi.mrp if pi else None)
+    if pi and getattr(pi, 'unit_sale_price', None):
+        mrp_disp += f" (USP: {pi.unit_sale_price})"
+
     info_rows = [
-        ['Product Name', _safe_str(pi.product_name if pi else None)],
-        ['Brand', _safe_str(pi.brand if pi else None)],
-        ['Manufacturer / Packer', _safe_str(pi.manufacturer if pi else None)],
-        ['Marketed By', _safe_str(pi.marketed_by if pi else None)],
-        ['Net Quantity', _safe_str(pi.net_quantity if pi else None)],
-        ['MRP', _safe_str(pi.mrp if pi else None)],
-        ['Country of Origin', _safe_str(pi.country_of_origin if pi else None)],
-        ['FSSAI Licence No.', _safe_str(pi.fssai_license if pi else None)],
-        ['Manufacture Date', _safe_str((pi.manufacturing_date or pi.manufacture_date) if pi else None)],
-        ['Best Before', _safe_str((pi.best_before or pi.relative_shelf_life) if pi else None)],
-        ['Expiry / Use By', _safe_str((pi.expiry_date or pi.use_by_date) if pi else None)],
-        ['Batch Number', _safe_str(pi.batch_number if pi else None)],
-        ['Consumer Care', _safe_str(pi.consumer_care if pi else None)],
-        ['Ingredients', _safe_str(_truncate(pi.ingredients, 180) if (pi and pi.ingredients) else None)],
+        [ui_labels.get("product_name", "Product Name"), _safe_str(pi.product_name if pi else None)],
+        [ui_labels.get("brand", "Brand"), _safe_str(pi.brand if pi else None)],
+        [localize_rule_label("LM-001", canon_lang), _safe_str(pi.manufacturer if pi else None)],
+        [ui_labels.get("marketed_by", "Marketed By"), _safe_str(pi.marketed_by if pi else None)],
+        [localize_rule_label("LM-003", canon_lang), _safe_str(pi.net_quantity if pi else None)],
+        [localize_rule_label("LM-004", canon_lang), mrp_disp],
+        [localize_rule_label("LM-006", canon_lang), _safe_str(pi.country_of_origin if pi else None)],
+        [localize_rule_label("FS-001", canon_lang), _safe_str(pi.fssai_license if pi else None)],
+        [localize_rule_label("LM-008", canon_lang), _safe_str((pi.manufacturing_date or pi.manufacture_date) if pi else None)],
+        [ui_labels.get("best_before_shelf_life", "Best Before / Shelf Life"), _safe_str((pi.best_before or pi.relative_shelf_life) if pi else None)],
+        [localize_rule_label("FS-005", canon_lang), _safe_str((pi.expiry_date or pi.use_by_date) if pi else None)],
+        [ui_labels.get("batch_lot_number", "Batch / Lot Number"), _safe_str(pi.batch_number if pi else None)],
+        [localize_rule_label("LM-005", canon_lang), _safe_str(pi.consumer_care if pi else None)],
+        [localize_rule_label("FS-003", canon_lang), _safe_str(_truncate(pi.ingredients, 180) if (pi and pi.ingredients) else None)],
     ]
 
     info_table_data = []
     for label, val in info_rows:
         info_table_data.append([
-            Paragraph(f'<b>{label}</b>', styles['TableCell']),
+            Paragraph(f'<b>{label}</b>', styles['TableCellBold']),
             Paragraph(val, styles['TableCell']),
         ])
 
-    info_table = Table(info_table_data, colWidths=[44*mm, w_avail - 44*mm])
+    info_table = Table(info_table_data, colWidths=[48*mm, w_avail - 48*mm])
     info_table.setStyle(TableStyle([
         ('VALIGN', (0, 0), (-1, -1), 'TOP'),
         ('BACKGROUND', (0, 0), (0, -1), SLATE_50),
         ('GRID', (0, 0), (-1, -1), 0.4, SLATE_200),
-        ('TOPPADDING', (0, 0), (-1, -1), 1.8),
-        ('BOTTOMPADDING', (0, 0), (-1, -1), 1.8),
+        ('TOPPADDING', (0, 0), (-1, -1), 1.5),
+        ('BOTTOMPADDING', (0, 0), (-1, -1), 1.5),
         ('LEFTPADDING', (0, 0), (-1, -1), 3),
         ('RIGHTPADDING', (0, 0), (-1, -1), 3),
     ]))
     story.append(info_table)
     story.append(Spacer(1, 2.5*mm))
 
-    # ── Disclaimer ──
-    disclaimer_text = f"<b>Disclaimer:</b> {ui_labels.get('disclaimer', 'AI-assisted screening report generated for compliance auditing. Official enforcement decisions must be verified with physical packaging inspection.')}"
-    story.append(Paragraph(disclaimer_text, styles['Disclaimer']))
-
     # ══════════════════════════════════════════════════════════════
-    # PART II — HUMAN VERIFICATION & OFFICER WORKFLOW (SECTION 10)
-    # ══════════════════════════════════════════════════════════════
-    officer_rev = getattr(analysis, 'officer_review', None)
-    if officer_rev:
-        story.append(Spacer(1, 2*mm))
-        story.append(Paragraph('HUMAN OFFICER VERIFICATION & AUDIT REVIEW', styles['SectionHeading']))
-
-        rev_status = officer_rev.get('status', 'PENDING_REVIEW')
-        assigned_officer = officer_rev.get('assigned_officer') or 'Unassigned'
-        verified_by = officer_rev.get('verified_by') or '—'
-        verified_at = officer_rev.get('verified_at') or '—'
-        final_human_status = officer_rev.get('final_human_status') or 'Pending'
-        human_score = officer_rev.get('human_score')
-        human_score_str = f"{human_score:.1f} / 100" if human_score is not None else "Pending Verification"
-        
-        rev_rows = [
-            ['Review Workflow Status', rev_status],
-            ['Assigned Legal Metrology Officer', assigned_officer],
-            ['Verified By Officer', verified_by],
-            ['Verification Timestamp', verified_at],
-            ['Final Human Compliance Verdict', final_human_status],
-            ['Human Verified Score', human_score_str],
-            ['AI vs Human Score Delta', f"AI: {score_val:.1f}  →  Human: {human_score_str}" if human_score is not None else "Pending human verification"],
-        ]
-
-        # Check if comments exist
-        comments_list = officer_rev.get('comments', [])
-        if comments_list and isinstance(comments_list, list):
-            comment_texts = [f"[{c.get('officer_username', 'Officer')}]: {c.get('comment', '')}" for c in comments_list if isinstance(c, dict)]
-            if comment_texts:
-                rev_rows.append(['Officer Notes & Comments', "; ".join(comment_texts)])
-
-        rev_table_data = [
-            [Paragraph(f'<b>{lbl}</b>', styles['TableCellBold']), Paragraph(str(v), styles['TableCell'])]
-            for lbl, v in rev_rows
-        ]
-        rev_tbl = Table(rev_table_data, colWidths=[48*mm, w_avail - 48*mm])
-        rev_tbl.setStyle(TableStyle([
-            ('VALIGN', (0, 0), (-1, -1), 'TOP'),
-            ('BACKGROUND', (0, 0), (0, -1), SLATE_50),
-            ('GRID', (0, 0), (-1, -1), 0.4, SLATE_200),
-            ('TOPPADDING', (0, 0), (-1, -1), 2),
-            ('BOTTOMPADDING', (0, 0), (-1, -1), 2),
-            ('LEFTPADDING', (0, 0), (-1, -1), 3),
-            ('RIGHTPADDING', (0, 0), (-1, -1), 3),
-        ]))
-        story.append(rev_tbl)
-        story.append(Spacer(1, 2.5*mm))
-
-    # ══════════════════════════════════════════════════════════════
-    # PART III — TECHNICAL ASSESSMENT: RULE CHECKS & RULE 12
+    # SECTION 5 & 6 — STATUTORY COMPLIANCE CHECKLIST (LM & FSSAI)
     # ══════════════════════════════════════════════════════════════
     story.append(PageBreak())
-    story.append(Paragraph(ui_labels.get("rule_evaluations", 'STATUTORY COMPLIANCE CHECKLIST'), styles['SectionHeading']))
+    story.append(Paragraph(ui_labels.get("detailed_compliance_checklist", 'DETAILED STATUTORY COMPLIANCE CHECKLIST'), styles['SectionHeading']))
 
-    checks = cr.checks if cr else []
     lm_checks = [c for c in checks if (c.domain or '').upper() != 'FSSAI']
     fssai_checks = [c for c in checks if (c.domain or '').upper() == 'FSSAI']
 
@@ -553,11 +613,12 @@ def generate_pdf_report(
         elements.append(Paragraph(f'<b>{domain_label}</b>', styles['SubHeading']))
 
         header = [
-            Paragraph(f'<b>{ui_labels.get("field_header", "Rule / Field")}</b>', styles['TableCellBold']),
-            Paragraph(f'<b>Requirement</b>', styles['TableCellBold']),
+            Paragraph(f'<b>{ui_labels.get("field_header", "Rule ID")}</b>', styles['TableCellBoldCenter']),
+            Paragraph(f'<b>{ui_labels.get("requirement_header", "Statutory Requirement")}</b>', styles['TableCellBold']),
             Paragraph(f'<b>{ui_labels.get("status_header", "Status")}</b>', styles['TableCellBoldCenter']),
-            Paragraph(f'<b>{ui_labels.get("detected_value_header", "Detected Evidence")}</b>', styles['TableCellBold']),
-            Paragraph('<b>Confidence</b>', styles['TableCellBoldCenter']),
+            Paragraph(f'<b>{ui_labels.get("detected_value_header", "Detected Declaration")}</b>', styles['TableCellBold']),
+            Paragraph(f'<b>{ui_labels.get("confidence_header", "Confidence")}</b>', styles['TableCellBoldCenter']),
+            Paragraph(f'<b>{ui_labels.get("location_header", "Location")}</b>', styles['TableCellBold']),
         ]
         rows = [header]
 
@@ -570,49 +631,65 @@ def generate_pdf_report(
                 styles['TableCellCenter']
             )
 
-            det_val = _safe_str(c.detected_value, 'Not detected')
+            # Handle NOT_APPLICABLE text gracefully (never say 'Missing')
+            if status_str.upper() == 'NOT_APPLICABLE':
+                det_val = c.explanation or c.reason or 'Statutory exemption applies'
+            else:
+                det_val = _safe_str(c.detected_value, 'Not detected')
+
             conf = f'{round(c.confidence)}%' if c.confidence is not None else '—'
             loc_lbl = localize_rule_label(c.rule_id, canon_lang)
+            stat_cite = f"{c.source_name or ''} {c.source_reference or ''}".strip()
+            req_text = f"<b>{loc_lbl}</b>"
+            if stat_cite:
+                req_text += f"<br/><font size=6.5 color='{SLATE_500.hexval()}'>{stat_cite}</font>"
+
+            loc_text = c.evidence_image_label or "Package"
+            if c.evidence_region:
+                loc_text += f" ({c.evidence_region})"
 
             rows.append([
-                Paragraph(f'<b>{c.rule_id}</b>', styles['TableCell']),
-                Paragraph(_truncate(loc_lbl, 60), styles['TableCell']),
+                Paragraph(f'<b>{c.rule_id}</b>', styles['TableCellCenter']),
+                Paragraph(req_text, styles['TableCell']),
                 status_para,
-                Paragraph(_truncate(det_val, 80), styles['TableCell']),
+                Paragraph(_truncate(det_val, 70), styles['TableCell']),
                 Paragraph(conf, styles['TableCellCenter']),
+                Paragraph(_truncate(loc_text, 35), styles['TableCell']),
             ])
 
-        tbl = Table(rows, colWidths=[18*mm, 52*mm, 30*mm, 56*mm, 24*mm])
+        tbl = Table(rows, colWidths=[18*mm, 52*mm, 28*mm, 42*mm, 18*mm, 22*mm])
         tbl.setStyle(TableStyle([
             ('VALIGN', (0, 0), (-1, -1), 'TOP'),
             ('BACKGROUND', (0, 0), (-1, 0), INDIGO_LIGHT),
             ('GRID', (0, 0), (-1, -1), 0.4, SLATE_200),
-            ('TOPPADDING', (0, 0), (-1, -1), 2.5),
-            ('BOTTOMPADDING', (0, 0), (-1, -1), 2.5),
-            ('LEFTPADDING', (0, 0), (-1, -1), 2.5),
-            ('RIGHTPADDING', (0, 0), (-1, -1), 2.5),
+            ('TOPPADDING', (0, 0), (-1, -1), 2),
+            ('BOTTOMPADDING', (0, 0), (-1, -1), 2),
+            ('LEFTPADDING', (0, 0), (-1, -1), 2),
+            ('RIGHTPADDING', (0, 0), (-1, -1), 2),
             ('ROWBACKGROUNDS', (0, 1), (-1, -1), [WHITE, SLATE_50]),
         ]))
         elements.append(tbl)
-        elements.append(Spacer(1, 3*mm))
+        elements.append(Spacer(1, 2.5*mm))
         return elements
 
-    story.extend(_build_checks_table(lm_checks, 'LEGAL METROLOGY (PACKAGED COMMODITIES) RULES 2011'))
-    story.extend(_build_checks_table(fssai_checks, 'FSSAI (FOOD SAFETY & STANDARDS LABELLING)'))
+    story.extend(_build_checks_table(lm_checks, ui_labels.get("legal_metrology_title", 'LEGAL METROLOGY (PACKAGED COMMODITIES) RULES 2011')))
+    story.extend(_build_checks_table(fssai_checks, ui_labels.get("fssai_title", 'FSSAI (FOOD SAFETY & STANDARDS LABELLING REGULATIONS)')))
 
-    # ── Rule 12 Font Size & Readability Assessment ──
+    # ══════════════════════════════════════════════════════════════
+    # SECTION 7 — RULE 12 / PHYSICAL READABILITY & QUANTITY ASSESSMENT
+    # ══════════════════════════════════════════════════════════════
     if analysis.font_size_analysis:
-        story.append(Spacer(1, 2*mm))
-        story.append(Paragraph('RULE 12 FONT SIZE & READABILITY ASSESSMENT', styles['SubHeading']))
+        story.append(Spacer(1, 1*mm))
+        story.append(Paragraph(ui_labels.get("readability_title", 'PHYSICAL READABILITY & QUANTITY DECLARATION ASSESSMENT'), styles['SectionHeading']))
         fsa = analysis.font_size_analysis
         
         font_rows = [
-            ['Readability Score & Tier', f"{fsa.readability_score:.1f} / 100 ({fsa.readability_tier})"],
-            ['Estimated Net Qty Font Height', f"{fsa.net_quantity_font_height_mm} mm" if fsa.net_quantity_font_height_mm is not None else "N/A"],
-            ['Statutory Minimum Required (Rule 12 Table)', f"{fsa.min_required_font_height_mm} mm" if fsa.min_required_font_height_mm is not None else "N/A"],
-            ['Rule 12 Compliance Verdict', fsa.rule_12_verdict or "Compliant"],
-            ['Optical Calibration Scale', fsa.calibration_status or "PHYSICAL_MEASUREMENT_ESTIMATED"],
-            ['Assessment Details', fsa.details or "Font height meets or exceeds statutory requirements."],
+            [ui_labels.get("readability_score_tier", 'Visual Readability Score & Tier'), f"{fsa.readability_score:.1f} / 100 ({fsa.readability_tier})"],
+            [ui_labels.get("net_qty_font_height", 'Estimated Net Qty Character Height'), f"{fsa.net_quantity_font_height_mm} mm" if fsa.net_quantity_font_height_mm is not None else "N/A"],
+            [ui_labels.get("min_required_font_height", 'Statutory Minimum Required Height'), f"{fsa.min_required_font_height_mm} mm (Rule 12 Table-I)" if fsa.min_required_font_height_mm is not None else "N/A"],
+            [ui_labels.get("rule_12_verdict", 'Rule 12 Screening Verdict'), fsa.rule_12_verdict or "Compliant"],
+            [ui_labels.get("measurement_method", 'Measurement Method & Optical Scale'), fsa.calibration_status or "PHYSICAL_MEASUREMENT_ESTIMATED"],
+            [ui_labels.get("assessment_summary", 'Assessment Summary'), fsa.details or "Font height meets or exceeds statutory requirements."],
         ]
         font_tbl_data = [
             [Paragraph(f'<b>{lbl}</b>', styles['TableCellBold']), Paragraph(str(v), styles['TableCell'])]
@@ -623,32 +700,36 @@ def generate_pdf_report(
             ('VALIGN', (0, 0), (-1, -1), 'TOP'),
             ('BACKGROUND', (0, 0), (0, -1), SLATE_50),
             ('GRID', (0, 0), (-1, -1), 0.4, SLATE_200),
-            ('TOPPADDING', (0, 0), (-1, -1), 2),
-            ('BOTTOMPADDING', (0, 0), (-1, -1), 2),
+            ('TOPPADDING', (0, 0), (-1, -1), 1.8),
+            ('BOTTOMPADDING', (0, 0), (-1, -1), 1.8),
             ('LEFTPADDING', (0, 0), (-1, -1), 3),
             ('RIGHTPADDING', (0, 0), (-1, -1), 3),
         ]))
         story.append(font_tbl)
-        story.append(Spacer(1, 3*mm))
+        story.append(Spacer(1, 1.5*mm))
+
+        # Rule 12 limitation note
+        rule12_note = f"<b>Rule 12 Measurement Notice:</b> {ui_labels.get('rule12_notice', 'Estimated measurements are derived from digital image analysis and optical scale estimation. They should not be treated as a physically calibrated measurement certificate.')}"
+        story.append(Paragraph(rule12_note, styles['Disclaimer']))
+        story.append(Spacer(1, 2*mm))
 
     # ══════════════════════════════════════════════════════════════
-    # EXTERNAL VERIFICATION & CROSS-CHECKING (SECTION 13)
+    # SECTION 8 — EXTERNAL REGISTRY VERIFICATION (IF PRESENT)
     # ══════════════════════════════════════════════════════════════
     ext_ver = getattr(analysis, 'external_verification', None)
     if ext_ver:
-        story.append(Spacer(1, 2*mm))
-        story.append(Paragraph('EXTERNAL REGISTRY VERIFICATION & CROSS-CHECKING', styles['SectionHeading']))
+        story.append(Spacer(1, 1.5*mm))
+        story.append(Paragraph(ui_labels.get("external_verification_title", 'EXTERNAL REGISTRY VERIFICATION & CROSS-CHECKING'), styles['SectionHeading']))
         
-        ver_items = []
         conf_tier = ext_ver.confidence.tier.value if hasattr(ext_ver.confidence, 'tier') else "UNVERIFIED"
         conf_score = int(ext_ver.confidence.score * 100) if hasattr(ext_ver.confidence, 'score') else 0
         overall_st = ext_ver.overall_consistency_status.value if hasattr(ext_ver.overall_consistency_status, 'value') else str(ext_ver.overall_consistency_status)
         
         summary_rows = [
-            ['Overall Cross-Check Status', overall_st],
-            ['Verification Confidence Tier', f'{conf_tier} ({conf_score}%)'],
-            ['Authoritative Verdict', ext_ver.summary_verdict or 'Cross-referencing completed.'],
-            ['Verification Sources', ", ".join(ext_ver.verification_sources) if ext_ver.verification_sources else 'Local FoSCoS / GS1 Registry Adapters'],
+            [ui_labels.get("overall_cross_check_status", 'Overall Cross-Check Status'), overall_st],
+            [ui_labels.get("verification_confidence_tier", 'Verification Confidence Tier'), f'{conf_tier} ({conf_score}%)'],
+            [ui_labels.get("authoritative_verdict", 'Authoritative Verdict'), ext_ver.summary_verdict or 'Cross-referencing completed.'],
+            [ui_labels.get("verification_sources", 'Verification Sources'), ", ".join(ext_ver.verification_sources) if ext_ver.verification_sources else 'Local FoSCoS / GS1 Registry Adapters'],
         ]
         
         sum_table_data = [
@@ -660,21 +741,20 @@ def generate_pdf_report(
             ('VALIGN', (0, 0), (-1, -1), 'TOP'),
             ('BACKGROUND', (0, 0), (0, -1), SLATE_50),
             ('GRID', (0, 0), (-1, -1), 0.4, SLATE_200),
-            ('TOPPADDING', (0, 0), (-1, -1), 2),
-            ('BOTTOMPADDING', (0, 0), (-1, -1), 2),
+            ('TOPPADDING', (0, 0), (-1, -1), 1.8),
+            ('BOTTOMPADDING', (0, 0), (-1, -1), 1.8),
             ('LEFTPADDING', (0, 0), (-1, -1), 3),
             ('RIGHTPADDING', (0, 0), (-1, -1), 3),
         ]))
-        ver_items.append(sum_tbl)
-        ver_items.append(Spacer(1, 2*mm))
+        story.append(sum_tbl)
+        story.append(Spacer(1, 1.5*mm))
 
-        # Cross-checks field table
         if ext_ver.cross_checks:
             cc_headers = [
-                Paragraph('<b>Cross-Check Target</b>', styles['TableCellBold']),
-                Paragraph('<b>Extracted Value</b>', styles['TableCellBold']),
-                Paragraph('<b>Registry Record</b>', styles['TableCellBold']),
-                Paragraph('<b>Status</b>', styles['TableCellBoldCenter']),
+                Paragraph(f'<b>{ui_labels.get("cross_check_target", "Cross-Check Target")}</b>', styles['TableCellBold']),
+                Paragraph(f'<b>{ui_labels.get("extracted_value", "Extracted Value")}</b>', styles['TableCellBold']),
+                Paragraph(f'<b>{ui_labels.get("registry_record", "Registry Record")}</b>', styles['TableCellBold']),
+                Paragraph(f'<b>{ui_labels.get("status_header", "Status")}</b>', styles['TableCellBoldCenter']),
             ]
             cc_data = [cc_headers]
             for cc in ext_ver.cross_checks:
@@ -690,84 +770,77 @@ def generate_pdf_report(
                 ('VALIGN', (0, 0), (-1, -1), 'TOP'),
                 ('BACKGROUND', (0, 0), (-1, 0), INDIGO_LIGHT),
                 ('GRID', (0, 0), (-1, -1), 0.4, SLATE_200),
-                ('TOPPADDING', (0, 0), (-1, -1), 2),
-                ('BOTTOMPADDING', (0, 0), (-1, -1), 2),
+                ('TOPPADDING', (0, 0), (-1, -1), 1.8),
+                ('BOTTOMPADDING', (0, 0), (-1, -1), 1.8),
                 ('LEFTPADDING', (0, 0), (-1, -1), 2),
                 ('RIGHTPADDING', (0, 0), (-1, -1), 2),
                 ('ROWBACKGROUNDS', (0, 1), (-1, -1), [WHITE, SLATE_50]),
             ]))
-            ver_items.append(cc_tbl)
-
-        ver_items.append(Spacer(1, 3*mm))
-        story.append(KeepTogether(ver_items))
+            story.append(cc_tbl)
+            story.append(Spacer(1, 2*mm))
 
     # ══════════════════════════════════════════════════════════════
-    # PART IV — DETAILED STATUTORY FINDINGS & RULE VERSIONING
+    # SECTION 9 — OFFICER REVIEW (IF PRESENT)
     # ══════════════════════════════════════════════════════════════
-    story.append(Paragraph(ui_labels.get("finding_header", 'DETAILED STATUTORY FINDINGS & REGULATORY BASIS'), styles['SectionHeading']))
+    officer_rev = getattr(analysis, 'officer_review', None)
+    if officer_rev:
+        story.append(Spacer(1, 1.5*mm))
+        story.append(Paragraph(ui_labels.get("human_review_title", 'HUMAN OFFICER AUDIT REVIEW'), styles['SectionHeading']))
 
-    for c in checks:
-        status_str = c.status or 'UNKNOWN'
-        loc_st = localize_status(status_str, canon_lang)
-        loc_lbl = localize_rule_label(c.rule_id, canon_lang)
-        loc_expl = localize_explanation(c.rule_id, status_str, c.detected_value, canon_lang)
-
-        finding_items = []
-        finding_items.append(Paragraph(
-            f'<b>{c.rule_id}</b> — {loc_lbl}',
-            styles['SubHeading']
-        ))
-
-        detail_rows = [
-            ['Domain', (c.domain or 'LEGAL_METROLOGY').replace('_', ' ')],
-            [ui_labels.get("status_header", 'Status'), loc_st],
-            [ui_labels.get("detected_value_header", 'Detected Value'), _safe_str(c.detected_value, 'Not detected')],
-            ['Statutory Authority', f"{c.source_name or 'Legal Metrology Rules 2011'} {c.source_reference or ''}".strip()],
-            [ui_labels.get("finding_header", 'Finding'), loc_expl],
+        rev_status = officer_rev.get('status', 'PENDING_REVIEW')
+        assigned_officer = officer_rev.get('assigned_officer') or 'Unassigned'
+        verified_by = officer_rev.get('verified_by') or '—'
+        verified_at = officer_rev.get('verified_at') or '—'
+        final_human_status = officer_rev.get('final_human_status') or 'Pending'
+        human_score = officer_rev.get('human_score')
+        human_score_str = f"{human_score:.1f} / 100" if human_score is not None else "Pending Verification"
+        
+        rev_rows = [
+            [ui_labels.get("review_workflow_status", 'Review Workflow Status'), rev_status],
+            [ui_labels.get("assigned_officer", 'Assigned Legal Metrology Officer'), assigned_officer],
+            [ui_labels.get("verified_by_officer", 'Verified By Officer'), verified_by],
+            [ui_labels.get("verification_timestamp", 'Verification Timestamp'), verified_at],
+            [ui_labels.get("final_human_verdict", 'Final Human Compliance Verdict'), final_human_status],
+            [ui_labels.get("human_verified_score", 'Human Verified Score'), human_score_str],
+            [ui_labels.get("ai_vs_human_delta", 'AI vs Human Score Delta'), f"AI: {score_val:.1f}  →  Human: {human_score_str}" if human_score is not None else "Pending human verification"],
         ]
-        if c.rule_version:
-            detail_rows.append(['Rule Version', c.rule_version])
-        if c.confidence is not None:
-            detail_rows.append(['Confidence', f'{round(c.confidence)}%'])
-        if c.evidence_image_label or c.evidence_region:
-            loc = f'{c.evidence_image_label or "Package"} → {c.evidence_region or "label"}'
-            detail_rows.append(['Evidence Location', loc])
 
-        detail_table_data = []
-        for label, val in detail_rows:
-            detail_table_data.append([
-                Paragraph(f'<b>{label}</b>', styles['TableCell']),
-                Paragraph(str(val), styles['TableCell']),
-            ])
+        comments_list = officer_rev.get('comments', [])
+        if comments_list and isinstance(comments_list, list):
+            comment_texts = [f"[{c.get('officer_username', 'Officer')}]: {c.get('comment', '')}" for c in comments_list if isinstance(c, dict)]
+            if comment_texts:
+                rev_rows.append([ui_labels.get("officer_notes", 'Officer Notes & Comments'), "; ".join(comment_texts)])
 
-        dtbl = Table(detail_table_data, colWidths=[38*mm, w_avail - 38*mm])
-        dtbl.setStyle(TableStyle([
+        rev_table_data = [
+            [Paragraph(f'<b>{lbl}</b>', styles['TableCellBold']), Paragraph(str(v), styles['TableCell'])]
+            for lbl, v in rev_rows
+        ]
+        rev_tbl = Table(rev_table_data, colWidths=[48*mm, w_avail - 48*mm])
+        rev_tbl.setStyle(TableStyle([
             ('VALIGN', (0, 0), (-1, -1), 'TOP'),
             ('BACKGROUND', (0, 0), (0, -1), SLATE_50),
             ('GRID', (0, 0), (-1, -1), 0.4, SLATE_200),
-            ('TOPPADDING', (0, 0), (-1, -1), 2),
-            ('BOTTOMPADDING', (0, 0), (-1, -1), 2),
+            ('TOPPADDING', (0, 0), (-1, -1), 1.8),
+            ('BOTTOMPADDING', (0, 0), (-1, -1), 1.8),
             ('LEFTPADDING', (0, 0), (-1, -1), 3),
             ('RIGHTPADDING', (0, 0), (-1, -1), 3),
         ]))
-
-        finding_items.append(dtbl)
-        finding_items.append(Spacer(1, 3*mm))
-        story.append(KeepTogether(finding_items))
+        story.append(rev_tbl)
+        story.append(Spacer(1, 2*mm))
 
     # ══════════════════════════════════════════════════════════════
-    # PART V — RECOMMENDED CORRECTIVE ACTIONS & PRIORITY REMEDIATION
+    # SECTION 10 — RECOMMENDED ACTIONS (CONSUMER-FOCUSED)
     # ══════════════════════════════════════════════════════════════
+    story.append(PageBreak())
+    story.append(Paragraph(ui_labels.get("recommended_actions_title", 'RECOMMENDED NEXT STEPS & ACTIONS'), styles['SectionHeading']))
+
     if recommendations:
-        story.append(PageBreak())
-        story.append(Paragraph('RECOMMENDED CORRECTIVE ACTIONS & PRIORITY REMEDIATION', styles['SectionHeading']))
-
         rec_headers = [
-            Paragraph('<b>Priority</b>', styles['TableCellBoldCenter']),
-            Paragraph('<b>Rule ID & Title</b>', styles['TableCellBold']),
-            Paragraph('<b>Issue Description</b>', styles['TableCellBold']),
-            Paragraph('<b>Mandatory Corrective Action</b>', styles['TableCellBold']),
-            Paragraph('<b>Statutory Citation</b>', styles['TableCellBold']),
+            Paragraph(f'<b>{ui_labels.get("priority_header", "Priority")}</b>', styles['TableCellBoldCenter']),
+            Paragraph(f'<b>{ui_labels.get("rule_title_header", "Rule & Title")}</b>', styles['TableCellBold']),
+            Paragraph(f'<b>{ui_labels.get("issue_header", "Issue Identified")}</b>', styles['TableCellBold']),
+            Paragraph(f'<b>{ui_labels.get("recommended_action_header", "Recommended Action")}</b>', styles['TableCellBold']),
+            Paragraph(f'<b>{ui_labels.get("statutory_basis_header", "Statutory Basis")}</b>', styles['TableCellBold']),
         ]
         rec_rows = [rec_headers]
 
@@ -785,25 +858,38 @@ def generate_pdf_report(
                 Paragraph(legal_cite or 'Legal Metrology Rules 2011', styles['TableCell']),
             ])
 
-        rec_tbl = Table(rec_rows, colWidths=[20*mm, 38*mm, 42*mm, 52*mm, 28*mm])
+        rec_tbl = Table(rec_rows, colWidths=[20*mm, 40*mm, 48*mm, 48*mm, 24*mm])
         rec_tbl.setStyle(TableStyle([
             ('VALIGN', (0, 0), (-1, -1), 'TOP'),
             ('BACKGROUND', (0, 0), (-1, 0), INDIGO_LIGHT),
             ('GRID', (0, 0), (-1, -1), 0.4, SLATE_200),
-            ('TOPPADDING', (0, 0), (-1, -1), 2.5),
-            ('BOTTOMPADDING', (0, 0), (-1, -1), 2.5),
-            ('LEFTPADDING', (0, 0), (-1, -1), 2.5),
-            ('RIGHTPADDING', (0, 0), (-1, -1), 2.5),
+            ('TOPPADDING', (0, 0), (-1, -1), 2),
+            ('BOTTOMPADDING', (0, 0), (-1, -1), 2),
+            ('LEFTPADDING', (0, 0), (-1, -1), 2),
+            ('RIGHTPADDING', (0, 0), (-1, -1), 2),
             ('ROWBACKGROUNDS', (0, 1), (-1, -1), [WHITE, SLATE_50]),
         ]))
         story.append(rec_tbl)
-        story.append(Spacer(1, 3*mm))
+        story.append(Spacer(1, 2.5*mm))
+    else:
+        no_rec_para = Paragraph(
+            f'<b>{ui_labels.get("no_rec_msg", "No corrective actions required based on automated screening.")}</b>',
+            ParagraphStyle('NoRec', parent=styles['TableCellBoldCenter'], textColor=EMERALD)
+        )
+        no_rec_tbl = Table([[no_rec_para]], colWidths=[w_avail])
+        no_rec_tbl.setStyle(TableStyle([
+            ('BACKGROUND', (0, 0), (-1, -1), EMERALD_LIGHT),
+            ('BOX', (0, 0), (-1, -1), 0.75, EMERALD),
+            ('TOPPADDING', (0, 0), (-1, -1), 2.5),
+            ('BOTTOMPADDING', (0, 0), (-1, -1), 2.5),
+        ]))
+        story.append(no_rec_tbl)
+        story.append(Spacer(1, 2.5*mm))
 
     # ══════════════════════════════════════════════════════════════
-    # PART VI — VISUAL EVIDENCE APPENDIX & INTEGRITY DOSSIER
+    # SECTION 11 — VISUAL EVIDENCE APPENDIX
     # ══════════════════════════════════════════════════════════════
-    story.append(PageBreak())
-    story.append(Paragraph('VISUAL EVIDENCE APPENDIX & SYSTEM INTEGRITY DOSSIER', styles['SectionHeading']))
+    story.append(Paragraph(ui_labels.get("visual_evidence_title", 'VISUAL EVIDENCE APPENDIX'), styles['SectionHeading']))
 
     if images_list:
         for img_ev in images_list:
@@ -817,18 +903,27 @@ def generate_pdf_report(
                 styles['SubHeading']
             ))
 
-            rl_img = _load_image(img_url, max_width=w_avail * 0.85, max_height=85*mm)
+            rl_img = _load_image(img_url, max_width=w_avail * 0.85, max_height=80*mm)
             if rl_img:
                 img_items.append(rl_img)
             else:
                 img_items.append(Paragraph('<i>Image visual proof preview unavailable on this device</i>', styles['SmallText']))
 
-            img_items.append(Spacer(1, 2.5*mm))
+            img_items.append(Spacer(1, 2*mm))
             story.append(KeepTogether(img_items))
+    else:
+        no_img_para = Paragraph(
+            f'<i>{ui_labels.get("no_img_msg", "Package artwork was not submitted for this manual screening. Physical readability and optical measurements were not assessed.")}</i>',
+            styles['SmallText']
+        )
+        story.append(no_img_para)
+        story.append(Spacer(1, 2*mm))
 
-    # ── Tamper-Evident System Integrity & Audit Metadata ──
-    story.append(Spacer(1, 2*mm))
-    story.append(Paragraph('SECURITY, INTEGRITY & AUDIT PROVENANCE', styles['SubHeading']))
+    # ══════════════════════════════════════════════════════════════
+    # SECTION 12 — TECHNICAL PROVENANCE, INTEGRITY & DISCLAIMER
+    # ══════════════════════════════════════════════════════════════
+    story.append(Spacer(1, 1.5*mm))
+    story.append(Paragraph(ui_labels.get("security_integrity_title", 'SECURITY, INTEGRITY & AUDIT PROVENANCE'), styles['SectionHeading']))
 
     integrity_hash = analysis.integrity_hash or "SHA256-AUTHENTICATED-RECORD"
     system_ver = analysis.system_version or getattr(settings, 'SYSTEM_VERSION', '1.0.0')
@@ -836,12 +931,12 @@ def generate_pdf_report(
     ocr_engine = analysis.ocr_engine_version or 'PaddleOCR PP-OCRv4'
 
     integrity_rows = [
-        ['Cryptographic Integrity Hash (SHA-256)', integrity_hash],
-        ['System Software Version', f"MetrCheck AI v{system_ver}"],
-        ['Statutory Ruleset Version', f"Ruleset v{ruleset_ver} (Legal Metrology Act 2009 & 2011 Rules)"],
-        ['OCR & Vision Engine', ocr_engine],
-        ['Audit Verification Status', 'TAMPER-EVIDENT RECORD CERTIFIED'],
-        ['Verification Notice', 'This report hash is cryptographically verifiable against the system audit ledger.'],
+        [ui_labels.get("integrity_hash_label", 'Cryptographic Integrity Hash (SHA-256)'), integrity_hash],
+        [ui_labels.get("software_version_label", 'System Software Version'), f"MetrCheck AI v{system_ver}"],
+        [ui_labels.get("ruleset_version_label", 'Statutory Ruleset Version'), f"Ruleset v{ruleset_ver} (Legal Metrology Act 2009 & 2011 Rules)"],
+        [ui_labels.get("ocr_engine_label", 'OCR & Vision Engine'), ocr_engine],
+        [ui_labels.get("audit_status_label", 'Audit Verification Status'), 'TAMPER-EVIDENT RECORD CERTIFIED'],
+        [ui_labels.get("verification_notice_label", 'Verification Notice'), 'This report hash is cryptographically verifiable against the system audit ledger.'],
     ]
 
     int_table_data = [
@@ -853,13 +948,17 @@ def generate_pdf_report(
         ('VALIGN', (0, 0), (-1, -1), 'TOP'),
         ('BACKGROUND', (0, 0), (0, -1), SLATE_50),
         ('GRID', (0, 0), (-1, -1), 0.4, SLATE_200),
-        ('TOPPADDING', (0, 0), (-1, -1), 2),
-        ('BOTTOMPADDING', (0, 0), (-1, -1), 2),
+        ('TOPPADDING', (0, 0), (-1, -1), 1.8),
+        ('BOTTOMPADDING', (0, 0), (-1, -1), 1.8),
         ('LEFTPADDING', (0, 0), (-1, -1), 3),
         ('RIGHTPADDING', (0, 0), (-1, -1), 3),
     ]))
     story.append(int_tbl)
-    story.append(Spacer(1, 3*mm))
+    story.append(Spacer(1, 2*mm))
+
+    # Standard Legal Disclaimer
+    disclaimer_text = f"<b>Legal Disclaimer:</b> {ui_labels.get('legal_disclaimer', ui_labels.get('disclaimer', 'MetrCheck AI provides AI-assisted packaging compliance screening based on the images submitted for analysis. Results may require physical verification and should not be treated as an official enforcement determination.'))}"
+    story.append(Paragraph(disclaimer_text, styles['Disclaimer']))
 
     # Build document
     doc.build(story, onFirstPage=_header_footer, onLaterPages=_header_footer)

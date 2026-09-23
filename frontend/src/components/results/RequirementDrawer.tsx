@@ -4,6 +4,7 @@ import { type ComplianceCheck } from '../../types';
 import Drawer from '../ui/Drawer';
 import StatusBadge from '../ui/StatusBadge';
 import ConfidenceBar from '../ui/ConfidenceBar';
+import { useLanguage } from '../../context/LanguageContext';
 
 interface RequirementDrawerProps {
   check: ComplianceCheck | null;
@@ -16,8 +17,10 @@ const RequirementDrawer: React.FC<RequirementDrawerProps> = ({
   onClose,
   onViewEvidence,
 }) => {
+  const { t } = useLanguage();
+
   return (
-    <Drawer open={check !== null} onClose={onClose} title="Requirement Details">
+    <Drawer open={check !== null} onClose={onClose} title={t('results.requirement_details')}>
       {check && (
         <div className="flex flex-col h-full">
           <div className="p-6 space-y-6 flex-1 overflow-y-auto">
@@ -34,15 +37,15 @@ const RequirementDrawer: React.FC<RequirementDrawerProps> = ({
             </div>
 
             <section>
-              <h4 className="text-xs font-bold uppercase tracking-wider text-slate-500 mb-2">Detected Value</h4>
+              <h4 className="text-xs font-bold uppercase tracking-wider text-slate-500 mb-2">{t('results.detected_value')}</h4>
               <div className="p-4 bg-slate-50 dark:bg-slate-800 rounded-lg border border-slate-200 dark:border-slate-700 text-slate-900 dark:text-slate-100 font-medium break-words">
-                {check.detected_value || <span className="italic text-slate-400">Not reliably detected</span>}
+                {check.detected_value || <span className="italic text-slate-400">{t('results.not_reliably_detected')}</span>}
               </div>
             </section>
 
             {check.explanation && (
               <section>
-                <h4 className="text-xs font-bold uppercase tracking-wider text-slate-500 mb-2">Analysis Explanation</h4>
+                <h4 className="text-xs font-bold uppercase tracking-wider text-slate-500 mb-2">{t('results.analysis_explanation')}</h4>
                 <p className="text-sm text-slate-700 dark:text-slate-300">
                   {check.explanation}
                 </p>
@@ -51,13 +54,13 @@ const RequirementDrawer: React.FC<RequirementDrawerProps> = ({
 
             {check.confidence !== undefined && check.confidence !== null && (
               <section>
-                <h4 className="text-xs font-bold uppercase tracking-wider text-slate-500 mb-2">Detection Confidence</h4>
-                <ConfidenceBar value={check.confidence} label="Confidence" />
+                <h4 className="text-xs font-bold uppercase tracking-wider text-slate-500 mb-2">{t('results.detection_confidence')}</h4>
+                <ConfidenceBar value={check.confidence} label={t('results.confidence')} />
               </section>
             )}
 
             <section>
-              <h4 className="text-xs font-bold uppercase tracking-wider text-slate-500 mb-2">Legal Basis</h4>
+              <h4 className="text-xs font-bold uppercase tracking-wider text-slate-500 mb-2">{t('results.legal_basis')}</h4>
               <div className="bg-indigo-50 dark:bg-indigo-900/10 border border-indigo-100 dark:border-indigo-900/30 rounded-lg p-4">
                 <div className="flex items-start gap-2">
                   <Shield className="w-5 h-5 text-indigo-600 dark:text-indigo-400 shrink-0 mt-0.5" />
@@ -83,7 +86,7 @@ const RequirementDrawer: React.FC<RequirementDrawerProps> = ({
               className="w-full flex items-center justify-center gap-2 py-2.5 px-4 bg-indigo-600 hover:bg-indigo-700 text-white rounded-lg font-medium transition-colors cursor-pointer"
             >
               <Search className="w-4 h-4" />
-              Inspect Evidence
+              {t('results.inspect_evidence')}
             </button>
             {check.source_url && (
               <a
@@ -93,7 +96,7 @@ const RequirementDrawer: React.FC<RequirementDrawerProps> = ({
                 className="w-full flex items-center justify-center gap-2 py-2.5 px-4 bg-white dark:bg-slate-800 border border-slate-300 dark:border-slate-700 hover:bg-slate-50 dark:hover:bg-slate-700 text-slate-700 dark:text-slate-200 rounded-lg font-medium transition-colors cursor-pointer"
               >
                 <ExternalLink className="w-4 h-4" />
-                View Legal Source
+                {t('results.view_legal_source')}
               </a>
             )}
           </div>

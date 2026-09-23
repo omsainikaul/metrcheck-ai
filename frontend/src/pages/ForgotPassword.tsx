@@ -1,5 +1,5 @@
 import { useState, type FormEvent } from 'react';
-import { Link, useNavigate } from 'react-router-dom';
+import { Link } from 'react-router-dom';
 import { 
   ShieldCheck, 
   KeyRound, 
@@ -10,17 +10,15 @@ import {
   Sparkles, 
   CheckCircle2, 
   AlertCircle,
-  HelpCircle,
-  ExternalLink
+  HelpCircle
 } from 'lucide-react';
 import { api } from '../services/api';
 
 export default function ForgotPassword() {
-  const navigate = useNavigate();
   const [identifier, setIdentifier] = useState('');
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
-  const [successResponse, setSuccessResponse] = useState<{ message: string; dev_token?: string } | null>(null);
+  const [successResponse, setSuccessResponse] = useState<{ message: string } | null>(null);
 
   const handleSubmit = async (e: FormEvent) => {
     e.preventDefault();
@@ -92,30 +90,6 @@ export default function ForgotPassword() {
                 </p>
               </div>
 
-              {/* Dev / Test Mode token helper for automated & manual testing verification */}
-              {successResponse.dev_token && (
-                <div className="p-4 rounded-2xl bg-indigo-950/60 border border-indigo-500/30 space-y-2.5">
-                  <div className="flex items-center justify-between text-[11px] font-bold text-indigo-300 uppercase tracking-wider">
-                    <span className="flex items-center gap-1.5">
-                      <Sparkles className="w-3.5 h-3.5 text-amber-300" />
-                      Dev / Test Environment Helper
-                    </span>
-                    <span className="text-[10px] text-indigo-400 font-mono">15m Expiry</span>
-                  </div>
-                  <p className="text-xs text-slate-300">
-                    A single-use token was issued. You can immediately open the reset interface:
-                  </p>
-                  <button
-                    type="button"
-                    onClick={() => navigate(`/reset-password?token=${encodeURIComponent(successResponse.dev_token!)}`)}
-                    className="w-full py-2.5 px-3 rounded-xl bg-indigo-600 hover:bg-indigo-500 text-white text-xs font-bold transition-colors flex items-center justify-center gap-2 cursor-pointer shadow-md shadow-indigo-600/30"
-                  >
-                    <span>Open Reset Password Interface</span>
-                    <ExternalLink className="w-3.5 h-3.5" />
-                  </button>
-                </div>
-              )}
-
               <div className="pt-2">
                 <Link
                   to="/login"
@@ -127,6 +101,7 @@ export default function ForgotPassword() {
               </div>
             </div>
           ) : (
+
             <form onSubmit={handleSubmit} className="space-y-4">
               <div>
                 <label className="block text-xs font-medium text-slate-400 mb-1.5">

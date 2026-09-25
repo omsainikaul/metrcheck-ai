@@ -124,6 +124,13 @@ export function getDefaultWorkspaceForRole(role?: string | null): WorkspaceType 
   return 'USER';
 }
 
+export function getWorkspaceStorageKey(username?: string | null): string {
+  if (username && username.trim()) {
+    return `metrcheck-active-workspace-${username.trim()}`;
+  }
+  return WORKSPACE_STORAGE_KEY;
+}
+
 const WorkspaceContext = createContext<WorkspaceContextType | undefined>(undefined);
 
 export function WorkspaceProvider({ children }: { children: ReactNode }) {
@@ -140,9 +147,6 @@ export function WorkspaceProvider({ children }: { children: ReactNode }) {
   }, [user]);
 
   const [currentWorkspace, setCurrentWorkspaceState] = useState<WorkspaceType>(() => {
-    // Initialize to 'USER' (neutral, accessible to all roles) before auth resolves.
-    // The useEffect below corrects this to the role's proper workspace once auth loads.
-    // This prevents non-enforcement users from seeing a flash of the ENFORCEMENT workspace.
     try {
       const saved = localStorage.getItem(WORKSPACE_STORAGE_KEY) as WorkspaceType | null;
       if (saved && (saved in WORKSPACE_DEFINITIONS)) {
@@ -154,17 +158,25 @@ export function WorkspaceProvider({ children }: { children: ReactNode }) {
     return 'USER';
   });
 
-  // Ensure active workspace is always in allowedWorkspaces when auth state loads/changes
+  // Ensure active workspace is always in allowedWorkspaces and properly synchronized with user role
   useEffect(() => {
     if (loading) return;
     
     try {
-      const saved = localStorage.getItem(WORKSPACE_STORAGE_KEY) as WorkspaceType | null;
-      if (saved && allowedWorkspaces.includes(saved)) {
-        setCurrentWorkspaceState(saved);
+      const userKey = getWorkspaceStorageKey(user?.username);
+      if (user) {
+        const saved = localStorage.getItem(userKey) as WorkspaceType | null;
+        if (saved && allowedWorkspaces.includes(saved)) {
+          setCurrentWorkspaceState(saved);
+          localStorage.setItem(WORKSPACE_STORAGE_KEY, saved);
+        } else {
+          setCurrentWorkspaceState(defaultWorkspace);
+          localStorage.setItem(userKey, defaultWorkspace);
+          localStorage.setItem(WORKSPACE_STORAGE_KEY, defaultWorkspace);
+        }
       } else {
-        setCurrentWorkspaceState(defaultWorkspace);
-        localStorage.setItem(WORKSPACE_STORAGE_KEY, defaultWorkspace);
+        // Logged out / unauthenticated state
+        setCurrentWorkspaceState('USER');
       }
     } catch {
       setCurrentWorkspaceState(defaultWorkspace);
@@ -182,6 +194,8 @@ export function WorkspaceProvider({ children }: { children: ReactNode }) {
     }
     setCurrentWorkspaceState(ws);
     try {
+      const userKey = getWorkspaceStorageKey(user?.username);
+      localStorage.setItem(userKey, ws);
       localStorage.setItem(WORKSPACE_STORAGE_KEY, ws);
     } catch {
       // Ignore

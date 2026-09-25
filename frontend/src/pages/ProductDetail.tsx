@@ -17,6 +17,7 @@ import {
   type ProductHistoryItem, 
   type ProductArtworkSummary 
 } from '../types';
+import { useLanguage } from '../context/LanguageContext';
 import StatusBadge from '../components/ui/StatusBadge';
 import LoadingSkeleton from '../components/ui/LoadingSkeleton';
 import EmptyState from '../components/ui/EmptyState';
@@ -25,6 +26,7 @@ import { formatAnalysisDateTime } from '../utils/datetime';
 export default function ProductDetail() {
   const { productId } = useParams<{ productId: string }>();
   const navigate = useNavigate();
+  const { t } = useLanguage();
 
   const [summary, setSummary] = useState<ProductComplianceSummary | null>(null);
   const [historyItems, setHistoryItems] = useState<ProductHistoryItem[]>([]);
@@ -72,16 +74,16 @@ export default function ProductDetail() {
           <AlertTriangle className="w-6 h-6" />
         </div>
         <h2 className="text-lg font-bold text-slate-900 dark:text-slate-100">
-          Product Not Found
+          {t('merchant.product_detail.not_found_title')}
         </h2>
         <p className="text-xs sm:text-sm text-slate-500 dark:text-slate-400">
-          {error || 'The requested product SKU record does not exist or you do not have permission to view it.'}
+          {error || t('merchant.product_detail.not_found_desc')}
         </p>
         <button
           onClick={() => navigate('/products')}
           className="px-4 py-2 bg-sky-600 hover:bg-sky-700 text-white rounded-xl text-xs font-semibold transition-colors cursor-pointer"
         >
-          Return to Product Catalog
+          {t('merchant.product_detail.return_catalog')}
         </button>
       </div>
     );
@@ -111,11 +113,11 @@ export default function ProductDetail() {
                   ? 'bg-emerald-50 dark:bg-emerald-950/60 text-emerald-700 dark:text-emerald-300 border-emerald-200 dark:border-emerald-800'
                   : 'bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-400 border-slate-200 dark:border-slate-700'
               }`}>
-                {product.status}
+                {product.status === 'ACTIVE' ? t('merchant.status.active') : t('merchant.status.archived')}
               </span>
             </div>
             <p className="text-xs sm:text-sm text-slate-500 dark:text-slate-400 mt-0.5">
-              {product.brand_name ? `Brand: ${product.brand_name} • ` : ''}Category: {product.category || 'GENERAL'} • GTIN: {product.gtin_barcode || '—'}
+              {product.brand_name ? `${t('merchant.products.brand_label')}: ${product.brand_name} • ` : ''}{t('merchant.products.table.category')}: {product.category ? (t(`merchant.categories.${product.category}`) || product.category) : t('merchant.categories.GENERAL')} • {t('merchant.products.table.gtin')}: {product.gtin_barcode || '—'}
             </p>
           </div>
         </div>
@@ -123,25 +125,27 @@ export default function ProductDetail() {
         {/* Quick Execution Actions */}
         <div className="flex items-center gap-2 flex-wrap">
           <button
-            onClick={() => navigate('/analyze')}
+            onClick={() => navigate(`/analyze?productId=${product.id}`, { state: { productId: product.id, productName: product.product_name } })}
             className="inline-flex items-center gap-1.5 px-3.5 py-2 bg-sky-600 hover:bg-sky-700 text-white rounded-xl text-xs font-bold transition-all shadow-sm cursor-pointer"
+            title={t('sku_workflow.scan_packaging_for_sku')}
           >
             <ScanSearch className="w-4 h-4" />
-            <span>Scan Package Label</span>
+            <span>{t('sku_workflow.scan_packaging_for_sku')}</span>
           </button>
           <button
-            onClick={() => navigate('/preprint')}
+            onClick={() => navigate(`/preprint?productId=${product.id}`, { state: { productId: product.id, productName: product.product_name } })}
             className="inline-flex items-center gap-1.5 px-3.5 py-2 bg-indigo-600 hover:bg-indigo-700 text-white rounded-xl text-xs font-bold transition-all shadow-sm cursor-pointer"
+            title={t('sku_workflow.upload_artwork_for_sku')}
           >
             <Printer className="w-4 h-4" />
-            <span>Upload Pre-Print Artwork</span>
+            <span>{t('sku_workflow.upload_artwork_for_sku')}</span>
           </button>
           <button
             onClick={() => navigate(`/products/${product.id}/edit`)}
             className="inline-flex items-center gap-1.5 px-3 py-2 bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 hover:bg-slate-50 dark:hover:bg-slate-700 text-slate-700 dark:text-slate-200 rounded-xl text-xs font-semibold transition-colors cursor-pointer shadow-sm"
           >
             <Edit3 className="w-3.5 h-3.5" />
-            <span>Edit Record</span>
+            <span>{t('merchant.product_detail.edit_record')}</span>
           </button>
         </div>
       </div>
@@ -149,7 +153,7 @@ export default function ProductDetail() {
       {/* Compliance Overview KPI Banner */}
       <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
         <div className="p-4 rounded-xl bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 shadow-2xs">
-          <span className="text-[11px] font-semibold text-slate-500 dark:text-slate-400 uppercase tracking-wider">Latest Score</span>
+          <span className="text-[11px] font-semibold text-slate-500 dark:text-slate-400 uppercase tracking-wider">{t('merchant.product_detail.latest_score')}</span>
           <div className="flex items-baseline gap-2 mt-1">
             <span className={`text-2xl font-bold font-mono ${
               summary.latest_score >= 90 ? 'text-emerald-600 dark:text-emerald-400' :
@@ -166,37 +170,37 @@ export default function ProductDetail() {
         </div>
 
         <div className="p-4 rounded-xl bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 shadow-2xs">
-          <span className="text-[11px] font-semibold text-slate-500 dark:text-slate-400 uppercase tracking-wider">Physical Scans</span>
+          <span className="text-[11px] font-semibold text-slate-500 dark:text-slate-400 uppercase tracking-wider">{t('merchant.product_detail.physical_scans')}</span>
           <p className="text-2xl font-bold text-slate-900 dark:text-slate-100 mt-1">
             {summary.total_scans}
           </p>
           <p className="text-[10px] text-slate-400 mt-1">
-            {summary.latest_scan ? `Last scan: ${formatAnalysisDateTime(summary.latest_scan.created_at)}` : 'No scans yet'}
+            {summary.latest_scan ? t('merchant.product_detail.last_scan', { time: formatAnalysisDateTime(summary.latest_scan.created_at) }) : t('merchant.product_detail.no_scans_yet')}
           </p>
         </div>
 
         <div className="p-4 rounded-xl bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 shadow-2xs">
-          <span className="text-[11px] font-semibold text-slate-500 dark:text-slate-400 uppercase tracking-wider">Packaging Artworks</span>
+          <span className="text-[11px] font-semibold text-slate-500 dark:text-slate-400 uppercase tracking-wider">{t('merchant.product_detail.packaging_artworks')}</span>
           <p className="text-2xl font-bold text-slate-900 dark:text-slate-100 mt-1">
             {summary.total_artworks}
           </p>
           <p className="text-[10px] text-slate-400 mt-1">
-            {summary.latest_artwork ? `Ver ${summary.latest_artwork.iteration_number} (${summary.latest_artwork.workflow_status})` : 'No artworks yet'}
+            {summary.latest_artwork ? `Ver ${summary.latest_artwork.iteration_number} (${summary.latest_artwork.workflow_status})` : t('merchant.product_detail.no_artworks_yet')}
           </p>
         </div>
 
         <div className="p-4 rounded-xl bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 shadow-2xs">
-          <span className="text-[11px] font-semibold text-slate-500 dark:text-slate-400 uppercase tracking-wider">Findings Severity</span>
+          <span className="text-[11px] font-semibold text-slate-500 dark:text-slate-400 uppercase tracking-wider">{t('merchant.product_detail.findings_severity')}</span>
           <div className="flex items-center gap-3 mt-1.5">
             <div className="flex items-center gap-1">
               <XCircle className="w-4 h-4 text-red-500" />
               <span className="text-sm font-bold text-red-600 dark:text-red-400">{summary.critical_findings_count}</span>
-              <span className="text-[10px] text-slate-400">Critical</span>
+              <span className="text-[10px] text-slate-400">{t('merchant.product_detail.critical')}</span>
             </div>
             <div className="flex items-center gap-1">
               <AlertTriangle className="w-4 h-4 text-amber-500" />
               <span className="text-sm font-bold text-amber-600 dark:text-amber-400">{summary.review_findings_count}</span>
-              <span className="text-[10px] text-slate-400">Review</span>
+              <span className="text-[10px] text-slate-400">{t('merchant.product_detail.review')}</span>
             </div>
           </div>
         </div>
@@ -213,7 +217,7 @@ export default function ProductDetail() {
           }`}
         >
           <ScanSearch className="w-4 h-4" />
-          <span>Physical Label Scans ({historyItems.length})</span>
+          <span>{t('merchant.product_detail.tab_scans', { count: historyItems.length })}</span>
         </button>
 
         <button
@@ -225,7 +229,7 @@ export default function ProductDetail() {
           }`}
         >
           <Printer className="w-4 h-4" />
-          <span>Pre-Print Artworks ({artworks.length})</span>
+          <span>{t('merchant.product_detail.tab_artworks', { count: artworks.length })}</span>
         </button>
 
         <button
@@ -237,7 +241,7 @@ export default function ProductDetail() {
           }`}
         >
           <Scale className="w-4 h-4" />
-          <span>Master Declarations</span>
+          <span>{t('merchant.product_detail.tab_declarations')}</span>
         </button>
       </div>
 
@@ -250,11 +254,11 @@ export default function ProductDetail() {
                 <table className="w-full text-left text-sm border-collapse">
                   <thead>
                     <tr className="bg-slate-50 dark:bg-slate-800/60 border-b border-slate-200 dark:border-slate-800 text-[11px] font-bold text-slate-500 dark:text-slate-400 uppercase tracking-wider">
-                      <th className="py-3 px-4 font-semibold">Scan Date &amp; Time</th>
-                      <th className="py-3 px-4 font-semibold">Compliance Score</th>
-                      <th className="py-3 px-4 font-semibold">Verdict</th>
-                      <th className="py-3 px-4 font-semibold">Integrity Hash</th>
-                      <th className="py-3 px-4 text-right font-semibold">Action</th>
+                      <th className="py-3 px-4 font-semibold">{t('merchant.product_detail.col_scan_date')}</th>
+                      <th className="py-3 px-4 font-semibold">{t('merchant.product_detail.col_score')}</th>
+                      <th className="py-3 px-4 font-semibold">{t('merchant.product_detail.col_verdict')}</th>
+                      <th className="py-3 px-4 font-semibold">{t('merchant.product_detail.col_integrity')}</th>
+                      <th className="py-3 px-4 text-right font-semibold">{t('merchant.products.table.actions')}</th>
                     </tr>
                   </thead>
                   <tbody className="divide-y divide-slate-100 dark:divide-slate-800/60">
@@ -287,7 +291,7 @@ export default function ProductDetail() {
                             onClick={(e) => { e.stopPropagation(); navigate(`/results/${item.id}`); }}
                             className="text-xs font-semibold text-sky-600 dark:text-sky-400 hover:underline cursor-pointer"
                           >
-                            View Audit Report &rarr;
+                            {t('merchant.product_detail.view_audit_report')}
                           </button>
                         </td>
                       </tr>
@@ -300,10 +304,10 @@ export default function ProductDetail() {
             <div className="p-8 bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-xl">
               <EmptyState
                 icon={ScanSearch}
-                title="No physical label scans recorded yet."
-                description="Upload images of the physical manufactured product to verify statutory text, font sizes, and mandatory declarations."
-                actionLabel="Run First Scan"
-                onAction={() => navigate('/analyze')}
+                title={t('merchant.product_detail.no_scans_title')}
+                description={t('merchant.product_detail.no_scans_desc')}
+                actionLabel={t('sku_workflow.scan_packaging_for_sku')}
+                onAction={() => navigate(`/analyze?productId=${product.id}`, { state: { productId: product.id, productName: product.product_name } })}
               />
             </div>
           )}
@@ -319,12 +323,12 @@ export default function ProductDetail() {
                 <table className="w-full text-left text-sm border-collapse">
                   <thead>
                     <tr className="bg-slate-50 dark:bg-slate-800/60 border-b border-slate-200 dark:border-slate-800 text-[11px] font-bold text-slate-500 dark:text-slate-400 uppercase tracking-wider">
-                      <th className="py-3 px-4 font-semibold">Artwork File</th>
-                      <th className="py-3 px-4 font-semibold">Iteration #</th>
-                      <th className="py-3 px-4 font-semibold">Workflow Status</th>
-                      <th className="py-3 px-4 font-semibold">Approval</th>
-                      <th className="py-3 px-4 font-semibold">Upload Date</th>
-                      <th className="py-3 px-4 text-right font-semibold">Action</th>
+                      <th className="py-3 px-4 font-semibold">{t('merchant.product_detail.col_artwork_file')}</th>
+                      <th className="py-3 px-4 font-semibold">{t('merchant.product_detail.col_iteration')}</th>
+                      <th className="py-3 px-4 font-semibold">{t('merchant.product_detail.col_workflow_status')}</th>
+                      <th className="py-3 px-4 font-semibold">{t('merchant.product_detail.col_approval')}</th>
+                      <th className="py-3 px-4 font-semibold">{t('merchant.product_detail.col_upload_date')}</th>
+                      <th className="py-3 px-4 text-right font-semibold">{t('merchant.products.table.actions')}</th>
                     </tr>
                   </thead>
                   <tbody className="divide-y divide-slate-100 dark:divide-slate-800/60">
@@ -366,7 +370,7 @@ export default function ProductDetail() {
                             onClick={() => navigate('/preprint')}
                             className="text-xs font-semibold text-indigo-600 dark:text-indigo-400 hover:underline cursor-pointer"
                           >
-                            Open Pre-Print Hub &rarr;
+                            {t('merchant.product_detail.open_preprint_hub')}
                           </button>
                         </td>
                       </tr>
@@ -379,10 +383,10 @@ export default function ProductDetail() {
             <div className="p-8 bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-xl">
               <EmptyState
                 icon={Printer}
-                title="No pre-print packaging artworks uploaded."
-                description="Validate high-resolution packaging PDFs or dieline graphics before initiating printing runs to eliminate regulatory packaging waste."
-                actionLabel="Upload Pre-Print Artwork"
-                onAction={() => navigate('/preprint')}
+                title={t('merchant.product_detail.no_artworks_title')}
+                description={t('merchant.product_detail.no_artworks_desc')}
+                actionLabel={t('sku_workflow.upload_artwork_for_sku')}
+                onAction={() => navigate(`/preprint?productId=${product.id}`, { state: { productId: product.id, productName: product.product_name } })}
               />
             </div>
           )}
@@ -396,24 +400,24 @@ export default function ProductDetail() {
             <div className="flex items-center gap-2 pb-2 border-b border-slate-100 dark:border-slate-800">
               <Scale className="w-4 h-4 text-sky-600 dark:text-sky-400" />
               <h3 className="text-xs font-bold text-slate-900 dark:text-slate-100 uppercase tracking-wider">
-                Legal Metrology Rule 6 Parameters
+                {t('merchant.product_detail.rule6_title')}
               </h3>
             </div>
             <div className="space-y-2 text-xs">
               <div className="flex justify-between py-1 border-b border-slate-50 dark:border-slate-800/40">
-                <span className="text-slate-500 dark:text-slate-400">Declared Net Quantity</span>
-                <span className="font-semibold text-slate-800 dark:text-slate-200">{product.net_quantity_declared || 'Not declared'}</span>
+                <span className="text-slate-500 dark:text-slate-400">{t('merchant.product_new.field_net_qty')}</span>
+                <span className="font-semibold text-slate-800 dark:text-slate-200">{product.net_quantity_declared || t('merchant.product_detail.not_declared')}</span>
               </div>
               <div className="flex justify-between py-1 border-b border-slate-50 dark:border-slate-800/40">
-                <span className="text-slate-500 dark:text-slate-400">Declared Maximum Retail Price (MRP)</span>
-                <span className="font-semibold text-slate-800 dark:text-slate-200">{product.mrp_declared ? `₹${product.mrp_declared.toFixed(2)}` : 'Not declared'}</span>
+                <span className="text-slate-500 dark:text-slate-400">{t('merchant.product_new.field_mrp')}</span>
+                <span className="font-semibold text-slate-800 dark:text-slate-200">{product.mrp_declared ? `₹${product.mrp_declared.toFixed(2)}` : t('merchant.product_detail.not_declared')}</span>
               </div>
               <div className="flex justify-between py-1 border-b border-slate-50 dark:border-slate-800/40">
-                <span className="text-slate-500 dark:text-slate-400">Unit Sale Price (USP)</span>
-                <span className="font-semibold text-slate-800 dark:text-slate-200">{product.unit_sale_price_declared || 'Not declared'}</span>
+                <span className="text-slate-500 dark:text-slate-400">{t('merchant.product_new.field_usp')}</span>
+                <span className="font-semibold text-slate-800 dark:text-slate-200">{product.unit_sale_price_declared || t('merchant.product_detail.not_declared')}</span>
               </div>
               <div className="flex justify-between py-1">
-                <span className="text-slate-500 dark:text-slate-400">Country of Origin</span>
+                <span className="text-slate-500 dark:text-slate-400">{t('merchant.product_new.field_origin')}</span>
                 <span className="font-semibold text-slate-800 dark:text-slate-200">{product.country_of_origin || 'India'}</span>
               </div>
             </div>
@@ -423,20 +427,20 @@ export default function ProductDetail() {
             <div className="flex items-center gap-2 pb-2 border-b border-slate-100 dark:border-slate-800">
               <Building2 className="w-4 h-4 text-sky-600 dark:text-sky-400" />
               <h3 className="text-xs font-bold text-slate-900 dark:text-slate-100 uppercase tracking-wider">
-                Manufacturing &amp; Regulatory Licensure
+                {t('merchant.product_detail.licensure_title')}
               </h3>
             </div>
             <div className="space-y-2 text-xs">
               <div className="py-1 border-b border-slate-50 dark:border-slate-800/40">
-                <span className="text-slate-500 dark:text-slate-400 block mb-0.5">Manufacturer / Packer Name &amp; Address</span>
-                <span className="font-medium text-slate-800 dark:text-slate-200">{product.manufacturer_name || 'Not provided'}</span>
+                <span className="text-slate-500 dark:text-slate-400 block mb-0.5">{t('merchant.product_detail.mfg_address')}</span>
+                <span className="font-medium text-slate-800 dark:text-slate-200">{product.manufacturer_name || t('merchant.product_detail.not_provided')}</span>
               </div>
               <div className="flex justify-between py-1 border-b border-slate-50 dark:border-slate-800/40">
-                <span className="text-slate-500 dark:text-slate-400">FSSAI License</span>
+                <span className="text-slate-500 dark:text-slate-400">{t('merchant.product_detail.fssai_license')}</span>
                 <span className="font-mono font-semibold text-slate-800 dark:text-slate-200">{product.fssai_license || '—'}</span>
               </div>
               <div className="flex justify-between py-1">
-                <span className="text-slate-500 dark:text-slate-400">Legal Metrology Registration No.</span>
+                <span className="text-slate-500 dark:text-slate-400">{t('merchant.product_detail.lm_license')}</span>
                 <span className="font-mono font-semibold text-slate-800 dark:text-slate-200">{product.legal_metrology_license || '—'}</span>
               </div>
             </div>

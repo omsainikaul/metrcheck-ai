@@ -24,6 +24,31 @@ from version import SYSTEM_VERSION, OCR_PIPELINE_VERSION, COMPLIANCE_RULESET_VER
 
 logger = logging.getLogger(__name__)
 
+QUALIFYING_REVIEW_STATUSES = {
+    "REVIEW REQUIRED",
+    "POTENTIAL NON-COMPLIANCE",
+    "FAIL",
+    "NON_COMPLIANT",
+    "NEEDS_REVIEW"
+}
+
+async def _auto_ingest_officer_review(analysis_id: str, compliance_status: str):
+    """
+    Phase A-01.3: Automatically incepts an officer review task in PENDING_REVIEW state
+    for qualifying compliance verdicts (REVIEW REQUIRED, POTENTIAL NON-COMPLIANCE, FAIL),
+    preserving the immutable AI snapshot and tenant organization boundaries.
+    Idempotent: will not create duplicate reviews if one already exists.
+    """
+    if not analysis_id:
+        return
+    st = str(compliance_status or "").strip().upper()
+    if st in QUALIFYING_REVIEW_STATUSES:
+        try:
+            from services.review_service import get_or_create_review
+            await get_or_create_review(analysis_id)
+        except Exception as rev_err:
+            logger.warning(f"[REVIEW INGESTION] Could not auto-create officer review for {analysis_id}: {rev_err}")
+
 async def analyze_products(
     files: List[UploadFile],
     labels: Optional[List[str]] = None,
@@ -240,6 +265,7 @@ async def analyze_products(
         'ruleset_version': COMPLIANCE_RULESET_VERSION,
     }
     await save_analysis(db_data)
+    await _auto_ingest_officer_review(analysis_id, compliance_result.status)
     t_db = (time.perf_counter() - t_db0) * 1000
     logger.info(f"[PERF] DB Save: {t_db:.1f} ms")
 
@@ -371,6 +397,7 @@ async def analyze_text(
         'ruleset_version': COMPLIANCE_RULESET_VERSION,
     }
     await save_analysis(db_data)
+    await _auto_ingest_officer_review(analysis_id, compliance_result.status)
     
     return AnalysisResponse(
         id=analysis_id,
@@ -537,6 +564,7 @@ async def analyze_manual(
         'ruleset_version': COMPLIANCE_RULESET_VERSION,
     }
     await save_analysis(db_data)
+    await _auto_ingest_officer_review(analysis_id, compliance_result.status)
 
     return AnalysisResponse(
         id=analysis_id,

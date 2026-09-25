@@ -1,8 +1,9 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import { ImageIcon, Layers } from 'lucide-react';
 import { type ProductImageEvidence } from '../../types';
 import { api } from '../../services/api';
 import { useLanguage } from '../../context/LanguageContext';
+import { getLocalizedPanelName, isFrontPanel } from '../../utils/panelHelper';
 
 interface PackagePreviewProps {
   images: ProductImageEvidence[];
@@ -17,29 +18,68 @@ const PackagePreview: React.FC<PackagePreviewProps> = ({
   const { t } = useLanguage();
   const [selectedIndex, setSelectedIndex] = useState<number>(0);
   const [imgSrcMap, setImgSrcMap] = useState<Record<number, string>>({});
+  const [imgLoadingMap, setImgLoadingMap] = useState<Record<number, boolean>>({});
   const [imgErrors, setImgErrors] = useState<Record<number, boolean>>({});
+  const createdBlobUrlsRef = useRef<Set<string>>(new Set());
 
   // Ensure selectedIndex is within bounds
   const activeIndex = selectedIndex >= 0 && selectedIndex < images.length ? selectedIndex : 0;
   const activeImage = images[activeIndex] || images[0];
 
+  // Load authenticated image blobs for all images
   useEffect(() => {
     let isCancelled = false;
-    if (activeImage?.image_url && !imgSrcMap[activeIndex]) {
-      api.fetchImageBlobUrl(activeImage.image_url).then((resolvedUrl) => {
-        if (!isCancelled && resolvedUrl) {
-          setImgSrcMap(prev => ({ ...prev, [activeIndex]: resolvedUrl }));
-        }
-      }).catch(() => {
-        if (!isCancelled) {
-          setImgSrcMap(prev => ({ ...prev, [activeIndex]: api.getAssetUrl(activeImage.image_url) }));
-        }
-      });
-    }
+
+    images.forEach((img, idx) => {
+      if (!img?.image_url) return;
+
+      if (img.image_url.startsWith('data:') || img.image_url.startsWith('blob:')) {
+        setImgSrcMap(prev => ({ ...prev, [idx]: img.image_url }));
+        setImgLoadingMap(prev => ({ ...prev, [idx]: false }));
+        setImgErrors(prev => ({ ...prev, [idx]: false }));
+        return;
+      }
+
+      if (!imgSrcMap[idx]) {
+        setImgLoadingMap(prev => ({ ...prev, [idx]: true }));
+        api.fetchImageBlobUrl(img.image_url)
+          .then((resolvedUrl) => {
+            if (!isCancelled && resolvedUrl) {
+              if (resolvedUrl.startsWith('blob:')) {
+                createdBlobUrlsRef.current.add(resolvedUrl);
+              }
+              setImgSrcMap(prev => ({ ...prev, [idx]: resolvedUrl }));
+              setImgLoadingMap(prev => ({ ...prev, [idx]: false }));
+              setImgErrors(prev => ({ ...prev, [idx]: false }));
+            }
+          })
+          .catch(() => {
+            if (!isCancelled) {
+              setImgErrors(prev => ({ ...prev, [idx]: true }));
+              setImgLoadingMap(prev => ({ ...prev, [idx]: false }));
+            }
+          });
+      }
+    });
+
     return () => {
       isCancelled = true;
     };
-  }, [activeImage?.image_url, activeIndex, imgSrcMap]);
+  }, [images]);
+
+  // Clean up object URLs on unmount
+  useEffect(() => {
+    return () => {
+      createdBlobUrlsRef.current.forEach(url => {
+        try {
+          URL.revokeObjectURL(url);
+        } catch {
+          // ignore
+        }
+      });
+      createdBlobUrlsRef.current.clear();
+    };
+  }, []);
 
   if (!images || images.length === 0) {
     return (
@@ -55,10 +95,12 @@ const PackagePreview: React.FC<PackagePreviewProps> = ({
     );
   }
 
-  const isImageBroken = imgErrors[activeIndex] || !activeImage?.image_url;
-  const currentDisplaySrc = imgSrcMap[activeIndex] || api.getAssetUrl(activeImage.image_url);
+  const currentDisplaySrc = imgSrcMap[activeIndex];
+  const isCurrentLoading = Boolean(imgLoadingMap[activeIndex]) && !currentDisplaySrc;
+  const isImageBroken = Boolean(imgErrors[activeIndex]) || (!isCurrentLoading && !currentDisplaySrc && !activeImage?.image_url);
 
-  const isFront = (activeImage?.label || '').toLowerCase().includes('front') || activeIndex === 0;
+  const activePanelLocalized = getLocalizedPanelName(activeImage?.label, activeIndex, t);
+  const isFront = isFrontPanel(activeImage?.label, activeIndex);
 
   return (
     <div className="bg-white dark:bg-slate-900 rounded-2xl border border-slate-200/90 dark:border-slate-800 shadow-2xs overflow-hidden mb-6 transition-all">
@@ -89,10 +131,20 @@ const PackagePreview: React.FC<PackagePreviewProps> = ({
       {/* Main Image Display Box */}
       <div className="p-4 sm:p-6 flex flex-col items-center">
         <div className="w-full max-w-xl min-h-[220px] max-h-[380px] bg-slate-950/5 dark:bg-slate-950/60 rounded-xl border border-slate-200/80 dark:border-slate-800 flex items-center justify-center p-3 relative overflow-hidden group">
-          {!isImageBroken ? (
+          {isCurrentLoading ? (
+            <div className="flex flex-col items-center justify-center text-slate-400 dark:text-slate-500 py-12 space-y-3">
+              <div className="w-8 h-8 border-2 border-indigo-500 border-t-transparent rounded-full animate-spin" />
+              <span className="text-xs font-semibold text-slate-600 dark:text-slate-300">
+                {t('results.loading_preview', { defaultValue: 'Loading package preview...' })}
+              </span>
+              <span className="text-[11px] text-slate-400 font-mono">
+                {activePanelLocalized}
+              </span>
+            </div>
+          ) : currentDisplaySrc && !isImageBroken ? (
             <img
               src={currentDisplaySrc}
-              alt={`${productName} - ${activeImage.label || 'Package'}`}
+              alt={`${productName} - ${activePanelLocalized}`}
               className="max-h-[340px] w-auto max-w-full object-contain mx-auto rounded-lg shadow-xs transition-transform duration-200 group-hover:scale-[1.01]"
               loading="eager"
               onError={() => {
@@ -103,7 +155,9 @@ const PackagePreview: React.FC<PackagePreviewProps> = ({
             <div className="flex flex-col items-center justify-center text-slate-400 dark:text-slate-500 py-10 space-y-2">
               <ImageIcon className="w-10 h-10 stroke-[1.5]" />
               <span className="text-xs font-semibold">{t('results.preview_unavailable', { defaultValue: 'Package image preview unavailable' })}</span>
-              <span className="text-[11px] text-slate-400">{t('common.panel', { defaultValue: 'Panel' })}: {activeImage?.label || `Panel ${activeIndex + 1}`}</span>
+              <span className="text-[11px] text-slate-400">
+                {t('common.panel', { defaultValue: 'Panel' })}: {activePanelLocalized}
+              </span>
             </div>
           )}
         </div>
@@ -112,7 +166,7 @@ const PackagePreview: React.FC<PackagePreviewProps> = ({
         <div className="mt-3.5 text-center space-y-1">
           <div className="flex items-center justify-center gap-2">
             <h4 className="font-bold text-sm text-slate-900 dark:text-slate-100">
-              {activeImage.label || `Panel ${activeIndex + 1}`}
+              {activePanelLocalized}
             </h4>
             <span className="text-[10px] font-semibold px-2 py-0.5 rounded-full bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-400 border border-slate-200 dark:border-slate-700">
               {isFront ? t('results.primary_package_view', { defaultValue: 'Primary package view' }) : t('results.secondary_package_view', { defaultValue: 'Secondary package view' })}
@@ -133,6 +187,7 @@ const PackagePreview: React.FC<PackagePreviewProps> = ({
             </span>
             {images.map((img, idx) => {
               const isSelected = activeIndex === idx;
+              const panelLabel = getLocalizedPanelName(img.label, idx, t);
               return (
                 <button
                   key={idx}
@@ -146,7 +201,7 @@ const PackagePreview: React.FC<PackagePreviewProps> = ({
                   aria-pressed={isSelected}
                 >
                   <ImageIcon className="w-3.5 h-3.5" />
-                  <span>{img.label || `Panel ${idx + 1}`}</span>
+                  <span>{panelLabel}</span>
                   {img.word_count ? (
                     <span className={`text-[10px] font-mono px-1.5 py-0.2 rounded-full ${
                       isSelected ? 'bg-indigo-500 text-white' : 'bg-slate-200 dark:bg-slate-700 text-slate-600 dark:text-slate-300'
@@ -165,4 +220,3 @@ const PackagePreview: React.FC<PackagePreviewProps> = ({
 };
 
 export default PackagePreview;
-

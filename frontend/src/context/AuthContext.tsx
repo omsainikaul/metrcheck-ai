@@ -80,6 +80,11 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
   const logout = () => {
     tokenStore.clear();
+    try {
+      localStorage.removeItem('metrcheck-active-workspace');
+    } catch {
+      // Ignore
+    }
     setToken(null);
     setUser(null);
   };

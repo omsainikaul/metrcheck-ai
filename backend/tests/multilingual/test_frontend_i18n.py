@@ -274,6 +274,7 @@ def test_analyze_package_keys_in_all_locales():
             val = resolve_key(data, key)
             assert val is not None and len(val.strip()) > 0, f'Analyze key {key} missing in locale {lang}'
 
+
 def test_analyze_page_has_no_listing_text_mode():
     analyze_file = Path(__file__).resolve().parent.parent.parent.parent / 'frontend' / 'src' / 'pages' / 'Analyze.tsx'
     assert analyze_file.exists(), 'Analyze.tsx must exist'
@@ -282,5 +283,84 @@ def test_analyze_page_has_no_listing_text_mode():
     assert 'SAMPLE_LISTING_TEXT' not in content, 'Analyze.tsx must not contain listing sample text constant'
     assert 'handleAnalyzeText' not in content, 'Analyze.tsx must not contain text handler'
     assert '<span>Listing Text</span>' not in content, 'Analyze.tsx must not render Listing Text button'
+
+
+def test_merchant_workspace_keys_and_localization_in_all_locales():
+    critical_merchant_keys = [
+        'merchant.dashboard.subtitle',
+        'merchant.dashboard.add_product_sku',
+        'merchant.dashboard.scan_package_label',
+        'merchant.dashboard.preprint_artworks',
+        'merchant.dashboard.active_skus',
+        'merchant.dashboard.checks_screened',
+        'merchant.dashboard.attention_required',
+        'merchant.dashboard.managed_sku_catalog',
+        'merchant.dashboard.view_full_catalog',
+        'merchant.dashboard.no_products_catalog',
+        'merchant.dashboard.register_first_sku',
+        'merchant.categories.GENERAL',
+        'merchant.categories.FOOD_BEVERAGES',
+        'merchant.categories.COSMETICS',
+        'merchant.categories.ELECTRONICS',
+        'merchant.categories.PHARMACEUTICALS',
+        'merchant.categories.HOUSEHOLD',
+        'merchant.categories.APPAREL',
+        'merchant.categories.all',
+        'merchant.status.active',
+        'merchant.status.archived',
+        'merchant.status.all',
+        'merchant.products.title',
+        'merchant.products.subtitle',
+        'merchant.products.add_new_sku',
+        'merchant.products.search_placeholder',
+        'merchant.products.table.sku_info',
+        'merchant.products.table.category',
+        'merchant.products.table.gtin',
+        'merchant.products.table.mrp_qty',
+        'merchant.products.table.status',
+        'merchant.products.table.registered',
+        'merchant.products.table.actions',
+        'merchant.products.brand_label',
+        'merchant.products.qty_label',
+        'merchant.products.active_skus',
+        'merchant.products.screened_checks',
+        'merchant.products.attention_required',
+        'merchant.products.preprint_artworks',
+        'merchant.product_new.title',
+        'merchant.product_new.subtitle',
+        'merchant.product_new.sec_identity',
+        'merchant.product_new.sec_declarations',
+        'merchant.product_new.sec_licensure',
+        'merchant.product_new.btn_save',
+        'merchant.product_edit.title',
+        'merchant.product_edit.btn_update',
+        'merchant.product_detail.return_catalog',
+        'merchant.product_detail.edit_record',
+        'merchant.product_detail.tab_scans',
+        'merchant.product_detail.tab_artworks',
+        'merchant.product_detail.tab_declarations',
+        'merchant.business_profile.title',
+        'merchant.business_profile.verified_brand',
+        'merchant.business_profile.tenant_isolation',
+        'merchant.preprint.studio_title',
+        'merchant.preprint.upload_artwork',
+        'merchant.version_comparison.studio_title',
+        'merchant.version_comparison.run_comparison',
+        'merchant.listing_check.title',
+        'merchant.listing_check.run_check',
+    ]
+
+    en_data = load_locale('en')
+    for lang in SUPPORTED_LANGUAGES:
+        data = load_locale(lang)
+        for key in critical_merchant_keys:
+            val = resolve_key(data, key)
+            assert val is not None and len(val.strip()) > 0, f'Merchant key {key} missing in locale {lang}'
+            if lang != 'en':
+                en_val = resolve_key(en_data, key)
+                # Ensure the translation is authentic regional language, not verbatim English
+                if len(en_val) > 4:
+                    assert val != en_val, f'Merchant key {key} in locale {lang} is identical to English: "{val}"'
+
 
 

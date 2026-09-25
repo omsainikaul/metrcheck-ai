@@ -19,9 +19,11 @@ import {
   type ReviewStatus 
 } from '../types';
 import { useAuth } from '../context/AuthContext';
+import { useLanguage } from '../context/LanguageContext';
 
 export default function OfficerDashboard() {
   const { user } = useAuth();
+  const { t } = useLanguage();
   const navigate = useNavigate();
 
   const [summary, setSummary] = useState<OfficerDashboardSummary | null>(null);
@@ -75,7 +77,7 @@ export default function OfficerDashboard() {
       setAssignComments('');
       await loadData();
     } catch (err: any) {
-      alert(err.message || 'Failed to assign review.');
+      alert(err.message || t('audit_review.modal_assign.error_fallback'));
     } finally {
       setAssigning(false);
     }
@@ -116,25 +118,25 @@ export default function OfficerDashboard() {
   const getStatusBadge = (st: ReviewStatus) => {
     switch (st) {
       case 'PENDING_REVIEW':
-        return <span className="px-2.5 py-1 text-xs font-semibold rounded-full bg-amber-500/10 text-amber-400 border border-amber-500/20">Pending Review</span>;
+        return <span className="px-2.5 py-1 text-xs font-semibold rounded-full bg-amber-500/10 text-amber-400 border border-amber-500/20">{t('audit_review.badges.pending_review')}</span>;
       case 'ASSIGNED':
-        return <span className="px-2.5 py-1 text-xs font-semibold rounded-full bg-blue-500/10 text-blue-400 border border-blue-500/20">Assigned</span>;
+        return <span className="px-2.5 py-1 text-xs font-semibold rounded-full bg-blue-500/10 text-blue-400 border border-blue-500/20">{t('audit_review.badges.assigned')}</span>;
       case 'IN_REVIEW':
-        return <span className="px-2.5 py-1 text-xs font-semibold rounded-full bg-indigo-500/10 text-indigo-400 border border-indigo-500/20">In Review</span>;
+        return <span className="px-2.5 py-1 text-xs font-semibold rounded-full bg-indigo-500/10 text-indigo-400 border border-indigo-500/20">{t('audit_review.badges.in_review')}</span>;
       case 'CORRECTION_REQUIRED':
-        return <span className="px-2.5 py-1 text-xs font-semibold rounded-full bg-orange-500/10 text-orange-400 border border-orange-500/20">Corrections Active</span>;
+        return <span className="px-2.5 py-1 text-xs font-semibold rounded-full bg-orange-500/10 text-orange-400 border border-orange-500/20">{t('audit_review.badges.corrections_active')}</span>;
       case 'VERIFIED_PASS':
-        return <span className="px-2.5 py-1 text-xs font-semibold rounded-full bg-emerald-500/10 text-emerald-400 border border-emerald-500/20">Verified Pass</span>;
+        return <span className="px-2.5 py-1 text-xs font-semibold rounded-full bg-emerald-500/10 text-emerald-400 border border-emerald-500/20">{t('audit_review.badges.verified_pass')}</span>;
       case 'VERIFIED_FAIL':
-        return <span className="px-2.5 py-1 text-xs font-semibold rounded-full bg-red-500/10 text-red-400 border border-red-500/20">Verified Fail</span>;
+        return <span className="px-2.5 py-1 text-xs font-semibold rounded-full bg-red-500/10 text-red-400 border border-red-500/20">{t('audit_review.badges.verified_fail')}</span>;
       case 'VERIFIED_NEEDS_REVIEW':
-        return <span className="px-2.5 py-1 text-xs font-semibold rounded-full bg-yellow-500/10 text-yellow-400 border border-yellow-500/20">Verified Caution</span>;
+        return <span className="px-2.5 py-1 text-xs font-semibold rounded-full bg-yellow-500/10 text-yellow-400 border border-yellow-500/20">{t('audit_review.badges.verified_needs_review')}</span>;
       case 'REJECTED':
-        return <span className="px-2.5 py-1 text-xs font-semibold rounded-full bg-rose-500/10 text-rose-400 border border-rose-500/20">Rejected</span>;
+        return <span className="px-2.5 py-1 text-xs font-semibold rounded-full bg-rose-500/10 text-rose-400 border border-rose-500/20">{t('audit_review.badges.rejected')}</span>;
       case 'ESCALATED':
-        return <span className="px-2.5 py-1 text-xs font-semibold rounded-full bg-purple-500/10 text-purple-400 border border-purple-500/20">Escalated</span>;
+        return <span className="px-2.5 py-1 text-xs font-semibold rounded-full bg-purple-500/10 text-purple-400 border border-purple-500/20">{t('audit_review.badges.escalated')}</span>;
       case 'REOPENED':
-        return <span className="px-2.5 py-1 text-xs font-semibold rounded-full bg-cyan-500/10 text-cyan-400 border border-cyan-500/20">Reopened</span>;
+        return <span className="px-2.5 py-1 text-xs font-semibold rounded-full bg-cyan-500/10 text-cyan-400 border border-cyan-500/20">{t('audit_review.badges.reopened')}</span>;
       default:
         return <span className="px-2.5 py-1 text-xs font-semibold rounded-full bg-slate-800 text-slate-400 border border-slate-700">{st}</span>;
     }
@@ -142,10 +144,10 @@ export default function OfficerDashboard() {
 
   const getRiskBadge = (risk: string) => {
     const r = risk.toUpperCase();
-    if (r === 'CRITICAL') return <span className="px-2 py-0.5 text-[10px] font-bold rounded bg-red-500/20 text-red-400 border border-red-500/30">CRITICAL RISK</span>;
-    if (r === 'HIGH') return <span className="px-2 py-0.5 text-[10px] font-bold rounded bg-amber-500/20 text-amber-400 border border-amber-500/30">HIGH RISK</span>;
-    if (r === 'MEDIUM') return <span className="px-2 py-0.5 text-[10px] font-bold rounded bg-yellow-500/20 text-yellow-400 border border-yellow-500/30">MEDIUM RISK</span>;
-    return <span className="px-2 py-0.5 text-[10px] font-bold rounded bg-emerald-500/20 text-emerald-400 border border-emerald-500/30">LOW RISK</span>;
+    if (r === 'CRITICAL') return <span className="px-2 py-0.5 text-[10px] font-bold rounded bg-red-500/20 text-red-400 border border-red-500/30">{t('audit_review.badges.risk_critical')}</span>;
+    if (r === 'HIGH') return <span className="px-2 py-0.5 text-[10px] font-bold rounded bg-amber-500/20 text-amber-400 border border-amber-500/30">{t('audit_review.badges.risk_high')}</span>;
+    if (r === 'MEDIUM') return <span className="px-2 py-0.5 text-[10px] font-bold rounded bg-yellow-500/20 text-yellow-400 border border-yellow-500/30">{t('audit_review.badges.risk_medium')}</span>;
+    return <span className="px-2 py-0.5 text-[10px] font-bold rounded bg-emerald-500/20 text-emerald-400 border border-emerald-500/30">{t('audit_review.badges.risk_low')}</span>;
   };
 
   if (loading) {
@@ -153,7 +155,7 @@ export default function OfficerDashboard() {
       <div className="min-h-screen flex items-center justify-center bg-slate-950 text-slate-400">
         <div className="flex items-center gap-3">
           <RefreshCw className="w-6 h-6 animate-spin text-indigo-500" />
-          <span>Loading Officer Review Dashboard...</span>
+          <span>{t('audit_review.dashboard.loading')}</span>
         </div>
       </div>
     );
@@ -169,14 +171,14 @@ export default function OfficerDashboard() {
               <ShieldCheck className="w-6 h-6" />
             </span>
             <h1 className="text-2xl md:text-3xl font-extrabold text-white tracking-tight">
-              Officer Review Dashboard
+              {t('audit_review.dashboard.title')}
             </h1>
             <span className="text-xs font-bold px-2.5 py-1 rounded-md bg-indigo-500/20 text-indigo-300 border border-indigo-500/30">
-              Sec 10 Human Verification
+              {t('audit_review.dashboard.badge_sec10')}
             </span>
           </div>
           <p className="text-sm text-slate-400 mt-1">
-            Authoritative human verification layer, review queue triage, statutory declaration corrections, and officer workload management.
+            {t('audit_review.dashboard.subtitle')}
           </p>
         </div>
 
@@ -187,7 +189,7 @@ export default function OfficerDashboard() {
             className="flex items-center gap-2 px-3.5 py-2 rounded-xl bg-slate-900 border border-slate-700 hover:border-slate-600 text-sm font-medium text-slate-200 transition-all cursor-pointer"
           >
             <RefreshCw className={`w-4 h-4 ${refreshing ? 'animate-spin text-indigo-400' : ''}`} />
-            <span>Refresh Queue</span>
+            <span>{t('audit_review.dashboard.refresh_queue')}</span>
           </button>
         </div>
       </div>
@@ -195,45 +197,45 @@ export default function OfficerDashboard() {
       {/* KPI Metrics Cards */}
       <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-7 gap-3">
         <div className="p-4 rounded-2xl bg-slate-900/80 border border-slate-800 shadow-sm flex flex-col justify-between">
-          <span className="text-xs font-semibold text-slate-400 uppercase tracking-wider">Total Queue</span>
+          <span className="text-xs font-semibold text-slate-400 uppercase tracking-wider">{t('audit_review.dashboard.kpi_total_queue')}</span>
           <div className="text-2xl font-black text-white mt-2">{summary?.total_queue ?? 0}</div>
-          <span className="text-[10px] text-slate-400 mt-1">Audits indexed</span>
+          <span className="text-[10px] text-slate-400 mt-1">{t('audit_review.dashboard.kpi_total_desc')}</span>
         </div>
 
         <div className="p-4 rounded-2xl bg-amber-950/20 border border-amber-500/30 shadow-sm flex flex-col justify-between">
-          <span className="text-xs font-semibold text-amber-300 uppercase tracking-wider">Pending</span>
+          <span className="text-xs font-semibold text-amber-300 uppercase tracking-wider">{t('audit_review.dashboard.kpi_pending')}</span>
           <div className="text-2xl font-black text-amber-400 mt-2">{summary?.pending_review ?? 0}</div>
-          <span className="text-[10px] text-amber-400/70 mt-1">Awaiting triage</span>
+          <span className="text-[10px] text-amber-400/70 mt-1">{t('audit_review.dashboard.kpi_pending_desc')}</span>
         </div>
 
         <div className="p-4 rounded-2xl bg-blue-950/20 border border-blue-500/30 shadow-sm flex flex-col justify-between">
-          <span className="text-xs font-semibold text-blue-300 uppercase tracking-wider">Assigned</span>
+          <span className="text-xs font-semibold text-blue-300 uppercase tracking-wider">{t('audit_review.dashboard.kpi_assigned')}</span>
           <div className="text-2xl font-black text-blue-400 mt-2">{summary?.assigned ?? 0}</div>
-          <span className="text-[10px] text-blue-400/70 mt-1">Officers allocated</span>
+          <span className="text-[10px] text-blue-400/70 mt-1">{t('audit_review.dashboard.kpi_assigned_desc')}</span>
         </div>
 
         <div className="p-4 rounded-2xl bg-indigo-950/20 border border-indigo-500/30 shadow-sm flex flex-col justify-between">
-          <span className="text-xs font-semibold text-indigo-300 uppercase tracking-wider">In Review</span>
+          <span className="text-xs font-semibold text-indigo-300 uppercase tracking-wider">{t('audit_review.dashboard.kpi_in_review')}</span>
           <div className="text-2xl font-black text-indigo-400 mt-2">{summary?.in_review ?? 0}</div>
-          <span className="text-[10px] text-indigo-400/70 mt-1">Active verification</span>
+          <span className="text-[10px] text-indigo-400/70 mt-1">{t('audit_review.dashboard.kpi_in_review_desc')}</span>
         </div>
 
         <div className="p-4 rounded-2xl bg-emerald-950/20 border border-emerald-500/30 shadow-sm flex flex-col justify-between">
-          <span className="text-xs font-semibold text-emerald-300 uppercase tracking-wider">Verified</span>
+          <span className="text-xs font-semibold text-emerald-300 uppercase tracking-wider">{t('audit_review.dashboard.kpi_verified')}</span>
           <div className="text-2xl font-black text-emerald-400 mt-2">{summary?.verified ?? 0}</div>
-          <span className="text-[10px] text-emerald-400/70 mt-1">Sign-off complete</span>
+          <span className="text-[10px] text-emerald-400/70 mt-1">{t('audit_review.dashboard.kpi_verified_desc')}</span>
         </div>
 
         <div className="p-4 rounded-2xl bg-red-950/20 border border-red-500/30 shadow-sm flex flex-col justify-between">
-          <span className="text-xs font-semibold text-red-300 uppercase tracking-wider">Rejected</span>
+          <span className="text-xs font-semibold text-red-300 uppercase tracking-wider">{t('audit_review.dashboard.kpi_rejected')}</span>
           <div className="text-2xl font-black text-red-400 mt-2">{summary?.rejected ?? 0}</div>
-          <span className="text-[10px] text-red-400/70 mt-1">AI result overturned</span>
+          <span className="text-[10px] text-red-400/70 mt-1">{t('audit_review.dashboard.kpi_rejected_desc')}</span>
         </div>
 
         <div className="p-4 rounded-2xl bg-purple-950/20 border border-purple-500/30 shadow-sm flex flex-col justify-between">
-          <span className="text-xs font-semibold text-purple-300 uppercase tracking-wider">Escalated</span>
+          <span className="text-xs font-semibold text-purple-300 uppercase tracking-wider">{t('audit_review.dashboard.kpi_escalated')}</span>
           <div className="text-2xl font-black text-purple-400 mt-2">{summary?.escalated ?? 0}</div>
-          <span className="text-[10px] text-purple-400/70 mt-1">Senior review</span>
+          <span className="text-[10px] text-purple-400/70 mt-1">{t('audit_review.dashboard.kpi_escalated_desc')}</span>
         </div>
       </div>
 
@@ -248,7 +250,7 @@ export default function OfficerDashboard() {
                 <Search className="w-4 h-4 text-slate-400 absolute left-3.5 top-1/2 -translate-y-1/2" />
                 <input
                   type="text"
-                  placeholder="Search product name, analysis ID, or assigned officer..."
+                  placeholder={t('audit_review.dashboard.search_placeholder')}
                   value={searchQuery}
                   onChange={(e) => setSearchQuery(e.target.value)}
                   className="w-full pl-9 pr-4 py-2 rounded-xl bg-slate-950 border border-slate-800 text-sm text-slate-200 placeholder-slate-400 focus:outline-hidden focus:border-indigo-500"
@@ -258,21 +260,21 @@ export default function OfficerDashboard() {
               <div className="flex items-center gap-2 w-full md:w-auto overflow-x-auto">
                 <div className="flex items-center gap-1.5 shrink-0">
                   <SlidersHorizontal className="w-3.5 h-3.5 text-slate-400" />
-                  <span className="text-xs text-slate-400 font-medium">Status:</span>
+                  <span className="text-xs text-slate-400 font-medium">{t('audit_review.dashboard.filter_status_label')}</span>
                 </div>
                 <select
                   value={statusFilter}
                   onChange={(e) => setStatusFilter(e.target.value)}
                   className="px-2.5 py-1.5 rounded-lg bg-slate-950 border border-slate-800 text-xs text-slate-300 focus:outline-hidden focus:border-indigo-500 cursor-pointer"
                 >
-                  <option value="ALL">All Statuses</option>
-                  <option value="PENDING">Pending Review</option>
-                  <option value="ASSIGNED">Assigned</option>
-                  <option value="IN_REVIEW">In Review</option>
-                  <option value="VERIFIED">Verified (Pass/Fail)</option>
-                  <option value="REJECTED">Rejected</option>
-                  <option value="ESCALATED">Escalated</option>
-                  <option value="REOPENED">Reopened</option>
+                  <option value="ALL">{t('audit_review.dashboard.status_all')}</option>
+                  <option value="PENDING">{t('audit_review.dashboard.status_pending')}</option>
+                  <option value="ASSIGNED">{t('audit_review.dashboard.status_assigned')}</option>
+                  <option value="IN_REVIEW">{t('audit_review.dashboard.status_in_review')}</option>
+                  <option value="VERIFIED">{t('audit_review.dashboard.status_verified')}</option>
+                  <option value="REJECTED">{t('audit_review.dashboard.status_rejected')}</option>
+                  <option value="ESCALATED">{t('audit_review.dashboard.status_escalated')}</option>
+                  <option value="REOPENED">{t('audit_review.dashboard.status_reopened')}</option>
                 </select>
 
                 <select
@@ -280,11 +282,11 @@ export default function OfficerDashboard() {
                   onChange={(e) => setRiskFilter(e.target.value)}
                   className="px-2.5 py-1.5 rounded-lg bg-slate-950 border border-slate-800 text-xs text-slate-300 focus:outline-hidden focus:border-indigo-500 cursor-pointer"
                 >
-                  <option value="ALL">All Risk Levels</option>
-                  <option value="CRITICAL">Critical Risk</option>
-                  <option value="HIGH">High Risk</option>
-                  <option value="MEDIUM">Medium Risk</option>
-                  <option value="LOW">Low Risk</option>
+                  <option value="ALL">{t('audit_review.dashboard.risk_all')}</option>
+                  <option value="CRITICAL">{t('audit_review.dashboard.risk_critical')}</option>
+                  <option value="HIGH">{t('audit_review.dashboard.risk_high')}</option>
+                  <option value="MEDIUM">{t('audit_review.dashboard.risk_medium')}</option>
+                  <option value="LOW">{t('audit_review.dashboard.risk_low')}</option>
                 </select>
 
                 <select
@@ -292,9 +294,9 @@ export default function OfficerDashboard() {
                   onChange={(e) => setOfficerFilter(e.target.value)}
                   className="px-2.5 py-1.5 rounded-lg bg-slate-950 border border-slate-800 text-xs text-slate-300 focus:outline-hidden focus:border-indigo-500 cursor-pointer"
                 >
-                  <option value="ALL">All Officers</option>
-                  <option value="MY_ASSIGNMENTS">My Assigned Audits</option>
-                  <option value="UNASSIGNED">Unassigned Only</option>
+                  <option value="ALL">{t('audit_review.dashboard.officer_all')}</option>
+                  <option value="MY_ASSIGNMENTS">{t('audit_review.dashboard.officer_my_assignments')}</option>
+                  <option value="UNASSIGNED">{t('audit_review.dashboard.officer_unassigned')}</option>
                   {officers.map(o => (
                     <option key={o.username} value={o.username}>{o.full_name || o.username}</option>
                   ))}
@@ -307,21 +309,23 @@ export default function OfficerDashboard() {
           <div className="rounded-2xl bg-slate-900 border border-slate-800 overflow-hidden shadow-sm">
             <div className="p-4 border-b border-slate-800 flex items-center justify-between">
               <div className="flex items-center gap-2">
-                <span className="font-bold text-sm text-white">Active Review Queue</span>
+                <span className="font-bold text-sm text-white">{t('audit_review.dashboard.queue_title')}</span>
                 <span className="text-xs px-2 py-0.5 rounded-full bg-slate-800 text-slate-400 font-mono">
-                  {filteredQueue.length} item{filteredQueue.length === 1 ? '' : 's'}
+                  {filteredQueue.length === 1 
+                    ? t('audit_review.dashboard.queue_count_single', { count: filteredQueue.length }) 
+                    : t('audit_review.dashboard.queue_count_multiple', { count: filteredQueue.length })}
                 </span>
               </div>
               <span className="text-xs text-slate-400">
-                Ordered by Deterministic Priority (Critical Risk &gt; Age)
+                {t('audit_review.dashboard.queue_ordering_note')}
               </span>
             </div>
 
             {filteredQueue.length === 0 ? (
               <div className="p-12 text-center text-slate-400 space-y-2">
                 <CheckCircle2 className="w-10 h-10 text-emerald-400/40 mx-auto" />
-                <p className="text-sm font-semibold text-slate-300">No review audits match your current filter</p>
-                <p className="text-xs text-slate-400">All pending statutory screenings are up to date.</p>
+                <p className="text-sm font-semibold text-slate-300">{t('audit_review.dashboard.empty_title')}</p>
+                <p className="text-xs text-slate-400">{t('audit_review.dashboard.empty_desc')}</p>
               </div>
             ) : (
               <div className="divide-y divide-slate-800/80">
@@ -345,17 +349,19 @@ export default function OfficerDashboard() {
                         </div>
 
                         <div className="flex items-center gap-4 text-xs text-slate-400 flex-wrap">
-                          <span className="font-mono text-slate-400">ID: {item.analysis_id.slice(0, 12)}</span>
-                          <span>AI Score: <strong className="text-slate-200">{item.ai_score.toFixed(1)}/100</strong></span>
-                          <span>Critical Violations: <strong className={item.critical_issues_count > 0 ? 'text-red-400' : 'text-slate-200'}>{item.critical_issues_count}</strong></span>
+                          <span className="font-mono text-slate-400">{t('audit_review.dashboard.item_id_prefix')}{item.analysis_id.slice(0, 12)}</span>
+                          <span>{t('audit_review.dashboard.item_ai_score')} <strong className="text-slate-200">{item.ai_score.toFixed(1)}/100</strong></span>
+                          <span>{t('audit_review.dashboard.item_critical_violations')} <strong className={item.critical_issues_count > 0 ? 'text-red-400' : 'text-slate-200'}>{item.critical_issues_count}</strong></span>
                           {item.assigned_officer ? (
-                            <span className="text-indigo-300 font-medium">Assigned: @{item.assigned_officer}</span>
+                            <span className="text-indigo-300 font-medium">{t('audit_review.dashboard.item_assigned_prefix', { officer: item.assigned_officer })}</span>
                           ) : (
-                            <span className="text-amber-400/80 font-medium">Unassigned</span>
+                            <span className="text-amber-400/80 font-medium">{t('audit_review.dashboard.item_unassigned')}</span>
                           )}
                           <span className="flex items-center gap-1 text-slate-400">
                             <Clock className="w-3 h-3" />
-                            {item.age_hours < 24 ? `${item.age_hours}h in queue` : `${(item.age_hours / 24).toFixed(1)}d in queue`}
+                            {item.age_hours < 24 
+                              ? t('audit_review.dashboard.item_age_hours', { hours: item.age_hours }) 
+                              : t('audit_review.dashboard.item_age_days', { days: (item.age_hours / 24).toFixed(1) })}
                           </span>
                         </div>
 
@@ -367,7 +373,9 @@ export default function OfficerDashboard() {
                               </span>
                             ))}
                             {item.review_reasons.length > 3 && (
-                              <span className="text-[10px] text-slate-400">+{item.review_reasons.length - 3} more issues</span>
+                              <span className="text-[10px] text-slate-400">
+                                {t('audit_review.dashboard.item_more_issues', { count: item.review_reasons.length - 3 })}
+                              </span>
                             )}
                           </div>
                         )}
@@ -381,7 +389,7 @@ export default function OfficerDashboard() {
                           setSelectedOfficer(item.assigned_officer || '');
                         }}
                         className="p-2 rounded-lg bg-slate-800 hover:bg-slate-700 text-slate-300 text-xs font-medium transition-colors cursor-pointer"
-                        title="Assign to Officer"
+                        title={t('audit_review.dashboard.btn_assign_tooltip')}
                       >
                         <UserCheck className="w-4 h-4" />
                       </button>
@@ -390,7 +398,7 @@ export default function OfficerDashboard() {
                         onClick={() => navigate(`/reviews/${item.review_id}`)}
                         className="flex items-center gap-1.5 px-3.5 py-1.5 rounded-xl bg-indigo-600 hover:bg-indigo-500 text-white text-xs font-bold transition-all shadow-xs shadow-indigo-950 cursor-pointer"
                       >
-                        <span>Inspect &amp; Verify</span>
+                        <span>{t('audit_review.dashboard.btn_inspect_verify')}</span>
                         <ChevronRight className="w-3.5 h-3.5" />
                       </button>
                     </div>
@@ -406,11 +414,11 @@ export default function OfficerDashboard() {
           <div className="p-4 rounded-2xl bg-slate-900 border border-slate-800 space-y-4 shadow-sm">
             <div className="flex items-center gap-2 border-b border-slate-800 pb-3">
               <Users className="w-4 h-4 text-indigo-400" />
-              <h2 className="font-bold text-sm text-white">Officer Workload Allocation</h2>
+              <h2 className="font-bold text-sm text-white">{t('audit_review.dashboard.workload_title')}</h2>
             </div>
 
             {summary?.workload.length === 0 ? (
-              <p className="text-xs text-slate-400">No active officers registered.</p>
+              <p className="text-xs text-slate-400">{t('audit_review.dashboard.no_officers')}</p>
             ) : (
               <div className="space-y-3">
                 {summary?.workload.map(off => (
@@ -420,25 +428,25 @@ export default function OfficerDashboard() {
                         {off.officer_name}
                       </span>
                       <span className="text-[10px] font-mono px-1.5 py-0.5 rounded bg-slate-800 text-indigo-300">
-                        {off.officer_role === 'ADMIN' ? 'Admin' : (off.officer_role === 'ENFORCEMENT_OFFICER' ? 'Enforcement' : 'Audit')}
+                        {off.officer_role === 'ADMIN' ? t('audit_review.dashboard.role_admin') : (off.officer_role === 'ENFORCEMENT_OFFICER' ? t('audit_review.dashboard.role_enforcement') : t('audit_review.dashboard.role_audit'))}
                       </span>
                     </div>
 
                     <div className="grid grid-cols-4 gap-1 text-center text-[10px]">
                       <div className="p-1 rounded bg-slate-900 border border-slate-800">
-                        <span className="text-slate-400 block">Total</span>
+                        <span className="text-slate-400 block">{t('audit_review.dashboard.workload_total')}</span>
                         <span className="font-bold text-white">{off.total_assigned}</span>
                       </div>
                       <div className="p-1 rounded bg-amber-950/20 border border-amber-500/20">
-                        <span className="text-amber-400/70 block">Pending</span>
+                        <span className="text-amber-400/70 block">{t('audit_review.dashboard.workload_pending')}</span>
                         <span className="font-bold text-amber-400">{off.pending_count}</span>
                       </div>
                       <div className="p-1 rounded bg-indigo-950/20 border border-indigo-500/20">
-                        <span className="text-indigo-400/70 block">Active</span>
+                        <span className="text-indigo-400/70 block">{t('audit_review.dashboard.workload_active')}</span>
                         <span className="font-bold text-indigo-400">{off.in_review_count}</span>
                       </div>
                       <div className="p-1 rounded bg-emerald-950/20 border border-emerald-500/20">
-                        <span className="text-emerald-400/70 block">Done</span>
+                        <span className="text-emerald-400/70 block">{t('audit_review.dashboard.workload_done')}</span>
                         <span className="font-bold text-emerald-400">{off.completed_count}</span>
                       </div>
                     </div>
@@ -450,10 +458,10 @@ export default function OfficerDashboard() {
             <div className="p-3 rounded-xl bg-indigo-950/30 border border-indigo-500/20 text-xs text-indigo-300 space-y-1">
               <div className="font-bold flex items-center gap-1.5">
                 <ShieldCheck className="w-3.5 h-3.5" />
-                Statutory Human Authority
+                {t('audit_review.dashboard.human_authority_title')}
               </div>
               <p className="text-[11px] text-indigo-200/70 leading-relaxed">
-                MetrCheck AI provides automated evidence extraction and rule checking. Officers hold authoritative sign-off power under Legal Metrology enforcement protocols.
+                {t('audit_review.dashboard.human_authority_desc')}
               </p>
             </div>
           </div>
@@ -467,7 +475,7 @@ export default function OfficerDashboard() {
             <div className="flex items-center justify-between border-b border-slate-800 pb-3">
               <h3 className="text-base font-bold text-white flex items-center gap-2">
                 <UserCheck className="w-4 h-4 text-indigo-400" />
-                Assign Audit to Officer
+                {t('audit_review.modal_assign.title')}
               </h3>
               <button
                 onClick={() => setAssignModalReview(null)}
@@ -479,19 +487,19 @@ export default function OfficerDashboard() {
 
             <div className="space-y-3">
               <div>
-                <span className="text-xs text-slate-400">Target Audit</span>
+                <span className="text-xs text-slate-400">{t('audit_review.modal_assign.target_audit')}</span>
                 <p className="text-sm font-bold text-white">{assignModalReview.product_name}</p>
-                <p className="text-[10px] font-mono text-slate-400">ID: {assignModalReview.analysis_id}</p>
+                <p className="text-[10px] font-mono text-slate-400">{t('audit_review.dashboard.item_id_prefix')}{assignModalReview.analysis_id}</p>
               </div>
 
               <div>
-                <label className="text-xs font-semibold text-slate-300 block mb-1">Select Officer</label>
+                <label className="text-xs font-semibold text-slate-300 block mb-1">{t('audit_review.modal_assign.select_officer')}</label>
                 <select
                   value={selectedOfficer}
                   onChange={(e) => setSelectedOfficer(e.target.value)}
                   className="w-full px-3 py-2 rounded-xl bg-slate-950 border border-slate-800 text-sm text-slate-200 focus:outline-hidden focus:border-indigo-500"
                 >
-                  <option value="">-- Choose an Officer --</option>
+                  <option value="">{t('audit_review.modal_assign.choose_officer_placeholder')}</option>
                   {officers.map(o => (
                     <option key={o.username} value={o.username}>
                       {o.full_name || o.username} ({o.role})
@@ -501,11 +509,11 @@ export default function OfficerDashboard() {
               </div>
 
               <div>
-                <label className="text-xs font-semibold text-slate-300 block mb-1">Assignment Instructions / Notes (Optional)</label>
+                <label className="text-xs font-semibold text-slate-300 block mb-1">{t('audit_review.modal_assign.instructions_label')}</label>
                 <textarea
                   value={assignComments}
                   onChange={(e) => setAssignComments(e.target.value)}
-                  placeholder="e.g., Please verify net quantity and manufacturer pincode against state registry."
+                  placeholder={t('audit_review.modal_assign.instructions_placeholder')}
                   rows={3}
                   className="w-full p-3 rounded-xl bg-slate-950 border border-slate-800 text-xs text-slate-200 focus:outline-hidden focus:border-indigo-500 resize-none"
                 />
@@ -517,14 +525,14 @@ export default function OfficerDashboard() {
                 onClick={() => setAssignModalReview(null)}
                 className="px-4 py-2 rounded-xl bg-slate-800 hover:bg-slate-700 text-xs font-semibold text-slate-300 cursor-pointer"
               >
-                Cancel
+                {t('common.cancel')}
               </button>
               <button
                 onClick={handleAssignSubmit}
                 disabled={!selectedOfficer || assigning}
                 className="px-4 py-2 rounded-xl bg-indigo-600 hover:bg-indigo-500 disabled:opacity-50 text-xs font-bold text-white cursor-pointer"
               >
-                {assigning ? 'Assigning...' : 'Confirm Assignment'}
+                {assigning ? t('audit_review.modal_assign.assigning_btn') : t('audit_review.modal_assign.confirm_btn')}
               </button>
             </div>
           </div>

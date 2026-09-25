@@ -30,6 +30,7 @@ import {
 import api from '../services/api';
 import StatusBadge from './ui/StatusBadge';
 import { useLanguage } from '../context/LanguageContext';
+import { getLocalizedPanelName, isFrontPanel, getCanonicalPanelType } from '../utils/panelHelper';
 
 
 export interface EvidenceViewerProps {
@@ -118,9 +119,16 @@ export default function EvidenceViewer({
 
       let imgIdx = primaryEv?.image_index;
       if (typeof imgIdx !== 'number' && safeImages.length > 0) {
-        const lowerLbl = imgLabel.toLowerCase();
-        const found = safeImages.findIndex(img => (img.label || '').toLowerCase().includes(lowerLbl) || lowerLbl.includes((img.label || '').toLowerCase()));
-        imgIdx = found !== -1 ? found : (lowerLbl.includes('front') ? 0 : Math.min(1, safeImages.length - 1));
+        const targetType = getCanonicalPanelType(imgLabel);
+        if (targetType !== 'other') {
+          const canonicalIdx = safeImages.findIndex((img, i) => getCanonicalPanelType(img.label, i) === targetType);
+          if (canonicalIdx !== -1) imgIdx = canonicalIdx;
+        }
+        if (typeof imgIdx !== 'number') {
+          const lowerLbl = imgLabel.toLowerCase();
+          const found = safeImages.findIndex(img => (img.label || '').toLowerCase().includes(lowerLbl) || lowerLbl.includes((img.label || '').toLowerCase()));
+          imgIdx = found !== -1 ? found : (isFrontPanel(imgLabel) ? 0 : Math.min(1, safeImages.length - 1));
+        }
       }
 
       return {
@@ -173,25 +181,32 @@ export default function EvidenceViewer({
       return item.image_index;
     }
 
-    // 2. Exact or substring match against image labels
-    const targetLabel = (item.evidence_image_label || '').trim().toLowerCase();
+    // 2. Exact or substring match against image labels using canonical panel types
+    const targetLabel = (item.evidence_image_label || '').trim();
     if (targetLabel) {
-      const exactIdx = safeImages.findIndex(img => (img.label || '').trim().toLowerCase() === targetLabel);
+      const targetType = getCanonicalPanelType(targetLabel);
+      if (targetType !== 'other') {
+        const canonicalIdx = safeImages.findIndex((img, i) => getCanonicalPanelType(img.label, i) === targetType);
+        if (canonicalIdx !== -1) return canonicalIdx;
+      }
+
+      const exactIdx = safeImages.findIndex(img => (img.label || '').trim().toLowerCase() === targetLabel.toLowerCase());
       if (exactIdx !== -1) return exactIdx;
 
       const subIdx = safeImages.findIndex(img => {
         const imgLabel = (img.label || '').trim().toLowerCase();
-        return imgLabel.includes(targetLabel) || targetLabel.includes(imgLabel);
+        const tgt = targetLabel.toLowerCase();
+        return imgLabel.includes(tgt) || tgt.includes(imgLabel);
       });
       if (subIdx !== -1) return subIdx;
     }
 
     // 3. Fallback: rule-specific preference (Front for LM-002, FS-002; Back for others)
     if (['LM-002', 'FS-002'].includes(item.rule_id)) {
-      const frontIdx = safeImages.findIndex(img => (img.label || '').toLowerCase().includes('front'));
+      const frontIdx = safeImages.findIndex((img, i) => isFrontPanel(img.label, i));
       if (frontIdx !== -1) return frontIdx;
     } else {
-      const backIdx = safeImages.findIndex(img => (img.label || '').toLowerCase().includes('back'));
+      const backIdx = safeImages.findIndex((img, i) => getCanonicalPanelType(img.label, i) === 'back');
       if (backIdx !== -1) return backIdx;
     }
 
@@ -234,7 +249,16 @@ export default function EvidenceViewer({
     let isCancelled = false;
 
     safeImages.forEach((img, idx) => {
-      if (img?.image_url && !imgSrcMap[idx]) {
+      if (!img?.image_url) return;
+
+      if (img.image_url.startsWith('data:') || img.image_url.startsWith('blob:')) {
+        setImgSrcMap(prev => ({ ...prev, [idx]: img.image_url }));
+        setImgLoadingMap(prev => ({ ...prev, [idx]: false }));
+        setImgErrorMap(prev => ({ ...prev, [idx]: false }));
+        return;
+      }
+
+      if (!imgSrcMap[idx]) {
         setImgLoadingMap(prev => ({ ...prev, [idx]: true }));
         api.fetchImageBlobUrl(img.image_url)
           .then((resolvedUrl) => {
@@ -249,7 +273,7 @@ export default function EvidenceViewer({
           })
           .catch(() => {
             if (!isCancelled) {
-              setImgSrcMap(prev => ({ ...prev, [idx]: api.getAssetUrl(img.image_url) }));
+              setImgErrorMap(prev => ({ ...prev, [idx]: true }));
               setImgLoadingMap(prev => ({ ...prev, [idx]: false }));
             }
           });
@@ -527,7 +551,7 @@ export default function EvidenceViewer({
                 }`}
               >
                 <ImageIcon className="w-3.5 h-3.5" />
-                <span>{img.label || `Image ${idx + 1}`}</span>
+                <span>{getLocalizedPanelName(img.label, idx, t)}</span>
                 {img.word_count ? (
                   <span className={`text-[10px] px-1.5 py-0.2 rounded-full ${isSelected ? 'bg-indigo-500 text-white' : 'bg-slate-200 dark:bg-slate-700 text-slate-600 dark:text-slate-300'}`}>
                     {img.word_count}w
@@ -667,7 +691,7 @@ export default function EvidenceViewer({
 
             <div className="flex items-center gap-2">
               <span className="text-[11px] font-mono text-slate-500 dark:text-slate-400 bg-slate-100 dark:bg-slate-800 px-2 py-0.5 rounded">
-                {t('evidence.face', { defaultValue: 'Face:' })} {activeImage?.label || 'Package'}
+                {t('evidence.face', { defaultValue: 'Face:' })} {getLocalizedPanelName(activeImage?.label, selectedImageIndex, t)}
               </span>
               {activeBBox && (
                 <span className="text-[10px] font-mono text-indigo-600 dark:text-indigo-400 font-bold bg-indigo-50 dark:bg-indigo-950/60 px-2 py-0.5 rounded border border-indigo-200 dark:border-indigo-800/60">
@@ -685,9 +709,9 @@ export default function EvidenceViewer({
               <div className="py-20 flex flex-col items-center justify-center text-slate-400 space-y-3">
                 <div className="w-8 h-8 border-2 border-indigo-500 border-t-transparent rounded-full animate-spin" />
                 <span className="text-xs font-semibold text-slate-300">{t('evidence.loading_image', { defaultValue: 'Loading evidence image...' })}</span>
-                <span className="text-[11px] text-slate-500 font-mono">{t('evidence.panel', { defaultValue: 'Panel:' })} {activeImage?.label || `Panel ${selectedImageIndex + 1}`}</span>
+                <span className="text-[11px] text-slate-500 font-mono">{t('evidence.panel', { defaultValue: 'Panel:' })} {getLocalizedPanelName(activeImage?.label, selectedImageIndex, t)}</span>
               </div>
-            ) : (activeImage?.image_url && !imgErrorMap[selectedImageIndex]) ? (
+            ) : (activeImage?.image_url && imgSrcMap[selectedImageIndex] && !imgErrorMap[selectedImageIndex]) ? (
               <div 
                 className="relative inline-block transition-transform duration-150 origin-center"
                 style={{ transform: `scale(${zoomLevel})` }}
@@ -704,8 +728,8 @@ export default function EvidenceViewer({
 
                 {/* 1. Underlying Base Package Image */}
                 <img
-                  src={imgSrcMap[selectedImageIndex] || api.getAssetUrl(activeImage.image_url)}
-                  alt={activeImage.label ? `${activeImage.label} Package View` : 'Package artwork for compliance review'}
+                  src={imgSrcMap[selectedImageIndex]}
+                  alt={`${getLocalizedPanelName(activeImage?.label, selectedImageIndex, t)} Package View`}
                   className="max-h-[480px] max-w-full object-contain rounded select-none shadow-md block"
                   onLoad={(e) => handleImageLoad(e, selectedImageIndex)}
                   onError={() => {
@@ -894,7 +918,7 @@ export default function EvidenceViewer({
                 </div>
                 <span className="text-sm font-bold text-slate-300">{t('evidence.image_unavailable', { defaultValue: 'Evidence image unavailable' })}</span>
                 <span className="text-xs text-slate-500 max-w-sm">
-                  {t('evidence.image_unavailable_desc', { label: activeImage?.label || `Panel ${selectedImageIndex + 1}`, defaultValue: 'The package image could not be loaded.' })}
+                  {t('evidence.image_unavailable_desc', { label: getLocalizedPanelName(activeImage?.label, selectedImageIndex, t), defaultValue: 'The package image could not be loaded.' })}
                 </span>
               </div>
             )}

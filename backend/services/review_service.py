@@ -180,18 +180,25 @@ def create_initial_review_record(analysis_dict: Dict[str, Any]) -> Dict[str, Any
     score = float(analysis_dict.get("score") or comp_res.get("score") or 0.0)
     ai_status = str(analysis_dict.get("status") or comp_res.get("status") or "PASS")
     
-    # Risk calculation
-    risk_level = "LOW"
-    if score < 60: risk_level = "CRITICAL"
-    elif score < 80: risk_level = "HIGH"
-    elif score < 90: risk_level = "MEDIUM"
-
     checks = comp_res.get("checks", [])
     crit_count = sum(1 for c in checks if c.get("status") == "FAIL" and c.get("severity") == "critical")
     review_reasons = []
     for c in checks:
         if c.get("status") in ("FAIL", "WARNING", "NEEDS_REVIEW"):
             review_reasons.append(f"{c.get('rule_id')}: {c.get('field_label') or c.get('field')}")
+
+    # Risk calculation (prefers authoritative risk_assessment produced by compliance scorer)
+    risk_assessment = comp_res.get("risk_assessment") or {}
+    if isinstance(risk_assessment, dict) and risk_assessment.get("risk_level"):
+        risk_level = str(risk_assessment.get("risk_level")).upper()
+    elif score < 60 or crit_count > 0:
+        risk_level = "CRITICAL"
+    elif score < 80:
+        risk_level = "HIGH"
+    elif score < 90 or len(review_reasons) > 0 or ai_status in ("REVIEW REQUIRED", "NEEDS_REVIEW"):
+        risk_level = "MEDIUM"
+    else:
+        risk_level = "LOW"
 
     ai_snapshot = {
         "analysis_id": ana_id,
@@ -295,6 +302,9 @@ async def assign_review(
     req: AssignReviewRequest
 ) -> Dict[str, Any]:
     """Assigns an audit review to a specific officer."""
+    from database.db import get_user_by_username
+    from auth.security import ROLE_ADMIN, ROLE_AUDIT
+
     raw = await get_review(review_id)
     if not raw:
         raise ValueError(f"Review '{review_id}' not found.")
@@ -307,7 +317,30 @@ async def assign_review(
     if not validate_transition(prev_status, new_status):
         raise ValueError(f"Cannot transition review from '{prev_status}' to '{new_status}'.")
 
-    rev["assigned_officer"] = req.assigned_officer.strip()
+    target_username = req.assigned_officer.strip()
+    if not target_username:
+        raise ValueError("assigned_officer cannot be empty or whitespace.")
+
+    target_user = await get_user_by_username(target_username)
+    if not target_user:
+        raise ValueError(f"Officer '{target_username}' not found.")
+
+    if target_user.get("role") not in (ROLE_ADMIN, ROLE_AUDIT):
+        raise ValueError(
+            f"Target user '{target_username}' has role '{target_user.get('role')}'. "
+            f"Audit reviews can only be assigned to AUDIT_OFFICER or ADMIN."
+        )
+
+    if target_user.get("status") in ("SUSPENDED", "DISABLED"):
+        raise ValueError("Cannot assign audit review to a suspended or disabled officer.")
+
+    actor_role = actor_user.get("role")
+    actor_org = (actor_user.get("organization_id") or "").strip()
+    target_org = (target_user.get("organization_id") or "").strip()
+    if actor_role != ROLE_ADMIN and actor_org and target_org and actor_org != target_org:
+        raise ValueError("Access denied. Cross-organization officer assignment prohibited.")
+
+    rev["assigned_officer"] = target_username
     rev["assigned_by"] = actor_user.get("username", "")
     rev["assigned_at"] = now
     rev["status"] = new_status
@@ -318,11 +351,11 @@ async def assign_review(
         "action": "ASSIGNED",
         "actor_username": actor_user.get("username", "officer"),
         "actor_role": actor_user.get("role", "OFFICER"),
-        "details": f"Assigned to officer '{req.assigned_officer}'." + (f" Note: {req.comments}" if req.comments else ""),
+        "details": f"Assigned to audit officer '{target_username}'." + (f" Note: {req.comments}" if req.comments else ""),
         "previous_state": prev_status,
         "new_state": new_status,
         "timestamp": now,
-        "metadata": {"assigned_officer": req.assigned_officer}
+        "metadata": {"assigned_officer": target_username}
     }
     rev["history"].append(event)
 
@@ -769,7 +802,7 @@ async def escalate_review(
     try:
         from database.db import get_enforcement_case_by_analysis_id, save_enforcement_case, generate_case_reference
         existing_case = await get_enforcement_case_by_analysis_id(rev["analysis_id"])
-        if not existing_case:
+        if not existing_case or existing_case.get("status") in ("CLOSED", "RESOLVED"):
             ana_data = await get_analysis(rev["analysis_id"]) or {}
             sev = "CRITICAL" if rev.get("ai_risk_level") == "CRITICAL" else "HIGH"
             case_id = f"case-{uuid.uuid4().hex[:8]}"
@@ -813,6 +846,11 @@ async def escalate_review(
             await save_enforcement_case(case_record)
             rev["enforcement_case_id"] = case_id
             rev["enforcement_case_reference"] = case_ref
+            await save_review(rev)
+        else:
+            rev["enforcement_case_id"] = existing_case["id"]
+            rev["enforcement_case_reference"] = existing_case["case_reference"]
+            await save_review(rev)
     except Exception:
         pass
 
@@ -1001,13 +1039,15 @@ async def get_officer_dashboard_summary(
     if user_role != "ADMIN" and organization_id:
         officer_users = [
             u for u in users 
-            if u.get("role") in ("ADMIN", "ENFORCEMENT_OFFICER", "AUDIT_OFFICER")
+            if u.get("role") in ("ADMIN", "AUDIT_OFFICER")
+            and u.get("status") not in ("SUSPENDED", "DISABLED")
             and u.get("organization_id") == organization_id
         ]
     elif user_role == "ADMIN":
         officer_users = [
             u for u in users 
-            if u.get("role") in ("ADMIN", "ENFORCEMENT_OFFICER", "AUDIT_OFFICER")
+            if u.get("role") in ("ADMIN", "AUDIT_OFFICER")
+            and u.get("status") not in ("SUSPENDED", "DISABLED")
         ]
     else:
         officer_users = []

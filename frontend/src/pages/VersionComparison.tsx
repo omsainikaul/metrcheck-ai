@@ -19,12 +19,14 @@ import {
   Sparkles
 } from 'lucide-react';
 import { api } from '../services/api';
+import { useLanguage } from '../context/LanguageContext';
 import { 
   type VersionComparisonResult, 
   type VersionTimelineEvent
 } from '../types';
 
 export default function VersionComparison() {
+  const { t } = useLanguage();
   const [targets, setTargets] = useState<any[]>([]);
   const [selectedVersionA, setSelectedVersionA] = useState<string>('');
   const [selectedVersionB, setSelectedVersionB] = useState<string>('');
@@ -108,13 +110,10 @@ export default function VersionComparison() {
           </div>
           <div>
             <div className="flex items-center gap-2">
-              <h1 className="text-2xl font-black text-white tracking-tight">Version Comparison Studio</h1>
-              <span className="px-2 py-0.5 rounded-md text-[10px] font-extrabold uppercase bg-amber-500/20 text-amber-300 border border-amber-500/30">
-                Section 9
-              </span>
+              <h1 className="text-2xl font-black text-white tracking-tight">{t('merchant.version_comparison.studio_title')}</h1>
             </div>
             <p className="text-xs text-slate-400 mt-0.5">
-              Compare packaging revisions, pre-print artwork iterations, and physical package screenings side-by-side.
+              {t('merchant.version_comparison.studio_desc')}
             </p>
           </div>
         </div>
@@ -127,20 +126,20 @@ export default function VersionComparison() {
             <span>{error}</span>
           </div>
           <button onClick={() => setError(null)} className="text-rose-400 hover:text-white text-xs underline cursor-pointer">
-            Dismiss
+            {t('merchant.preprint.dismiss') || 'Dismiss'}
           </button>
         </div>
       )}
 
       {/* ── Version Selectors Bar ── */}
       <div className="bg-slate-900/80 border border-slate-800 rounded-2xl p-5 shadow-lg space-y-4">
-        <h2 className="text-xs font-bold uppercase tracking-wider text-slate-400">Select Versions to Compare</h2>
+        <h2 className="text-xs font-bold uppercase tracking-wider text-slate-400">{t('merchant.version_comparison.select_versions')}</h2>
         
         <div className="grid grid-cols-1 md:grid-cols-12 gap-4 items-center">
           {/* Version A Dropdown */}
           <div className="md:col-span-5 space-y-1.5">
             <label className="block text-xs font-bold text-slate-300">
-              Version A (Base / Previous)
+              {t('merchant.version_comparison.version_a')}
             </label>
             <select
               value={selectedVersionA}
@@ -167,7 +166,7 @@ export default function VersionComparison() {
           {/* Version B Dropdown */}
           <div className="md:col-span-5 space-y-1.5">
             <label className="block text-xs font-bold text-slate-300">
-              Version B (Target / Revised)
+              {t('merchant.version_comparison.version_b')}
             </label>
             <select
               value={selectedVersionB}
@@ -196,7 +195,7 @@ export default function VersionComparison() {
             ) : (
               <GitCompare className="w-4 h-4" />
             )}
-            <span>Run Version Comparison</span>
+            <span>{comparing ? t('merchant.version_comparison.comparing') : t('merchant.version_comparison.run_comparison')}</span>
           </button>
         </div>
       </div>

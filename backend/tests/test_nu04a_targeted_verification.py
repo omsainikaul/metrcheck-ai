@@ -310,6 +310,10 @@ def test_mrp_regression_f_multiline_currency_separation_cannot_bind_isolated_num
 @pytest.mark.asyncio
 async def test_live_analyze_products_alpino_returns_needs_review():
     """Verify live analyze_products pipeline on Alpino does not report ₹15435 and yields NEEDS_REVIEW for LM-004."""
+    from ocr.paddle_engine import _is_paddle_available
+    if not _is_paddle_available():
+        pytest.skip("PaddleOCR not installed in current environment.")
+
     from services.analysis_service import analyze_products
     from fastapi import UploadFile
     import io

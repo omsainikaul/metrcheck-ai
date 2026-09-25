@@ -1,4 +1,5 @@
 import { useState, useEffect, useRef } from 'react';
+import { useSearchParams, useLocation } from 'react-router-dom';
 import { 
   Printer, 
   Upload, 
@@ -18,7 +19,9 @@ import {
   Tag, 
   AlertOctagon,
   Copy,
-  Check
+  Check,
+  Package,
+  X
 } from 'lucide-react';
 import { api } from '../services/api';
 import { 
@@ -26,10 +29,32 @@ import {
   type PreprintAnalysisResponse, 
 } from '../types';
 import { useAuth } from '../context/AuthContext';
+import { useLanguage } from '../context/LanguageContext';
 import LoadingSkeleton from '../components/ui/LoadingSkeleton';
 
 export default function PrePrintCompliance() {
   const { user } = useAuth();
+  const { t } = useLanguage();
+  const location = useLocation();
+  const [searchParams] = useSearchParams();
+
+  const initialProductId = (searchParams.get('productId') || (location.state as any)?.productId || '').trim();
+  const initialProductName = ((location.state as any)?.productName || '').trim();
+
+  const [productId, setProductId] = useState<string>(initialProductId);
+  const [productName, setProductName] = useState<string>(initialProductName);
+
+  useEffect(() => {
+    if (productId && !productName) {
+      let isMounted = true;
+      api.getProduct(productId).then(prod => {
+        if (isMounted && prod?.product_name) {
+          setProductName(prod.product_name);
+        }
+      }).catch(() => {});
+      return () => { isMounted = false; };
+    }
+  }, [productId, productName]);
   
   // State
   const [artworks, setArtworks] = useState<ArtworkDocument[]>([]);
@@ -96,7 +121,7 @@ export default function PrePrintCompliance() {
     setUploading(true);
     setError(null);
     try {
-      const uploadResp = await api.uploadArtwork(file, undefined, 1);
+      const uploadResp = await api.uploadArtwork(file, undefined, 1, productId.trim() ? productId.trim() : undefined);
       if (uploadResp.success) {
         // Run analysis immediately
         const analysisResp = await api.analyzeArtwork(uploadResp.artwork_id);
@@ -199,7 +224,7 @@ export default function PrePrintCompliance() {
         return (
           <span className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-xs font-bold bg-emerald-500/20 text-emerald-300 border border-emerald-500/40 shadow-xs">
             <CheckCircle2 className="w-3.5 h-3.5 text-emerald-400" />
-            READY FOR PRINT
+            {t('merchant.preprint.ready_for_print')}
           </span>
         );
       case 'CHANGES_REQUESTED':
@@ -207,21 +232,21 @@ export default function PrePrintCompliance() {
         return (
           <span className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-xs font-bold bg-amber-500/20 text-amber-300 border border-amber-500/40">
             <AlertTriangle className="w-3.5 h-3.5 text-amber-400" />
-            ACTION REQUIRED
+            {t('merchant.preprint.action_required')}
           </span>
         );
       case 'REJECTED':
         return (
           <span className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-xs font-bold bg-rose-500/20 text-rose-300 border border-rose-500/40">
             <XCircle className="w-3.5 h-3.5 text-rose-400" />
-            REJECTED
+            {t('merchant.preprint.rejected')}
           </span>
         );
       default:
         return (
           <span className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-xs font-bold bg-slate-700 text-slate-300 border border-slate-600">
             <Clock className="w-3.5 h-3.5 text-slate-400" />
-            DRAFT / PENDING
+            {t('merchant.preprint.draft_pending')}
           </span>
         );
     }
@@ -240,13 +265,10 @@ export default function PrePrintCompliance() {
             </div>
             <div>
               <div className="flex items-center gap-2">
-                <h1 className="text-2xl font-black text-white tracking-tight">Pre-Print Artwork Studio</h1>
-                <span className="px-2 py-0.5 rounded-md text-[10px] font-extrabold uppercase bg-sky-500/20 text-sky-300 border border-sky-500/30">
-                  Section 8
-                </span>
+                <h1 className="text-2xl font-black text-white tracking-tight">{t('merchant.preprint.studio_title')}</h1>
               </div>
               <p className="text-xs text-slate-400 mt-0.5">
-                Verify digital packaging artwork (PDF/Vector/Raster) before physical plate-making & print runs.
+                {t('merchant.preprint.studio_desc')}
               </p>
             </div>
           </div>
@@ -270,7 +292,7 @@ export default function PrePrintCompliance() {
             ) : (
               <Upload className="w-4 h-4" />
             )}
-            <span>Upload Artwork</span>
+            <span>{t('merchant.preprint.upload_artwork')}</span>
           </button>
 
           {selectedArtwork && (
@@ -279,11 +301,37 @@ export default function PrePrintCompliance() {
               className="flex items-center gap-2 px-4 py-2.5 rounded-xl bg-emerald-600 hover:bg-emerald-500 text-white font-semibold text-sm shadow-md shadow-emerald-950/40 transition-all cursor-pointer"
             >
               <FileCheck className="w-4 h-4" />
-              <span>Review & Sign-Off</span>
+              <span>{t('merchant.preprint.review_signoff')}</span>
             </button>
           )}
         </div>
       </div>
+
+      {/* Linked SKU Context Banner if productId is present */}
+      {productId && (
+        <div className="px-5 py-3 rounded-xl bg-indigo-950/60 border border-indigo-800/60 flex items-center justify-between gap-3 text-xs text-indigo-200">
+          <div className="flex items-center gap-2 min-w-0">
+            <Package className="w-4 h-4 text-indigo-400 shrink-0" />
+            <span className="text-slate-300 font-medium">
+              {t('sku_workflow.artwork_for_sku')}:
+            </span>
+            <span className="font-bold text-white truncate">
+              {productName || productId}
+            </span>
+          </div>
+          <button
+            type="button"
+            onClick={() => {
+              setProductId('');
+              setProductName('');
+            }}
+            className="inline-flex items-center gap-1 text-[11px] text-slate-400 hover:text-red-400 font-medium transition-colors cursor-pointer"
+          >
+            <X className="w-3.5 h-3.5" />
+            <span>{t('sku_workflow.unlink')}</span>
+          </button>
+        </div>
+      )}
 
       {error && (
         <div className="p-4 rounded-xl bg-rose-500/10 border border-rose-500/30 text-rose-300 text-sm flex items-center justify-between">
@@ -292,7 +340,7 @@ export default function PrePrintCompliance() {
             <span>{error}</span>
           </div>
           <button onClick={() => setError(null)} className="text-rose-400 hover:text-white text-xs underline cursor-pointer">
-            Dismiss
+            {t('merchant.preprint.dismiss')}
           </button>
         </div>
       )}
@@ -304,8 +352,8 @@ export default function PrePrintCompliance() {
         <div className="lg:col-span-3 space-y-4">
           <div className="bg-slate-900/80 border border-slate-800 rounded-2xl p-4">
             <div className="flex items-center justify-between mb-3">
-              <h2 className="text-xs font-bold uppercase tracking-wider text-slate-400">Artwork Versions</h2>
-              <span className="text-xs font-semibold text-slate-500">{artworks.length} Total</span>
+              <h2 className="text-xs font-bold uppercase tracking-wider text-slate-400">{t('merchant.preprint.artwork_versions')}</h2>
+              <span className="text-xs font-semibold text-slate-500">{t('merchant.preprint.total', { count: artworks.length })}</span>
             </div>
 
             {loading ? (
@@ -314,7 +362,7 @@ export default function PrePrintCompliance() {
               </div>
             ) : artworks.length === 0 ? (
               <div className="text-center py-8 text-slate-500 text-xs">
-                No pre-print artworks uploaded yet. Upload a PDF or packaging image to begin.
+                {t('merchant.preprint.no_artworks')}
               </div>
             ) : (
               <div className="space-y-2 max-h-[600px] overflow-y-auto pr-1 custom-scrollbar">

@@ -78,8 +78,8 @@ def setup_audit_01_fixture():
 
         # Create test users across different roles and orgs
         await _create_test_user_helper("aud01_admin", ROLE_ADMIN, "")
-        await _create_test_user_helper("aud01_officer_a", ROLE_ENFORCEMENT, "org_sec_aud_alpha")
-        await _create_test_user_helper("aud01_officer_b", ROLE_ENFORCEMENT, "org_sec_aud_beta")
+        await _create_test_user_helper("aud01_officer_a", ROLE_AUDIT, "org_sec_aud_alpha")
+        await _create_test_user_helper("aud01_officer_b", ROLE_AUDIT, "org_sec_aud_beta")
         await _create_test_user_helper("aud01_audit_user", ROLE_AUDIT, "org_sec_aud_alpha")
         await _create_test_user_helper("aud01_merchant", ROLE_MERCHANT, "org_sec_aud_merchant")
 
@@ -208,7 +208,7 @@ def test_10_officers_directory_isolation_preserved(client):
     assert resp_merch.status_code == 403
 
     # Officer in Org Alpha -> 200, sees only Org Alpha officers
-    headers_off_a = _auth_header("aud01_officer_a", ROLE_ENFORCEMENT)
+    headers_off_a = _auth_header("aud01_officer_a", ROLE_AUDIT)
     resp_off_a = client.get("/api/reviews/officers", headers=headers_off_a)
     assert resp_off_a.status_code == 200
     data_a = resp_off_a.json()
@@ -218,7 +218,7 @@ def test_10_officers_directory_isolation_preserved(client):
     assert "aud01_officer_b" not in usernames_a, "Officer A must not see Officer B from different org"
 
     # Officer in Org Beta -> 200, sees only Org Beta officers
-    headers_off_b = _auth_header("aud01_officer_b", ROLE_ENFORCEMENT)
+    headers_off_b = _auth_header("aud01_officer_b", ROLE_AUDIT)
     resp_off_b = client.get("/api/reviews/officers", headers=headers_off_b)
     assert resp_off_b.status_code == 200
     data_b = resp_off_b.json()

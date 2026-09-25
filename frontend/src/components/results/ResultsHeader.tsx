@@ -52,29 +52,55 @@ const ResultsHeader: React.FC<ResultsHeaderProps> = ({
   exportUrls: _exportUrls,
 }) => {
   const [showExport, setShowExport] = useState(false);
-  const [resolvedFrontImg, setResolvedFrontImg] = useState<string>(frontImageUrl || '');
+  const [resolvedFrontImg, setResolvedFrontImg] = useState<string>(() => {
+    if (frontImageUrl && (frontImageUrl.startsWith('data:') || frontImageUrl.startsWith('blob:'))) {
+      return frontImageUrl;
+    }
+    return '';
+  });
   const { selectedLanguage: selectedReportLang, setLanguage: setSelectedReportLang, t } = useLanguage();
   const dropdownRef = useRef<HTMLDivElement>(null);
+  const createdBlobUrlsRef = useRef<Set<string>>(new Set());
 
   useEffect(() => {
     let isCancelled = false;
     if (frontImageUrl && frontImageUrl !== '/placeholder.png') {
+      if (frontImageUrl.startsWith('data:') || frontImageUrl.startsWith('blob:')) {
+        setResolvedFrontImg(frontImageUrl);
+        return;
+      }
       api.fetchImageBlobUrl(frontImageUrl).then((blobUrl) => {
         if (!isCancelled && blobUrl) {
+          if (blobUrl.startsWith('blob:')) {
+            createdBlobUrlsRef.current.add(blobUrl);
+          }
           setResolvedFrontImg(blobUrl);
         }
       }).catch(() => {
         if (!isCancelled) {
-          setResolvedFrontImg(api.getAssetUrl(frontImageUrl));
+          setResolvedFrontImg('');
         }
       });
     } else {
-      setResolvedFrontImg(frontImageUrl || '');
+      setResolvedFrontImg('');
     }
     return () => {
       isCancelled = true;
     };
   }, [frontImageUrl]);
+
+  useEffect(() => {
+    return () => {
+      createdBlobUrlsRef.current.forEach(url => {
+        try {
+          URL.revokeObjectURL(url);
+        } catch {
+          // ignore
+        }
+      });
+      createdBlobUrlsRef.current.clear();
+    };
+  }, []);
 
   useEffect(() => {
     const handleClickOutside = (event: MouseEvent) => {

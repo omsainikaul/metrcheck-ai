@@ -1,5 +1,5 @@
 import React, { useState, useRef, useEffect, useMemo } from 'react';
-import { useNavigate } from 'react-router-dom';
+import { useNavigate, useLocation, useSearchParams } from 'react-router-dom';
 import { 
   UploadCloud, 
   X, 
@@ -21,12 +21,20 @@ import {
   Zap,
   Clock,
   Camera,
-  SwitchCamera
+  SwitchCamera,
+  Package
 } from 'lucide-react';
 import { api } from '../services/api';
 import { useLanguage } from '../context/LanguageContext';
 
 type SlotKey = 'front' | 'back' | 'side1' | 'side2';
+
+const CANONICAL_SLOT_LABELS: Record<SlotKey, string> = {
+  front: 'Front',
+  back: 'Back',
+  side1: 'Side 1',
+  side2: 'Side 2'
+};
 
 interface SlotDefinition {
   key: SlotKey;
@@ -53,7 +61,29 @@ const ALLOWED_TYPES = ['image/jpeg', 'image/png', 'image/webp'];
 
 export default function Analyze() {
   const navigate = useNavigate();
+  const location = useLocation();
+  const [searchParams] = useSearchParams();
   const { t } = useLanguage();
+
+  const initialProductId = (searchParams.get('productId') || (location.state as any)?.productId || '').trim();
+  const initialProductName = ((location.state as any)?.productName || '').trim();
+
+  const [productId, setProductId] = useState<string>(initialProductId);
+  const [productName, setProductName] = useState<string>(initialProductName);
+
+  useEffect(() => {
+    if (productId && !productName) {
+      let isMounted = true;
+      api.getProduct(productId).then(prod => {
+        if (isMounted && prod?.product_name) {
+          setProductName(prod.product_name);
+        }
+      }).catch(() => {
+        // Non-fatal if product not found or unauthorized
+      });
+      return () => { isMounted = false; };
+    }
+  }, [productId, productName]);
 
   // Dynamic slot localized definitions
   const SLOTS = useMemo(() => [
@@ -474,8 +504,11 @@ export default function Analyze() {
     startPipelineAnimation(false);
 
     try {
-      const payload = stagedItems.map(item => ({ file: item.file, label: item.label }));
-      const result = await api.analyzeProducts(payload);
+      const payload = stagedItems.map(item => ({
+        file: item.file,
+        label: CANONICAL_SLOT_LABELS[item.key] || 'Front'
+      }));
+      const result = await api.analyzeProducts(payload, productId.trim() ? productId.trim() : undefined);
       await finishPipelineAndNavigate(result, false);
     } catch (err: any) {
       if (stageIntervalRef.current) clearInterval(stageIntervalRef.current);
@@ -620,6 +653,32 @@ export default function Analyze() {
                 )}
               </div>
             </div>
+
+            {/* Linked SKU Context Banner if productId is present */}
+            {productId && (
+              <div className="px-6 py-3 bg-indigo-50/80 dark:bg-indigo-950/40 border-b border-indigo-100 dark:border-indigo-900/50 flex items-center justify-between gap-3 text-xs">
+                <div className="flex items-center gap-2 min-w-0">
+                  <Package className="w-4 h-4 text-indigo-600 dark:text-indigo-400 shrink-0" />
+                  <span className="text-slate-600 dark:text-slate-300 font-medium">
+                    {t('sku_workflow.screening_for_sku')}:
+                  </span>
+                  <span className="font-bold text-slate-900 dark:text-white truncate">
+                    {productName || productId}
+                  </span>
+                </div>
+                <button
+                  type="button"
+                  onClick={() => {
+                    setProductId('');
+                    setProductName('');
+                  }}
+                  className="inline-flex items-center gap-1 text-[11px] text-slate-500 hover:text-red-600 dark:text-slate-400 dark:hover:text-red-400 font-medium transition-colors"
+                >
+                  <X className="w-3 h-3" />
+                  <span>{t('sku_workflow.unlink')}</span>
+                </button>
+              </div>
+            )}
 
             {/* Upload Instructions Banner */}
             <div className="px-6 py-4 bg-slate-50/70 dark:bg-slate-800/40 border-b border-slate-100 dark:border-slate-800 flex flex-col md:flex-row md:items-center justify-between gap-3 text-xs">

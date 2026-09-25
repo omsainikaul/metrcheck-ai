@@ -187,7 +187,7 @@ async def get_review_queue(
     dependencies=[Depends(require_roles(ROLE_ADMIN, ROLE_ENFORCEMENT, ROLE_AUDIT))]
 )
 async def list_available_officers(current_user: dict = Depends(get_current_user)):
-    """List of all registered officers available for assignment scoped to tenant."""
+    """List of all registered audit officers available for audit review assignment scoped to tenant."""
     all_users = await get_all_users()
     user_role = current_user.get("role")
     org_id = current_user.get("organization_id")
@@ -199,7 +199,8 @@ async def list_available_officers(current_user: dict = Depends(get_current_user)
             "status": u.get("status", "ACTIVE")
         }
         for u in all_users
-        if u.get("role") in (ROLE_ADMIN, ROLE_ENFORCEMENT, ROLE_AUDIT)
+        if u.get("role") in (ROLE_ADMIN, ROLE_AUDIT)
+        and u.get("status") not in ("SUSPENDED", "DISABLED")
         and (user_role == ROLE_ADMIN or not org_id or u.get("organization_id") == org_id or not u.get("organization_id"))
     ]
     return {"officers": officers, "total": len(officers)}

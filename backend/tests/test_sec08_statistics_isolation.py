@@ -83,13 +83,13 @@ async def _ensure_seed_data():
     if not await get_user_by_username("sec08_merchant_a2"):
         await create_user("sec08_merchant_a2", "hash", "salt", role=ROLE_MERCHANT, organization_id="org_sec08_alpha", full_name="Merchant A2")
     if not await get_user_by_username("sec08_officer_a"):
-        await create_user("sec08_officer_a", "hash", "salt", role=ROLE_ENFORCEMENT, organization_id="org_sec08_alpha", full_name="Officer Alpha")
+        await create_user("sec08_officer_a", "hash", "salt", role=ROLE_AUDIT, organization_id="org_sec08_alpha", full_name="Officer Alpha")
 
     # Beta Tenant Users
     if not await get_user_by_username("sec08_merchant_b"):
         await create_user("sec08_merchant_b", "hash", "salt", role=ROLE_MERCHANT, organization_id="org_sec08_beta", full_name="Merchant Beta")
     if not await get_user_by_username("sec08_officer_b"):
-        await create_user("sec08_officer_b", "hash", "salt", role=ROLE_ENFORCEMENT, organization_id="org_sec08_beta", full_name="Officer Beta")
+        await create_user("sec08_officer_b", "hash", "salt", role=ROLE_AUDIT, organization_id="org_sec08_beta", full_name="Officer Beta")
 
     # Empty Tenant User
     if not await get_user_by_username("sec08_merchant_empty"):
@@ -442,7 +442,7 @@ async def test_20_officer_beta_reviews_dashboard_scoped():
 async def test_21_officer_directory_filtered_by_organization():
     """Officer Alpha querying GET /api/reviews/officers sees only officers in Org Alpha."""
     await _ensure_seed_data()
-    token = create_token("sec08_officer_a", ROLE_ENFORCEMENT)
+    token = create_token("sec08_officer_a", ROLE_AUDIT)
     headers = {"Authorization": f"Bearer {token}"}
     resp = client.get("/api/reviews/officers", headers=headers)
     assert resp.status_code == 200

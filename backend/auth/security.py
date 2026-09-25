@@ -564,6 +564,11 @@ async def get_current_user(
             detail="Session expired or credentials changed. Please log in again."
         )
 
+    # Defense-in-depth: Ensure organization_id is non-empty
+    if not (user.get("organization_id") or "").strip():
+        from database.db import _ensure_user_organization
+        user = await _ensure_user_organization(user)
+
     return user
 
 

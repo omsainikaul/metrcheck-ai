@@ -5,7 +5,7 @@ import { useWorkspace, WORKSPACE_DEFINITIONS } from '../../context/WorkspaceCont
 import { useAuth } from '../../context/AuthContext';
 import { useLanguage } from '../../context/LanguageContext';
 import { type WorkspaceType } from '../../types';
-import { Menu, ChevronRight, Sparkles, SearchCheck, ShieldAlert, Store, Lock, Check } from 'lucide-react';
+import { Menu, ChevronRight, Sparkles, SearchCheck, ShieldAlert, Store, Lock, Check, UserCircle2 } from 'lucide-react';
 import ThemeToggle from '../ui/ThemeToggle';
 import LanguageSelector from '../ui/LanguageSelector';
 
@@ -36,9 +36,9 @@ export default function Layout() {
     }
     if (path.startsWith('/analyze')) {
       return { 
-        title: currentWorkspace === 'MERCHANT' ? t('navigation.analyze_package') : currentWorkspace === 'AUDIT' ? t('navigation.technical_packaging_verification') : t('navigation.statutory_compliance_inspection'), 
+        title: currentWorkspace === 'AUDIT' ? t('navigation.technical_packaging_verification') : t('navigation.statutory_compliance_inspection'), 
         subtitle: t('analysis.subtitle'),
-        breadcrumb: t('navigation.screening')
+        breadcrumb: currentWorkspace === 'MERCHANT' ? t('navigation.overview') : t('navigation.screening')
       };
     }
     if (path.startsWith('/results')) {
@@ -170,7 +170,9 @@ export default function Layout() {
                     ? 'bg-amber-500/10 text-amber-700 dark:text-amber-300 border-amber-300 dark:border-amber-700/80 shadow-2xs'
                     : currentWorkspace === 'AUDIT'
                     ? 'bg-indigo-50 dark:bg-indigo-950/60 text-indigo-700 dark:text-indigo-300 border-indigo-200/80 dark:border-indigo-800'
-                    : 'bg-sky-50 dark:bg-sky-950/60 text-sky-700 dark:text-sky-300 border-sky-200 dark:border-sky-800'
+                    : currentWorkspace === 'MERCHANT'
+                    ? 'bg-sky-50 dark:bg-sky-950/60 text-sky-700 dark:text-sky-300 border-sky-200 dark:border-sky-800'
+                    : 'bg-emerald-50 dark:bg-emerald-950/60 text-emerald-700 dark:text-emerald-300 border-emerald-200 dark:border-emerald-800'
                 }`}
                 title="Switch Active Workspace"
               >
@@ -178,8 +180,10 @@ export default function Layout() {
                   <ShieldAlert className="w-3.5 h-3.5 text-amber-600 dark:text-amber-400" />
                 ) : currentWorkspace === 'AUDIT' ? (
                   <SearchCheck className="w-3.5 h-3.5 text-indigo-600 dark:text-indigo-400" />
-                ) : (
+                ) : currentWorkspace === 'MERCHANT' ? (
                   <Store className="w-3.5 h-3.5 text-sky-600 dark:text-sky-400" />
+                ) : (
+                  <UserCircle2 className="w-3.5 h-3.5 text-emerald-600 dark:text-emerald-400" />
                 )}
                 <span className="hidden sm:inline font-bold">{workspaceInfo.label}</span>
                 <span className="sm:hidden font-bold">{workspaceInfo.shortLabel}</span>
@@ -196,11 +200,11 @@ export default function Layout() {
                     <div className="px-3 py-1.5 border-b border-slate-100 dark:border-slate-800 flex items-center justify-between">
                       <span className="text-[10px] font-bold text-slate-400 dark:text-slate-500 uppercase tracking-wider block">{t('layout.active_workspace')}</span>
                       <span className="text-[10px] text-slate-400 font-mono font-semibold">
-                        {t('layout.role')}: {user?.role === 'ADMIN' ? t('roles.admin') : user?.role === 'ENFORCEMENT_OFFICER' ? t('roles.enforcement_officer') : user?.role === 'AUDIT_OFFICER' ? t('roles.audit_officer') : t('roles.merchant')}
+                        {t('layout.role')}: {user?.role === 'ADMIN' ? t('roles.admin') : user?.role === 'ENFORCEMENT_OFFICER' ? t('roles.enforcement_officer') : user?.role === 'AUDIT_OFFICER' ? t('roles.audit_officer') : user?.role === 'MERCHANT_PUBLIC' ? t('roles.merchant') : 'Consumer'}
                       </span>
                     </div>
 
-                    {(['MERCHANT', 'AUDIT', 'ENFORCEMENT'] as WorkspaceType[]).map(wsKey => {
+                    {(['USER', 'MERCHANT', 'AUDIT', 'ENFORCEMENT'] as WorkspaceType[]).map(wsKey => {
                       const info = WORKSPACE_DEFINITIONS[wsKey];
                       const isSelected = currentWorkspace === wsKey;
                       const isAllowed = isWorkspaceAllowed(wsKey);
@@ -208,7 +212,8 @@ export default function Layout() {
                       const getIcon = () => {
                         if (wsKey === 'ENFORCEMENT') return <ShieldAlert className="w-4 h-4 text-amber-500" />;
                         if (wsKey === 'AUDIT') return <SearchCheck className="w-4 h-4 text-indigo-500" />;
-                        return <Store className="w-4 h-4 text-sky-500" />;
+                        if (wsKey === 'MERCHANT') return <Store className="w-4 h-4 text-sky-500" />;
+                        return <UserCircle2 className="w-4 h-4 text-emerald-500" />;
                       };
 
                       if (!isAllowed) {
@@ -216,7 +221,7 @@ export default function Layout() {
                           <div
                             key={wsKey}
                             className="w-full p-2.5 rounded-xl text-xs bg-slate-50/60 dark:bg-slate-800/30 border border-slate-200/40 dark:border-slate-800/40 opacity-60 flex flex-col gap-0.5 cursor-not-allowed select-none"
-                            title="Requires Administrator or Enforcement Official login"
+                            title="Requires authorized role credentials"
                           >
                             <div className="flex items-center justify-between">
                               <span className="font-bold flex items-center gap-1.5 text-slate-500 dark:text-slate-400">
@@ -228,7 +233,7 @@ export default function Layout() {
                               </span>
                             </div>
                             <span className="text-[11px] text-slate-400 dark:text-slate-500 leading-tight">
-                              Requires Enforcement Official or Administrator credentials.
+                              Requires authorized credentials.
                             </span>
                           </div>
                         );
@@ -256,7 +261,9 @@ export default function Layout() {
                             </span>
                             <div className="flex items-center gap-1.5">
                               <span className={`text-[9px] font-bold px-1.5 py-0.5 rounded tracking-wider ${
-                                info.coreAction === 'PREVENT'
+                                info.coreAction === 'CHECK'
+                                  ? 'bg-emerald-100 dark:bg-emerald-950 text-emerald-700 dark:text-emerald-300'
+                                  : info.coreAction === 'PREVENT'
                                   ? 'bg-sky-100 dark:bg-sky-950 text-sky-700 dark:text-sky-300'
                                   : info.coreAction === 'VERIFY'
                                   ? 'bg-indigo-100 dark:bg-indigo-950 text-indigo-700 dark:text-indigo-300'

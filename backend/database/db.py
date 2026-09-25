@@ -219,6 +219,45 @@ async def init_db():
         except Exception:
             pass
 
+        # Ensure canonical root organizations exist
+        try:
+            await db.execute('''
+                INSERT INTO organizations (id, name, org_type, jurisdiction, status, created_at, updated_at)
+                VALUES (?, ?, ?, ?, ?, ?, ?)
+                ON CONFLICT(id) DO UPDATE SET org_type=excluded.org_type, name=excluded.name, jurisdiction=excluded.jurisdiction
+            ''', ("org_ministry", "Ministry of Consumer Affairs & Legal Metrology Directorate", "REGULATOR", "National", "ACTIVE", now_seed_iso, now_seed_iso))
+            await db.execute('''
+                INSERT INTO organizations (id, name, org_type, jurisdiction, status, created_at, updated_at)
+                VALUES (?, ?, ?, ?, ?, ?, ?)
+                ON CONFLICT(id) DO UPDATE SET org_type=excluded.org_type, name=excluded.name, jurisdiction=excluded.jurisdiction
+            ''', ("org_merchant_demo", "Demo Merchant Brand Packaging Corp", "MERCHANT", "National", "ACTIVE", now_seed_iso, now_seed_iso))
+            await db.execute('''
+                INSERT INTO organizations (id, name, org_type, jurisdiction, status, created_at, updated_at)
+                VALUES (?, ?, ?, ?, ?, ?, ?)
+                ON CONFLICT(id) DO UPDATE SET org_type=excluded.org_type, name=excluded.name, jurisdiction=excluded.jurisdiction
+            ''', ("org_user_demo", "Personal User Space", "USER", "National", "ACTIVE", now_seed_iso, now_seed_iso))
+            await db.commit()
+        except Exception:
+            pass
+
+        # Automated idempotent backfill for users with missing or empty organization_id
+        try:
+            async with db.execute("SELECT id, username, role FROM users WHERE organization_id IS NULL OR organization_id = ''") as cursor:
+                unassigned_users = await cursor.fetchall()
+            for u_row in unassigned_users:
+                u_id, u_name, u_role = u_row[0], u_row[1], u_row[2]
+                org_id, org_name, org_type = resolve_default_organization_for_user(u_name, u_role)
+                if org_id:
+                    await db.execute('''
+                        INSERT INTO organizations (id, name, org_type, jurisdiction, status, created_at, updated_at)
+                        VALUES (?, ?, ?, ?, ?, ?, ?)
+                        ON CONFLICT(id) DO NOTHING
+                    ''', (org_id, org_name, org_type, "National", "ACTIVE", now_seed_iso, now_seed_iso))
+                    await db.execute("UPDATE users SET organization_id = ? WHERE id = ?", (org_id, u_id))
+            await db.commit()
+        except Exception:
+            pass
+
         # Idempotently create unique index for non-empty email
         try:
             await db.execute(
@@ -616,6 +655,26 @@ async def init_db():
 
         # Seed default accounts for demo/presentation (idempotent)
         await seed_default_users()
+
+        # Phase A-01.3: Automated Idempotent Backfill for Qualifying Historical Analyses into Officer Reviews
+        try:
+            async with db.execute("""
+                SELECT a.id FROM analyses a
+                LEFT JOIN officer_reviews r ON r.analysis_id = a.id
+                WHERE r.id IS NULL
+                AND a.organization_id IS NOT NULL
+                AND a.organization_id != ''
+                AND UPPER(a.status) IN ('REVIEW REQUIRED', 'POTENTIAL NON-COMPLIANCE', 'FAIL', 'NON_COMPLIANT', 'NEEDS_REVIEW')
+            """) as cursor:
+                missing_rows = await cursor.fetchall()
+            
+            if missing_rows:
+                from services.review_service import get_or_create_review
+                for row in missing_rows:
+                    ana_id = row[0]
+                    await get_or_create_review(ana_id)
+        except Exception:
+            pass
     finally:
         await db.close()
 
@@ -623,6 +682,74 @@ async def init_db():
 # ═══════════════════════════════════════════════════════════════════════
 # ORGANIZATIONS (Multi-Tenant Isolation)
 # ═══════════════════════════════════════════════════════════════════════
+
+def resolve_default_organization_for_user(username: str, role: str) -> tuple[str, str, str]:
+    """
+    Authoritative server-side determination of organization ID, Name, and Org Type
+    for a user based on their role and username.
+    """
+    clean_user = (username or "").strip().lower()
+    clean_role = (role or "").strip().upper()
+
+    if clean_role in ("ADMIN", "ROLE_ADMIN", "REGULATOR"):
+        return "org_ministry", "Ministry of Consumer Affairs & Legal Metrology Directorate", "REGULATOR"
+    
+    if clean_role in ("ENFORCEMENT_OFFICER", "ROLE_ENFORCEMENT", "AUDIT_OFFICER", "ROLE_AUDIT", "OFFICER"):
+        if clean_user in ("officer", "audit"):
+            return "org_ministry", "Ministry of Consumer Affairs & Legal Metrology Directorate", "REGULATOR"
+        # Unassigned officers remain unassigned until explicitly assigned by Administrator
+        return "", "", "REGULATOR"
+    
+    if clean_role in ("MERCHANT_PUBLIC", "ROLE_MERCHANT", "MERCHANT"):
+        if clean_user == "merchant":
+            return "org_merchant_demo", "Demo Merchant Brand Packaging Corp", "MERCHANT"
+        return f"org_{clean_user}", f"{username.strip()} Enterprise", "MERCHANT"
+    
+    if clean_role in ("PUBLIC_USER", "NORMAL_USER", "ROLE_USER", "USER"):
+        if clean_user == "user":
+            return "org_user_demo", "Personal User Space", "USER"
+        return f"org_user_{clean_user}", f"{username.strip()} Workspace", "USER"
+
+    # Default fallback
+    if clean_user:
+        return f"org_{clean_user}", f"{username.strip()} Workspace", "MERCHANT"
+    return "org_merchant_demo", "Demo Merchant Brand Packaging Corp", "MERCHANT"
+
+
+async def _ensure_user_organization(user_dict: Optional[dict]) -> Optional[dict]:
+    """
+    Ensures that a retrieved user dictionary has a non-empty organization_id,
+    and that the corresponding organization row exists in the database.
+    If organization_id was missing/empty, it backfills the user row in the database.
+    """
+    if not user_dict or not isinstance(user_dict, dict):
+        return user_dict
+    
+    user_org = (user_dict.get("organization_id") or "").strip()
+    username = (user_dict.get("username") or "").strip()
+    role = (user_dict.get("role") or "").strip()
+    
+    if not user_org and username:
+        org_id, org_name, org_type = resolve_default_organization_for_user(username, role)
+        if org_id:
+            await create_organization(id_or_data=org_id, name=org_name, org_type=org_type, jurisdiction="National", status="ACTIVE")
+            db = await get_db()
+            try:
+                await db.execute("UPDATE users SET organization_id = ? WHERE username = ?", (org_id, username))
+                await db.commit()
+            finally:
+                await db.close()
+            user_dict["organization_id"] = org_id
+    elif user_org:
+        # Ensure the organization record exists
+        org = await get_organization(user_org)
+        if not org:
+            org_id, org_name, org_type = resolve_default_organization_for_user(username, role)
+            if org_id:
+                await create_organization(id_or_data=user_org, name=org_name or f"{user_org} Organization", org_type=org_type, jurisdiction="National", status="ACTIVE")
+
+    return user_dict
+
 
 async def create_organization(id_or_data=None, name: str = "", org_type: str = "MERCHANT", jurisdiction: str = "", status: str = "ACTIVE", **kwargs) -> Dict[str, Any]:
     """Create or update an organization. Accepts dict, positional, or keyword arguments."""
@@ -973,22 +1100,21 @@ async def create_user(username: str, password_hash: str, salt: str, role: str,
     import datetime
     resolved_org = organization_id.strip() if organization_id else ""
     if not resolved_org:
-        if role == "MERCHANT_PUBLIC":
-            resolved_org = f"org_{username.strip().lower()}"
-        elif role in ("PUBLIC_USER", "NORMAL_USER"):
-            resolved_org = f"org_user_{username.strip().lower()}"
-        elif role == "ADMIN":
-            resolved_org = "org_ministry"
+        resolved_org, org_name, org_type = resolve_default_organization_for_user(username, role)
+    else:
+        _, org_name, org_type = resolve_default_organization_for_user(username, role)
 
     if resolved_org:
         try:
             existing_org = await get_organization(resolved_org)
             if not existing_org:
-                await create_organization({
-                    "id": resolved_org,
-                    "name": f"{resolved_org} Organization",
-                    "status": "ACTIVE"
-                })
+                await create_organization(
+                    id_or_data=resolved_org,
+                    name=org_name or f"{resolved_org} Organization",
+                    org_type=org_type,
+                    jurisdiction=jurisdiction or "National",
+                    status="ACTIVE"
+                )
         except Exception:
             pass
 
@@ -1010,12 +1136,15 @@ async def create_user(username: str, password_hash: str, salt: str, role: str,
 
 async def get_user_by_username(username: str):
     db = await get_db()
+    row = None
     try:
         async with db.execute('SELECT * FROM users WHERE username = ?', (username,)) as cursor:
             row = await cursor.fetchone()
-            return dict(row) if row else None
     finally:
         await db.close()
+    if row:
+        return await _ensure_user_organization(dict(row))
+    return None
 
 
 async def get_user_by_email(email: str):
@@ -1024,12 +1153,15 @@ async def get_user_by_email(email: str):
         return None
     normalized = email.strip().lower()
     db = await get_db()
+    row = None
     try:
         async with db.execute('SELECT * FROM users WHERE LOWER(email) = ? AND email != ""', (normalized,)) as cursor:
             row = await cursor.fetchone()
-            return dict(row) if row else None
     finally:
         await db.close()
+    if row:
+        return await _ensure_user_organization(dict(row))
+    return None
 
 
 async def get_user_by_identifier(identifier: str):
@@ -1039,20 +1171,20 @@ async def get_user_by_identifier(identifier: str):
     raw = identifier.strip()
     normalized = raw.lower()
     db = await get_db()
+    row = None
     try:
         # First check username exact/case-insensitive
         async with db.execute('SELECT * FROM users WHERE LOWER(username) = ?', (normalized,)) as cursor:
             row = await cursor.fetchone()
-            if row:
-                return dict(row)
-        # Then check email
-        async with db.execute('SELECT * FROM users WHERE LOWER(email) = ? AND email != ""', (normalized,)) as cursor:
-            row = await cursor.fetchone()
-            if row:
-                return dict(row)
-        return None
+        if not row:
+            # Then check email
+            async with db.execute('SELECT * FROM users WHERE LOWER(email) = ? AND email != ""', (normalized,)) as cursor:
+                row = await cursor.fetchone()
     finally:
         await db.close()
+    if row:
+        return await _ensure_user_organization(dict(row))
+    return None
 
 
 async def list_users(role: str | None = None):
@@ -1488,6 +1620,8 @@ async def seed_default_users():
     for username, password, role, full_name, jurisdiction, org_id in defaults:
         existing = await get_user_by_username(username)
         if existing:
+            if not (existing.get("organization_id") or "").strip():
+                await update_user(username, organization_id=org_id)
             continue
         pw_hash, salt = hash_password(password)
         await create_user(username, pw_hash, salt, role, full_name, jurisdiction, organization_id=org_id)

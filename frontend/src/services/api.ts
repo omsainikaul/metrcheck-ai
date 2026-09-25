@@ -555,24 +555,27 @@ export const api = {
     return fullUrl;
   },
 
-  fetchImageBlobUrl: async (url: string): Promise<string> => {
+  fetchImageBlobUrl: async (url: string, timeoutMs: number = 8000): Promise<string> => {
     if (!url) return '';
     if (url.startsWith('data:') || url.startsWith('blob:')) return url;
     let cleanUrl = url.startsWith('/uploads/') ? url.replace('/uploads/', '/api/images/') : url;
     let fullUrl = (cleanUrl.startsWith('http://') || cleanUrl.startsWith('https://'))
       ? cleanUrl
       : (API_HOST ? `${API_HOST}${cleanUrl}` : cleanUrl);
+    const token = tokenStore.get();
+    const headers: Record<string, string> = token ? { Authorization: `Bearer ${token}` } : {};
+    
+    const controller = new AbortController();
+    const timerId = setTimeout(() => controller.abort(), timeoutMs);
     try {
-      const token = tokenStore.get();
-      const headers: Record<string, string> = token ? { Authorization: `Bearer ${token}` } : {};
-      const res = await fetch(fullUrl, { headers });
+      const res = await fetch(fullUrl, { headers, signal: controller.signal });
       if (!res.ok) {
-        return fullUrl;
+        throw new Error(`Failed to fetch image blob: ${res.status} ${res.statusText}`);
       }
       const blob = await res.blob();
       return URL.createObjectURL(blob);
-    } catch {
-      return fullUrl;
+    } finally {
+      clearTimeout(timerId);
     }
   },
   extractText: (text: string): Promise<ProductInfo> =>
@@ -861,6 +864,9 @@ export const api = {
   // ── Phase 4B: Enforcement Case Management & Statutory Notices ─────────────
   getEnforcementDashboard: (): Promise<EnforcementDashboardMetrics> =>
     fetchJSON<EnforcementDashboardMetrics>(`${BASE_URL}/enforcement/dashboard`),
+
+  getAvailableEnforcementOfficers: (): Promise<{ officers: Array<{ username: string; full_name: string; role: string; status: string }>; total: number }> =>
+    fetchJSON<{ officers: Array<{ username: string; full_name: string; role: string; status: string }>; total: number }>(`${BASE_URL}/enforcement/officers`),
 
   listEnforcementCases: (params?: {
     status?: string;

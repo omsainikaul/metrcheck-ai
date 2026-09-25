@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useMemo } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import { 
   ShieldCheck, 
@@ -23,27 +23,12 @@ import {
   type AIvsHumanComparison
 } from '../types';
 import EvidenceViewer from '../components/EvidenceViewer';
-
-const FIELD_LABELS: Record<string, string> = {
-  product_name: "Product Name",
-  brand: "Brand",
-  mrp: "Maximum Retail Price (MRP)",
-  net_quantity: "Net Quantity",
-  manufacturer: "Manufacturer Name & Address",
-  marketed_by: "Marketed By",
-  fssai_license: "FSSAI License Number",
-  consumer_care: "Consumer Care Details",
-  country_of_origin: "Country of Origin",
-  manufacture_date: "Date of Manufacture",
-  expiry_date: "Expiry / Best Before Date",
-  batch_number: "Batch / Lot Number",
-  ingredients: "Ingredients List",
-  nutritional_info: "Nutrition Information Panel"
-};
+import { useLanguage } from '../context/LanguageContext';
 
 export default function ReviewWorkspace() {
   const { reviewId } = useParams<{ reviewId: string }>();
   const navigate = useNavigate();
+  const { t } = useLanguage();
 
   const [review, setReview] = useState<ReviewDetailResponse | null>(null);
   const [diffComparison, setDiffComparison] = useState<AIvsHumanComparison | null>(null);
@@ -75,6 +60,23 @@ export default function ReviewWorkspace() {
   const [missingLinkedRule, setMissingLinkedRule] = useState<string>('LM-001');
   const [missingLinkedField, setMissingLinkedField] = useState<string>('manufacturer');
 
+  const fieldLabels: Record<string, string> = useMemo(() => ({
+    product_name: t('audit_review.fields.product_name'),
+    brand: t('audit_review.fields.brand'),
+    mrp: t('audit_review.fields.mrp'),
+    net_quantity: t('audit_review.fields.net_quantity'),
+    manufacturer: t('audit_review.fields.manufacturer'),
+    marketed_by: t('audit_review.fields.marketed_by'),
+    fssai_license: t('audit_review.fields.fssai_license'),
+    consumer_care: t('audit_review.fields.consumer_care'),
+    country_of_origin: t('audit_review.fields.country_of_origin'),
+    manufacture_date: t('audit_review.fields.manufacture_date'),
+    expiry_date: t('audit_review.fields.expiry_date'),
+    batch_number: t('audit_review.fields.batch_number'),
+    ingredients: t('audit_review.fields.ingredients'),
+    nutritional_info: t('audit_review.fields.nutritional_info')
+  }), [t]);
+
   const loadReviewData = async () => {
     if (!reviewId) return;
     try {
@@ -94,7 +96,7 @@ export default function ReviewWorkspace() {
         console.warn("Could not load diff comparison:", err);
       }
     } catch (err: any) {
-      alert(err.message || 'Failed to load review workspace.');
+      alert(err.message || t('audit_review.workspace.error_load'));
     } finally {
       setLoading(false);
     }
@@ -113,7 +115,7 @@ export default function ReviewWorkspace() {
       setCommentText('');
       await loadReviewData();
     } catch (err: any) {
-      alert(err.message || 'Failed to accept AI result.');
+      alert(err.message || t('audit_review.workspace.error_accept'));
     } finally {
       setSubmitting(false);
     }
@@ -128,7 +130,7 @@ export default function ReviewWorkspace() {
       setCommentText('');
       await loadReviewData();
     } catch (err: any) {
-      alert(err.message || 'Failed to reject AI result.');
+      alert(err.message || t('audit_review.workspace.error_reject'));
     } finally {
       setSubmitting(false);
     }
@@ -141,7 +143,7 @@ export default function ReviewWorkspace() {
       await api.correctReviewField(
         review.review_id,
         selectedField,
-        FIELD_LABELS[selectedField] || selectedField,
+        fieldLabels[selectedField] || selectedField,
         correctedValue,
         correctionReason
       );
@@ -150,7 +152,7 @@ export default function ReviewWorkspace() {
       setCorrectionReason('');
       await loadReviewData();
     } catch (err: any) {
-      alert(err.message || 'Failed to apply field correction.');
+      alert(err.message || t('audit_review.workspace.error_correct'));
     } finally {
       setSubmitting(false);
     }
@@ -173,7 +175,7 @@ export default function ReviewWorkspace() {
       setCommentText('');
       await loadReviewData();
     } catch (err: any) {
-      alert(err.message || 'Failed to add missing evidence.');
+      alert(err.message || t('audit_review.workspace.error_add_evidence'));
     } finally {
       setSubmitting(false);
     }
@@ -189,7 +191,7 @@ export default function ReviewWorkspace() {
       setRemoveEvidenceReason('');
       await loadReviewData();
     } catch (err: any) {
-      alert(err.message || 'Failed to remove evidence.');
+      alert(err.message || t('audit_review.workspace.error_remove_evidence'));
     } finally {
       setSubmitting(false);
     }
@@ -204,7 +206,7 @@ export default function ReviewWorkspace() {
       setCommentText('');
       await loadReviewData();
     } catch (err: any) {
-      alert(err.message || 'Failed to add comment.');
+      alert(err.message || t('audit_review.workspace.error_comment'));
     } finally {
       setSubmitting(false);
     }
@@ -220,7 +222,7 @@ export default function ReviewWorkspace() {
       setCommentText('');
       await loadReviewData();
     } catch (err: any) {
-      alert(err.message || 'Failed to escalate review.');
+      alert(err.message || t('audit_review.workspace.error_escalate'));
     } finally {
       setSubmitting(false);
     }
@@ -236,7 +238,7 @@ export default function ReviewWorkspace() {
       setCommentText('');
       await loadReviewData();
     } catch (err: any) {
-      alert(err.message || 'Failed to reopen review.');
+      alert(err.message || t('audit_review.workspace.error_reopen'));
     } finally {
       setSubmitting(false);
     }
@@ -252,7 +254,7 @@ export default function ReviewWorkspace() {
       setCommentText('');
       await loadReviewData();
     } catch (err: any) {
-      alert(err.message || 'Failed to assign review.');
+      alert(err.message || t('audit_review.modal_assign.error_fallback'));
     } finally {
       setSubmitting(false);
     }
@@ -263,7 +265,7 @@ export default function ReviewWorkspace() {
       <div className="min-h-screen flex items-center justify-center bg-slate-950 text-slate-400">
         <div className="flex items-center gap-3">
           <Clock className="w-6 h-6 animate-spin text-indigo-500" />
-          <span>Loading Inspection Workspace...</span>
+          <span>{t('audit_review.workspace.loading')}</span>
         </div>
       </div>
     );
@@ -283,7 +285,7 @@ export default function ReviewWorkspace() {
           <button
             onClick={() => navigate('/reviews')}
             className="p-2 rounded-xl bg-slate-900 border border-slate-800 hover:border-slate-700 text-slate-300 hover:text-white transition-colors cursor-pointer"
-            title="Back to Review Dashboard"
+            title={t('audit_review.workspace.back_tooltip')}
           >
             <ArrowLeft className="w-5 h-5" />
           </button>
@@ -302,12 +304,12 @@ export default function ReviewWorkspace() {
                       ? 'bg-rose-500/20 text-rose-300 border border-rose-500/30' 
                       : 'bg-amber-500/20 text-amber-300 border border-amber-500/30')
               }`}>
-                Status: {review.status.replace('_', ' ')}
+                {t('audit_review.workspace.status_prefix')}{review.status.replace('_', ' ')}
               </span>
             </div>
             <p className="text-xs text-slate-400 mt-0.5">
-              Assigned: <strong className="text-indigo-300">{review.assigned_officer ? `@${review.assigned_officer}` : 'Unassigned'}</strong>
-              {review.verified_by && <> • Verified by: <strong className="text-emerald-300">@{review.verified_by}</strong> ({new Date(review.verified_at || '').toLocaleString()})</>}
+              {t('audit_review.workspace.assigned_label')}<strong className="text-indigo-300">{review.assigned_officer ? `@${review.assigned_officer}` : t('audit_review.workspace.unassigned')}</strong>
+              {review.verified_by && <> • {t('audit_review.workspace.verified_by_label')}<strong className="text-emerald-300">@{review.verified_by}</strong> ({new Date(review.verified_at || '').toLocaleString()})</>}
             </p>
           </div>
         </div>
@@ -319,7 +321,7 @@ export default function ReviewWorkspace() {
             className="px-3 py-2 rounded-xl bg-slate-900 border border-slate-800 hover:border-slate-700 text-xs font-semibold text-slate-300 flex items-center gap-1.5 cursor-pointer"
           >
             <UserCheck className="w-4 h-4 text-blue-400" />
-            <span>Assign</span>
+            <span>{t('audit_review.workspace.btn_assign')}</span>
           </button>
 
           <button
@@ -331,7 +333,7 @@ export default function ReviewWorkspace() {
             className="px-3 py-2 rounded-xl bg-slate-900 border border-slate-800 hover:border-slate-700 text-xs font-semibold text-slate-300 flex items-center gap-1.5 cursor-pointer"
           >
             <Edit3 className="w-4 h-4 text-amber-400" />
-            <span>Correct Field</span>
+            <span>{t('audit_review.workspace.btn_correct_field')}</span>
           </button>
 
           <button
@@ -339,7 +341,7 @@ export default function ReviewWorkspace() {
             className="px-3 py-2 rounded-xl bg-slate-900 border border-slate-800 hover:border-slate-700 text-xs font-semibold text-slate-300 flex items-center gap-1.5 cursor-pointer"
           >
             <PlusCircle className="w-4 h-4 text-emerald-400" />
-            <span>Add Evidence</span>
+            <span>{t('audit_review.workspace.btn_add_evidence')}</span>
           </button>
 
           <button
@@ -347,7 +349,7 @@ export default function ReviewWorkspace() {
             className="px-3.5 py-2 rounded-xl bg-emerald-600 hover:bg-emerald-500 text-white text-xs font-bold flex items-center gap-1.5 shadow-sm shadow-emerald-950 cursor-pointer"
           >
             <CheckCircle2 className="w-4 h-4" />
-            <span>Accept AI</span>
+            <span>{t('audit_review.workspace.btn_accept_ai')}</span>
           </button>
 
           <button
@@ -355,7 +357,7 @@ export default function ReviewWorkspace() {
             className="px-3.5 py-2 rounded-xl bg-rose-600 hover:bg-rose-500 text-white text-xs font-bold flex items-center gap-1.5 shadow-sm shadow-rose-950 cursor-pointer"
           >
             <XCircle className="w-4 h-4" />
-            <span>Reject AI</span>
+            <span>{t('audit_review.workspace.btn_reject_ai')}</span>
           </button>
 
           <button
@@ -363,7 +365,7 @@ export default function ReviewWorkspace() {
             className="px-3 py-2 rounded-xl bg-purple-900/40 border border-purple-500/30 text-purple-300 hover:bg-purple-900/60 text-xs font-semibold flex items-center gap-1.5 cursor-pointer"
           >
             <ArrowUpRight className="w-4 h-4" />
-            <span>Escalate</span>
+            <span>{t('audit_review.workspace.btn_escalate')}</span>
           </button>
 
           <button
@@ -371,7 +373,7 @@ export default function ReviewWorkspace() {
             className="px-3 py-2 rounded-xl bg-slate-900 border border-slate-800 hover:border-slate-700 text-xs font-semibold text-slate-300 flex items-center gap-1.5 cursor-pointer"
           >
             <MessageSquare className="w-4 h-4 text-sky-400" />
-            <span>Add Comment</span>
+            <span>{t('audit_review.workspace.btn_add_comment')}</span>
           </button>
 
           <button
@@ -379,7 +381,7 @@ export default function ReviewWorkspace() {
             className="px-3 py-2 rounded-xl bg-slate-900 border border-slate-800 hover:border-slate-700 text-xs font-semibold text-slate-300 flex items-center gap-1.5 cursor-pointer"
           >
             <Trash2 className="w-4 h-4 text-rose-400" />
-            <span>Remove Evidence</span>
+            <span>{t('audit_review.workspace.btn_remove_evidence')}</span>
           </button>
 
           {['VERIFIED_PASS', 'VERIFIED_FAIL', 'VERIFIED_NEEDS_REVIEW', 'REJECTED', 'CLOSED'].includes(review.status) && (
@@ -388,7 +390,7 @@ export default function ReviewWorkspace() {
               className="px-3 py-2 rounded-xl bg-cyan-900/40 border border-cyan-500/30 text-cyan-300 hover:bg-cyan-900/60 text-xs font-semibold flex items-center gap-1.5 cursor-pointer"
             >
               <RotateCcw className="w-4 h-4" />
-              <span>Reopen</span>
+              <span>{t('audit_review.workspace.btn_reopen')}</span>
             </button>
           )}
         </div>
@@ -401,7 +403,7 @@ export default function ReviewWorkspace() {
           <div className="flex items-center justify-between">
             <span className="text-xs font-bold text-slate-400 uppercase tracking-wider flex items-center gap-1.5">
               <Sparkles className="w-3.5 h-3.5 text-indigo-400" />
-              Automated AI Result (Immutable)
+              {t('audit_review.workspace.ai_banner_title')}
             </span>
             <span className={`text-[10px] font-mono font-bold px-2 py-0.5 rounded ${
               review.ai_status === 'PASS' ? 'bg-emerald-500/20 text-emerald-400' : 'bg-red-500/20 text-red-400'
@@ -411,11 +413,11 @@ export default function ReviewWorkspace() {
           </div>
           <div className="flex items-baseline gap-3">
             <span className="text-2xl font-black text-white">{review.ai_score.toFixed(1)}/100</span>
-            <span className="text-xs text-slate-400">Risk: <strong className="text-slate-300">{review.ai_risk_level}</strong></span>
-            <span className="text-xs text-slate-400">Critical Issues: <strong className="text-red-400">{review.critical_issues_count}</strong></span>
+            <span className="text-xs text-slate-400">{t('audit_review.workspace.risk_label')} <strong className="text-slate-300">{review.ai_risk_level}</strong></span>
+            <span className="text-xs text-slate-400">{t('audit_review.workspace.critical_issues_label')} <strong className="text-red-400">{review.critical_issues_count}</strong></span>
           </div>
           <p className="text-[11px] text-slate-400">
-            Original snapshot captured at {new Date(review.created_at).toLocaleString()}.
+            {t('audit_review.workspace.ai_snapshot_date', { date: new Date(review.created_at).toLocaleString() })}
           </p>
         </div>
 
@@ -424,7 +426,7 @@ export default function ReviewWorkspace() {
           <div className="flex items-center justify-between">
             <span className="text-xs font-bold text-indigo-300 uppercase tracking-wider flex items-center gap-1.5">
               <ShieldCheck className="w-3.5 h-3.5 text-indigo-400" />
-              Human Verified Result (Authoritative)
+              {t('audit_review.workspace.human_banner_title')}
             </span>
             <span className="text-[10px] font-mono font-bold px-2 py-0.5 rounded bg-indigo-500/20 text-indigo-300 border border-indigo-500/30">
               {review.final_human_status || review.status}
@@ -435,14 +437,14 @@ export default function ReviewWorkspace() {
               {review.human_score !== null && review.human_score !== undefined ? `${review.human_score.toFixed(1)}/100` : `${review.ai_score.toFixed(1)}/100`}
             </span>
             <span className="text-xs text-indigo-200/70">
-              Risk: <strong className="text-indigo-200">{review.human_risk_level || review.ai_risk_level}</strong>
+              {t('audit_review.workspace.risk_label')} <strong className="text-indigo-200">{review.human_risk_level || review.ai_risk_level}</strong>
             </span>
             <span className="text-xs text-indigo-200/70">
-              Corrections Applied: <strong className="text-amber-300">{review.field_corrections.length}</strong>
+              {t('audit_review.workspace.corrections_applied_label')} <strong className="text-amber-300">{review.field_corrections.length}</strong>
             </span>
           </div>
           <p className="text-[11px] text-indigo-200/60">
-            Authoritative officer verification state. {humanRes.last_recalculated_at ? `(Recalculated: ${new Date(humanRes.last_recalculated_at).toLocaleTimeString()})` : ''}
+            {t('audit_review.workspace.human_authoritative_note')} {humanRes.last_recalculated_at ? t('audit_review.workspace.recalculated_at', { time: new Date(humanRes.last_recalculated_at).toLocaleTimeString() }) : ''}
           </p>
         </div>
       </div>
@@ -456,7 +458,7 @@ export default function ReviewWorkspace() {
           }`}
         >
           <Layers className="w-4 h-4" />
-          <span>Evidence &amp; Rule Inspection</span>
+          <span>{t('audit_review.workspace.tab_evidence')}</span>
         </button>
 
         <button
@@ -466,7 +468,7 @@ export default function ReviewWorkspace() {
           }`}
         >
           <Edit3 className="w-4 h-4" />
-          <span>Officer Corrections ({review.field_corrections.length})</span>
+          <span>{t('audit_review.workspace.tab_corrections', { count: review.field_corrections.length })}</span>
         </button>
 
         <button
@@ -476,7 +478,7 @@ export default function ReviewWorkspace() {
           }`}
         >
           <GitCompare className="w-4 h-4" />
-          <span>AI vs Human Diff</span>
+          <span>{t('audit_review.workspace.tab_diff')}</span>
         </button>
 
         <button
@@ -486,7 +488,7 @@ export default function ReviewWorkspace() {
           }`}
         >
           <Clock className="w-4 h-4" />
-          <span>Review Audit History ({review.history.length})</span>
+          <span>{t('audit_review.workspace.tab_history', { count: review.history.length })}</span>
         </button>
       </div>
 
@@ -508,18 +510,18 @@ export default function ReviewWorkspace() {
             <div className="flex items-center justify-between border-b border-slate-800 pb-3">
               <div className="flex items-center gap-2">
                 <Edit3 className="w-5 h-5 text-amber-400" />
-                <h3 className="text-base font-bold text-white">Statutory Declaration Corrections</h3>
+                <h3 className="text-base font-bold text-white">{t('audit_review.corrections.title')}</h3>
               </div>
               <button
                 onClick={() => setModalType('CORRECT')}
                 className="px-3 py-1.5 rounded-xl bg-amber-600 hover:bg-amber-500 text-white text-xs font-bold cursor-pointer"
               >
-                + Add New Correction
+                {t('audit_review.corrections.btn_add')}
               </button>
             </div>
 
             {review.field_corrections.length === 0 ? (
-              <p className="text-xs text-slate-400 py-4">No field corrections have been recorded for this review.</p>
+              <p className="text-xs text-slate-400 py-4">{t('audit_review.corrections.empty')}</p>
             ) : (
               <div className="divide-y divide-slate-800">
                 {review.field_corrections.map((corr, idx) => (
@@ -527,14 +529,14 @@ export default function ReviewWorkspace() {
                     <div>
                       <span className="text-xs font-bold text-white block">{corr.field_label} ({corr.field_name})</span>
                       <div className="flex items-center gap-2 text-xs mt-1">
-                        <span className="text-slate-400 line-through">Original: {corr.original_value || 'None'}</span>
+                        <span className="text-slate-400 line-through">{t('audit_review.corrections.original_label')}{corr.original_value || 'None'}</span>
                         <span className="text-slate-400">→</span>
-                        <span className="text-emerald-400 font-bold">Corrected: {corr.corrected_value}</span>
+                        <span className="text-emerald-400 font-bold">{t('audit_review.corrections.corrected_label')}{corr.corrected_value}</span>
                       </div>
-                      <p className="text-[11px] text-slate-400 mt-0.5">Reason: {corr.reason}</p>
+                      <p className="text-[11px] text-slate-400 mt-0.5">{t('audit_review.corrections.reason_label')}{corr.reason}</p>
                     </div>
                     <div className="text-right text-[10px] text-slate-400">
-                      <span>By: @{corr.officer_username} ({corr.officer_role})</span>
+                      <span>{t('audit_review.corrections.by_label', { officer: corr.officer_username, role: corr.officer_role })}</span>
                       <span className="block">{new Date(corr.timestamp).toLocaleString()}</span>
                     </div>
                   </div>
@@ -547,12 +549,12 @@ export default function ReviewWorkspace() {
             <div className="flex items-center justify-between border-b border-slate-800 pb-3">
               <div className="flex items-center gap-2">
                 <PlusCircle className="w-5 h-5 text-emerald-400" />
-                <h3 className="text-base font-bold text-white">Evidence Annotations &amp; Soft-Removals</h3>
+                <h3 className="text-base font-bold text-white">{t('audit_review.corrections.evidence_mods_title')}</h3>
               </div>
             </div>
 
             {review.evidence_modifications.length === 0 ? (
-              <p className="text-xs text-slate-400 py-4">No evidence annotations or removals recorded.</p>
+              <p className="text-xs text-slate-400 py-4">{t('audit_review.corrections.evidence_mods_empty')}</p>
             ) : (
               <div className="divide-y divide-slate-800">
                 {review.evidence_modifications.map((mod, idx) => (
@@ -561,15 +563,15 @@ export default function ReviewWorkspace() {
                       <span className={`text-xs font-bold px-2 py-0.5 rounded ${
                         mod.action === 'ADDED' ? 'bg-emerald-500/20 text-emerald-400' : 'bg-red-500/20 text-red-400'
                       }`}>
-                        {mod.action}
+                        {mod.action === 'ADDED' ? t('audit_review.diff.state_added') : t('audit_review.diff.state_removed')}
                       </span>
                       {mod.action === 'ADDED' ? (
                         <p className="text-xs text-slate-300 mt-1">
-                          Rule: <strong>{mod.evidence?.linked_rule_id}</strong> — Text: "{mod.evidence?.text}"
+                          {t('audit_review.corrections.rule_prefix')}<strong>{mod.evidence?.linked_rule_id}</strong> — {t('audit_review.corrections.text_prefix')}"{mod.evidence?.text}"
                         </p>
                       ) : (
                         <p className="text-xs text-slate-300 mt-1">
-                          Evidence ID: <strong>{mod.evidence_id}</strong> — Reason: {mod.reason}
+                          {t('audit_review.corrections.evidence_id_prefix')}<strong>{mod.evidence_id}</strong> — {t('audit_review.corrections.reason_label')}{mod.reason}
                         </p>
                       )}
                     </div>
@@ -590,7 +592,7 @@ export default function ReviewWorkspace() {
           <div className="border-b border-slate-800 pb-4">
             <h3 className="text-base font-bold text-white flex items-center gap-2">
               <GitCompare className="w-5 h-5 text-indigo-400" />
-              AI Automated Output vs Final Human Verified Result
+              {t('audit_review.diff.title')}
             </h3>
             <p className="text-xs text-slate-400 mt-1">{diffComparison.summary}</p>
           </div>
@@ -599,27 +601,29 @@ export default function ReviewWorkspace() {
             <table className="w-full text-left text-xs border-collapse">
               <thead>
                 <tr className="border-b border-slate-800 text-slate-400 uppercase font-bold text-[10px]">
-                  <th className="py-2.5 px-3">Statutory Field</th>
-                  <th className="py-2.5 px-3">AI Automated Value</th>
-                  <th className="py-2.5 px-3">Human Verified Value</th>
-                  <th className="py-2.5 px-3">Diff State</th>
-                  <th className="py-2.5 px-3">Reviewer Attribution</th>
+                  <th className="py-2.5 px-3">{t('audit_review.diff.col_field')}</th>
+                  <th className="py-2.5 px-3">{t('audit_review.diff.col_ai_value')}</th>
+                  <th className="py-2.5 px-3">{t('audit_review.diff.col_human_value')}</th>
+                  <th className="py-2.5 px-3">{t('audit_review.diff.col_diff_state')}</th>
+                  <th className="py-2.5 px-3">{t('audit_review.diff.col_attribution')}</th>
                 </tr>
               </thead>
               <tbody className="divide-y divide-slate-800/80">
                 {diffComparison.field_diffs.map((fd, i) => (
                   <tr key={i} className={`hover:bg-slate-800/30 ${fd.is_changed ? 'bg-indigo-950/20' : ''}`}>
-                    <td className="py-2.5 px-3 font-semibold text-slate-200">{fd.field_label}</td>
+                    <td className="py-2.5 px-3 font-semibold text-slate-200">{fieldLabels[fd.field_name] || fd.field_label}</td>
                     <td className="py-2.5 px-3 text-slate-400">{fd.ai_value || '—'}</td>
                     <td className="py-2.5 px-3 font-bold text-white">{fd.human_value || '—'}</td>
                     <td className="py-2.5 px-3">
                       {fd.is_changed ? (
                         <span className="px-2 py-0.5 rounded bg-amber-500/20 text-amber-300 font-semibold text-[10px]">
-                          {fd.change_type}
+                          {fd.change_type === 'CORRECTED' 
+                            ? t('audit_review.diff.state_corrected') 
+                            : (fd.change_type === 'ADDED' ? t('audit_review.diff.state_added') : t('audit_review.diff.state_removed'))}
                         </span>
                       ) : (
                         <span className="px-2 py-0.5 rounded bg-slate-800 text-slate-400 text-[10px]">
-                          UNCHANGED
+                          {t('audit_review.diff.state_unchanged')}
                         </span>
                       )}
                     </td>
@@ -640,7 +644,7 @@ export default function ReviewWorkspace() {
           <div className="border-b border-slate-800 pb-3">
             <h3 className="text-base font-bold text-white flex items-center gap-2">
               <Clock className="w-5 h-5 text-indigo-400" />
-              Chronological Audit Trail
+              {t('audit_review.history.title')}
             </h3>
           </div>
 
@@ -653,7 +657,7 @@ export default function ReviewWorkspace() {
                   <span className="text-[10px] text-slate-400">{new Date(evt.timestamp).toLocaleString()}</span>
                 </div>
                 <p className="text-xs text-slate-300">{evt.details}</p>
-                <span className="text-[10px] text-slate-400 block">Actor: @{evt.actor_username} ({evt.actor_role})</span>
+                <span className="text-[10px] text-slate-400 block">{t('audit_review.history.actor_prefix', { officer: evt.actor_username, role: evt.actor_role })}</span>
               </div>
             ))}
           </div>
@@ -668,37 +672,28 @@ export default function ReviewWorkspace() {
           <div className="bg-slate-900 border border-slate-800 rounded-2xl max-w-md w-full p-6 space-y-4 shadow-2xl">
             <h3 className="text-base font-bold text-white flex items-center gap-2">
               <Edit3 className="w-4 h-4 text-amber-400" />
-              Correct Statutory Extracted Field
+              {t('audit_review.modal_correct.title')}
             </h3>
 
             <div className="space-y-3">
               <div>
-                <label className="text-xs font-semibold text-slate-300 block mb-1">Select Field</label>
+                <label className="text-xs font-semibold text-slate-300 block mb-1">{t('audit_review.modal_correct.select_field')}</label>
                 <select
                   value={selectedField}
                   onChange={(e) => setSelectedField(e.target.value)}
                   className="w-full px-3 py-2 rounded-xl bg-slate-950 border border-slate-800 text-sm text-slate-200"
                 >
-                  <option value="mrp">Maximum Retail Price (MRP)</option>
-                  <option value="net_quantity">Net Quantity</option>
-                  <option value="manufacturer">Manufacturer Name & Address</option>
-                  <option value="marketed_by">Marketed By</option>
-                  <option value="fssai_license">FSSAI License Number</option>
-                  <option value="consumer_care">Consumer Care Details</option>
-                  <option value="country_of_origin">Country of Origin</option>
-                  <option value="manufacture_date">Date of Manufacture</option>
-                  <option value="expiry_date">Expiry / Best Before Date</option>
-                  <option value="batch_number">Batch Number</option>
-                  <option value="ingredients">Ingredients List</option>
-                  <option value="nutritional_info">Nutritional Information Panel</option>
+                  {Object.entries(fieldLabels).map(([fKey, fLabel]) => (
+                    <option key={fKey} value={fKey}>{fLabel}</option>
+                  ))}
                 </select>
               </div>
 
               <div>
-                <label className="text-xs font-semibold text-slate-300 block mb-1">Corrected Value</label>
+                <label className="text-xs font-semibold text-slate-300 block mb-1">{t('audit_review.modal_correct.corrected_value')}</label>
                 <input
                   type="text"
-                  placeholder="Enter verified statutory value..."
+                  placeholder={t('audit_review.modal_correct.value_placeholder')}
                   value={correctedValue}
                   onChange={(e) => setCorrectedValue(e.target.value)}
                   className="w-full px-3 py-2 rounded-xl bg-slate-950 border border-slate-800 text-sm text-slate-200"
@@ -706,9 +701,9 @@ export default function ReviewWorkspace() {
               </div>
 
               <div>
-                <label className="text-xs font-semibold text-slate-300 block mb-1">Reason for Correction</label>
+                <label className="text-xs font-semibold text-slate-300 block mb-1">{t('audit_review.modal_correct.reason_label')}</label>
                 <textarea
-                  placeholder="e.g., OCR misread currency symbol; verified from front panel image."
+                  placeholder={t('audit_review.modal_correct.reason_placeholder')}
                   value={correctionReason}
                   onChange={(e) => setCorrectionReason(e.target.value)}
                   rows={2}
@@ -719,14 +714,14 @@ export default function ReviewWorkspace() {
 
             <div className="flex items-center justify-end gap-2 border-t border-slate-800 pt-4">
               <button onClick={() => setModalType(null)} className="px-4 py-2 rounded-xl bg-slate-800 text-xs font-semibold text-slate-300">
-                Cancel
+                {t('common.cancel')}
               </button>
               <button
                 onClick={handleCorrectFieldSubmit}
                 disabled={!correctedValue.trim() || submitting}
                 className="px-4 py-2 rounded-xl bg-amber-600 hover:bg-amber-500 disabled:opacity-50 text-xs font-bold text-white"
               >
-                {submitting ? 'Applying...' : 'Apply Correction & Recalculate'}
+                {submitting ? t('audit_review.modal_correct.applying_btn') : t('audit_review.modal_correct.submit_btn')}
               </button>
             </div>
           </div>
@@ -739,17 +734,17 @@ export default function ReviewWorkspace() {
           <div className="bg-slate-900 border border-slate-800 rounded-2xl max-w-md w-full p-6 space-y-4 shadow-2xl">
             <h3 className="text-base font-bold text-white flex items-center gap-2">
               <CheckCircle2 className="w-4 h-4 text-emerald-400" />
-              Accept AI Outcome as Human-Verified
+              {t('audit_review.modal_accept.title')}
             </h3>
 
             <p className="text-xs text-slate-300 leading-relaxed">
-              Confirming this audit establishes the current evaluation as the authoritative human verified outcome. The original AI result remains permanently snapshotted.
+              {t('audit_review.modal_accept.desc')}
             </p>
 
             <div>
-              <label className="text-xs font-semibold text-slate-300 block mb-1">Officer Notes (Optional)</label>
+              <label className="text-xs font-semibold text-slate-300 block mb-1">{t('audit_review.modal_accept.notes_label')}</label>
               <textarea
-                placeholder="Enter sign-off comments..."
+                placeholder={t('audit_review.modal_accept.notes_placeholder')}
                 value={commentText}
                 onChange={(e) => setCommentText(e.target.value)}
                 rows={3}
@@ -759,14 +754,14 @@ export default function ReviewWorkspace() {
 
             <div className="flex items-center justify-end gap-2 border-t border-slate-800 pt-4">
               <button onClick={() => setModalType(null)} className="px-4 py-2 rounded-xl bg-slate-800 text-xs font-semibold text-slate-300">
-                Cancel
+                {t('common.cancel')}
               </button>
               <button
                 onClick={handleAcceptSubmit}
                 disabled={submitting}
                 className="px-4 py-2 rounded-xl bg-emerald-600 hover:bg-emerald-500 text-xs font-bold text-white"
               >
-                {submitting ? 'Confirming...' : 'Sign-Off & Accept'}
+                {submitting ? t('audit_review.modal_accept.confirming_btn') : t('audit_review.modal_accept.submit_btn')}
               </button>
             </div>
           </div>
@@ -779,29 +774,29 @@ export default function ReviewWorkspace() {
           <div className="bg-slate-900 border border-slate-800 rounded-2xl max-w-md w-full p-6 space-y-4 shadow-2xl">
             <h3 className="text-base font-bold text-white flex items-center gap-2">
               <XCircle className="w-4 h-4 text-rose-400" />
-              Reject AI Outcome
+              {t('audit_review.modal_reject.title')}
             </h3>
 
             <div className="space-y-3">
               <div>
-                <label className="text-xs font-semibold text-slate-300 block mb-1">Rejection Reason</label>
+                <label className="text-xs font-semibold text-slate-300 block mb-1">{t('audit_review.modal_reject.reason_label')}</label>
                 <select
                   value={rejectionReason}
                   onChange={(e) => setRejectionReason(e.target.value)}
                   className="w-full px-3 py-2 rounded-xl bg-slate-950 border border-slate-800 text-sm text-slate-200"
                 >
-                  <option value="INCORRECT_EXTRACTION">Incorrect Information Extraction</option>
-                  <option value="INSUFFICIENT_EVIDENCE">Insufficient Visual Evidence</option>
-                  <option value="WRONG_RULE_EVALUATION">Incorrect Rule Evaluation</option>
-                  <option value="IMAGE_QUALITY_ISSUE">Package Image Quality Issue</option>
-                  <option value="OTHER">Other Enforcement Grounds</option>
+                  <option value="INCORRECT_EXTRACTION">{t('audit_review.modal_reject.reason_incorrect_extraction')}</option>
+                  <option value="INSUFFICIENT_EVIDENCE">{t('audit_review.modal_reject.reason_insufficient_evidence')}</option>
+                  <option value="WRONG_RULE_EVALUATION">{t('audit_review.modal_reject.reason_wrong_rule_evaluation')}</option>
+                  <option value="IMAGE_QUALITY_ISSUE">{t('audit_review.modal_reject.reason_image_quality_issue')}</option>
+                  <option value="OTHER">{t('audit_review.modal_reject.reason_other')}</option>
                 </select>
               </div>
 
               <div>
-                <label className="text-xs font-semibold text-slate-300 block mb-1">Officer Explanation (Mandatory)</label>
+                <label className="text-xs font-semibold text-slate-300 block mb-1">{t('audit_review.modal_reject.explanation_label')}</label>
                 <textarea
-                  placeholder="Provide detailed reasons for overturning AI outcome..."
+                  placeholder={t('audit_review.modal_reject.explanation_placeholder')}
                   value={commentText}
                   onChange={(e) => setCommentText(e.target.value)}
                   rows={3}
@@ -812,14 +807,14 @@ export default function ReviewWorkspace() {
 
             <div className="flex items-center justify-end gap-2 border-t border-slate-800 pt-4">
               <button onClick={() => setModalType(null)} className="px-4 py-2 rounded-xl bg-slate-800 text-xs font-semibold text-slate-300">
-                Cancel
+                {t('common.cancel')}
               </button>
               <button
                 onClick={handleRejectSubmit}
                 disabled={!commentText.trim() || submitting}
                 className="px-4 py-2 rounded-xl bg-rose-600 hover:bg-rose-500 disabled:opacity-50 text-xs font-bold text-white"
               >
-                {submitting ? 'Rejecting...' : 'Confirm Rejection'}
+                {submitting ? t('audit_review.modal_reject.rejecting_btn') : t('audit_review.modal_reject.submit_btn')}
               </button>
             </div>
           </div>
@@ -832,18 +827,18 @@ export default function ReviewWorkspace() {
           <div className="bg-slate-900 border border-slate-800 rounded-2xl max-w-md w-full p-6 space-y-4 shadow-2xl">
             <h3 className="text-base font-bold text-white flex items-center gap-2">
               <UserCheck className="w-4 h-4 text-indigo-400" />
-              Assign Review
+              {t('audit_review.modal_assign.workspace_title')}
             </h3>
 
             <div className="space-y-3">
               <div>
-                <label className="text-xs font-semibold text-slate-300 block mb-1">Select Officer</label>
+                <label className="text-xs font-semibold text-slate-300 block mb-1">{t('audit_review.modal_assign.select_officer')}</label>
                 <select
                   value={assignedOfficer}
                   onChange={(e) => setAssignedOfficer(e.target.value)}
                   className="w-full px-3 py-2 rounded-xl bg-slate-950 border border-slate-800 text-sm text-slate-200"
                 >
-                  <option value="">-- Choose an Officer --</option>
+                  <option value="">{t('audit_review.modal_assign.choose_officer_placeholder')}</option>
                   {officers.map(o => (
                     <option key={o.username} value={o.username}>
                       {o.full_name || o.username} ({o.role})
@@ -853,9 +848,9 @@ export default function ReviewWorkspace() {
               </div>
 
               <div>
-                <label className="text-xs font-semibold text-slate-300 block mb-1">Notes (Optional)</label>
+                <label className="text-xs font-semibold text-slate-300 block mb-1">{t('audit_review.modal_assign.notes_label')}</label>
                 <textarea
-                  placeholder="Enter instructions..."
+                  placeholder={t('audit_review.modal_assign.notes_placeholder')}
                   value={commentText}
                   onChange={(e) => setCommentText(e.target.value)}
                   rows={2}
@@ -866,14 +861,14 @@ export default function ReviewWorkspace() {
 
             <div className="flex items-center justify-end gap-2 border-t border-slate-800 pt-4">
               <button onClick={() => setModalType(null)} className="px-4 py-2 rounded-xl bg-slate-800 text-xs font-semibold text-slate-300">
-                Cancel
+                {t('common.cancel')}
               </button>
               <button
                 onClick={handleAssignSubmit}
                 disabled={!assignedOfficer || submitting}
                 className="px-4 py-2 rounded-xl bg-indigo-600 hover:bg-indigo-500 disabled:opacity-50 text-xs font-bold text-white"
               >
-                {submitting ? 'Assigning...' : 'Confirm Assignment'}
+                {submitting ? t('audit_review.modal_assign.assigning_btn') : t('audit_review.modal_assign.confirm_btn')}
               </button>
             </div>
           </div>
@@ -886,15 +881,15 @@ export default function ReviewWorkspace() {
           <div className="bg-slate-900 border border-slate-800 rounded-2xl max-w-md w-full p-6 space-y-4 shadow-2xl">
             <h3 className="text-base font-bold text-white flex items-center gap-2">
               <PlusCircle className="w-4 h-4 text-emerald-400" />
-              Add Missing Evidence Annotation
+              {t('audit_review.modal_add_evidence.title')}
             </h3>
 
             <div className="space-y-3">
               <div>
-                <label className="text-xs font-semibold text-slate-300 block mb-1">Linked Rule ID</label>
+                <label className="text-xs font-semibold text-slate-300 block mb-1">{t('audit_review.modal_add_evidence.rule_id_label')}</label>
                 <input
                   type="text"
-                  placeholder="e.g. LM-001, FS-001, LM-004"
+                  placeholder={t('audit_review.modal_add_evidence.rule_id_placeholder')}
                   value={missingLinkedRule}
                   onChange={(e) => setMissingLinkedRule(e.target.value)}
                   className="w-full px-3 py-2 rounded-xl bg-slate-950 border border-slate-800 text-sm text-slate-200"
@@ -902,23 +897,23 @@ export default function ReviewWorkspace() {
               </div>
 
               <div>
-                <label className="text-xs font-semibold text-slate-300 block mb-1">Linked Declaration Field</label>
+                <label className="text-xs font-semibold text-slate-300 block mb-1">{t('audit_review.modal_add_evidence.field_label')}</label>
                 <select
                   value={missingLinkedField}
                   onChange={(e) => setMissingLinkedField(e.target.value)}
                   className="w-full px-3 py-2 rounded-xl bg-slate-950 border border-slate-800 text-sm text-slate-200"
                 >
-                  {Object.entries(FIELD_LABELS).map(([fKey, fLabel]) => (
+                  {Object.entries(fieldLabels).map(([fKey, fLabel]) => (
                     <option key={fKey} value={fKey}>{fLabel}</option>
                   ))}
                 </select>
               </div>
 
               <div>
-                <label className="text-xs font-semibold text-slate-300 block mb-1">Evidence Text Found</label>
+                <label className="text-xs font-semibold text-slate-300 block mb-1">{t('audit_review.modal_add_evidence.text_found_label')}</label>
                 <input
                   type="text"
-                  placeholder="e.g. Mfd By: XYZ Industries Ltd, 110001"
+                  placeholder={t('audit_review.modal_add_evidence.text_found_placeholder')}
                   value={missingEvidenceText}
                   onChange={(e) => setMissingEvidenceText(e.target.value)}
                   className="w-full px-3 py-2 rounded-xl bg-slate-950 border border-slate-800 text-sm text-slate-200"
@@ -926,9 +921,9 @@ export default function ReviewWorkspace() {
               </div>
 
               <div>
-                <label className="text-xs font-semibold text-slate-300 block mb-1">Officer Notes (Optional)</label>
+                <label className="text-xs font-semibold text-slate-300 block mb-1">{t('audit_review.modal_add_evidence.notes_label')}</label>
                 <textarea
-                  placeholder="Annotation notes..."
+                  placeholder={t('audit_review.modal_add_evidence.notes_placeholder')}
                   value={commentText}
                   onChange={(e) => setCommentText(e.target.value)}
                   rows={2}
@@ -939,14 +934,14 @@ export default function ReviewWorkspace() {
 
             <div className="flex items-center justify-end gap-2 border-t border-slate-800 pt-4">
               <button onClick={() => setModalType(null)} className="px-4 py-2 rounded-xl bg-slate-800 text-xs font-semibold text-slate-300">
-                Cancel
+                {t('common.cancel')}
               </button>
               <button
                 onClick={handleAddEvidenceSubmit}
                 disabled={!missingEvidenceText.trim() || submitting}
                 className="px-4 py-2 rounded-xl bg-emerald-600 hover:bg-emerald-500 disabled:opacity-50 text-xs font-bold text-white"
               >
-                {submitting ? 'Saving...' : 'Add Evidence'}
+                {submitting ? t('audit_review.modal_add_evidence.saving_btn') : t('audit_review.modal_add_evidence.submit_btn')}
               </button>
             </div>
           </div>
@@ -959,27 +954,27 @@ export default function ReviewWorkspace() {
           <div className="bg-slate-900 border border-slate-800 rounded-2xl max-w-md w-full p-6 space-y-4 shadow-2xl">
             <h3 className="text-base font-bold text-white flex items-center gap-2">
               <ArrowUpRight className="w-4 h-4 text-purple-400" />
-              Escalate Audit Review
+              {t('audit_review.modal_escalate.title')}
             </h3>
 
             <div className="space-y-3">
               <div>
-                <label className="text-xs font-semibold text-slate-300 block mb-1">Escalation Target</label>
+                <label className="text-xs font-semibold text-slate-300 block mb-1">{t('audit_review.modal_escalate.target_label')}</label>
                 <select
                   value={escalationTarget}
                   onChange={(e) => setEscalationTarget(e.target.value)}
                   className="w-full px-3 py-2 rounded-xl bg-slate-950 border border-slate-800 text-sm text-slate-200"
                 >
-                  <option value="ADMIN">System Administrator</option>
-                  <option value="ENFORCEMENT_DIRECTOR">Enforcement Director</option>
-                  <option value="LEGAL_COUNSEL">Legal Metrology Counsel</option>
+                  <option value="ADMIN">{t('audit_review.modal_escalate.target_admin')}</option>
+                  <option value="ENFORCEMENT_DIRECTOR">{t('audit_review.modal_escalate.target_enforcement_director')}</option>
+                  <option value="LEGAL_COUNSEL">{t('audit_review.modal_escalate.target_legal_counsel')}</option>
                 </select>
               </div>
 
               <div>
-                <label className="text-xs font-semibold text-slate-300 block mb-1">Escalation Reason</label>
+                <label className="text-xs font-semibold text-slate-300 block mb-1">{t('audit_review.modal_escalate.reason_label')}</label>
                 <textarea
-                  placeholder="State the statutory or technical dispute requiring escalation..."
+                  placeholder={t('audit_review.modal_escalate.reason_placeholder')}
                   value={escalationReason}
                   onChange={(e) => setEscalationReason(e.target.value)}
                   rows={3}
@@ -990,14 +985,14 @@ export default function ReviewWorkspace() {
 
             <div className="flex items-center justify-end gap-2 border-t border-slate-800 pt-4">
               <button onClick={() => setModalType(null)} className="px-4 py-2 rounded-xl bg-slate-800 text-xs font-semibold text-slate-300">
-                Cancel
+                {t('common.cancel')}
               </button>
               <button
                 onClick={handleEscalateSubmit}
                 disabled={!escalationReason.trim() || submitting}
                 className="px-4 py-2 rounded-xl bg-purple-600 hover:bg-purple-500 disabled:opacity-50 text-xs font-bold text-white"
               >
-                {submitting ? 'Escalating...' : 'Confirm Escalation'}
+                {submitting ? t('audit_review.modal_escalate.escalating_btn') : t('audit_review.modal_escalate.submit_btn')}
               </button>
             </div>
           </div>
@@ -1010,17 +1005,17 @@ export default function ReviewWorkspace() {
           <div className="bg-slate-900 border border-slate-800 rounded-2xl max-w-md w-full p-6 space-y-4 shadow-2xl">
             <h3 className="text-base font-bold text-white flex items-center gap-2">
               <RotateCcw className="w-4 h-4 text-cyan-400" />
-              Reopen Completed Audit
+              {t('audit_review.modal_reopen.title')}
             </h3>
 
             <p className="text-xs text-slate-300 leading-relaxed">
-              Reopening will reactivate this audit into an active review state while preserving all prior verification history.
+              {t('audit_review.modal_reopen.desc')}
             </p>
 
             <div>
-              <label className="text-xs font-semibold text-slate-300 block mb-1">Reason for Reopening</label>
+              <label className="text-xs font-semibold text-slate-300 block mb-1">{t('audit_review.modal_reopen.reason_label')}</label>
               <textarea
-                placeholder="e.g. New laboratory test report received; supplementary packaging evidence submitted."
+                placeholder={t('audit_review.modal_reopen.reason_placeholder')}
                 value={reopenReason}
                 onChange={(e) => setReopenReason(e.target.value)}
                 rows={3}
@@ -1030,14 +1025,14 @@ export default function ReviewWorkspace() {
 
             <div className="flex items-center justify-end gap-2 border-t border-slate-800 pt-4">
               <button onClick={() => setModalType(null)} className="px-4 py-2 rounded-xl bg-slate-800 text-xs font-semibold text-slate-300">
-                Cancel
+                {t('common.cancel')}
               </button>
               <button
                 onClick={handleReopenSubmit}
                 disabled={!reopenReason.trim() || submitting}
                 className="px-4 py-2 rounded-xl bg-cyan-600 hover:bg-cyan-500 disabled:opacity-50 text-xs font-bold text-white"
               >
-                {submitting ? 'Reopening...' : 'Reopen Audit'}
+                {submitting ? t('audit_review.modal_reopen.reopening_btn') : t('audit_review.modal_reopen.submit_btn')}
               </button>
             </div>
           </div>
@@ -1050,13 +1045,13 @@ export default function ReviewWorkspace() {
           <div className="bg-slate-900 border border-slate-800 rounded-2xl max-w-md w-full p-6 space-y-4 shadow-2xl">
             <h3 className="text-base font-bold text-white flex items-center gap-2">
               <MessageSquare className="w-4 h-4 text-sky-400" />
-              Add Officer Comment
+              {t('audit_review.modal_comment.title')}
             </h3>
 
             <div>
-              <label className="text-xs font-semibold text-slate-300 block mb-1">Comment / Inspection Note</label>
+              <label className="text-xs font-semibold text-slate-300 block mb-1">{t('audit_review.modal_comment.note_label')}</label>
               <textarea
-                placeholder="Enter observation, test measurement, or statutory finding..."
+                placeholder={t('audit_review.modal_comment.note_placeholder')}
                 value={commentText}
                 onChange={(e) => setCommentText(e.target.value)}
                 rows={3}
@@ -1066,14 +1061,14 @@ export default function ReviewWorkspace() {
 
             <div className="flex items-center justify-end gap-2 border-t border-slate-800 pt-4">
               <button onClick={() => setModalType(null)} className="px-4 py-2 rounded-xl bg-slate-800 text-xs font-semibold text-slate-300">
-                Cancel
+                {t('common.cancel')}
               </button>
               <button
                 onClick={handleCommentSubmit}
                 disabled={!commentText.trim() || submitting}
                 className="px-4 py-2 rounded-xl bg-sky-600 hover:bg-sky-500 disabled:opacity-50 text-xs font-bold text-white"
               >
-                {submitting ? 'Saving...' : 'Add Comment'}
+                {submitting ? t('audit_review.modal_comment.saving_btn') : t('audit_review.modal_comment.submit_btn')}
               </button>
             </div>
           </div>
@@ -1086,15 +1081,15 @@ export default function ReviewWorkspace() {
           <div className="bg-slate-900 border border-slate-800 rounded-2xl max-w-md w-full p-6 space-y-4 shadow-2xl">
             <h3 className="text-base font-bold text-white flex items-center gap-2">
               <Trash2 className="w-4 h-4 text-rose-400" />
-              Soft-Remove Incorrect Evidence
+              {t('audit_review.modal_remove_evidence.title')}
             </h3>
 
             <div className="space-y-3">
               <div>
-                <label className="text-xs font-semibold text-slate-300 block mb-1">Evidence ID</label>
+                <label className="text-xs font-semibold text-slate-300 block mb-1">{t('audit_review.modal_remove_evidence.id_label')}</label>
                 <input
                   type="text"
-                  placeholder="e.g. ev-001"
+                  placeholder={t('audit_review.modal_remove_evidence.id_placeholder')}
                   value={targetEvidenceId}
                   onChange={(e) => setTargetEvidenceId(e.target.value)}
                   className="w-full px-3 py-2 rounded-xl bg-slate-950 border border-slate-800 text-sm text-slate-200"
@@ -1102,9 +1097,9 @@ export default function ReviewWorkspace() {
               </div>
 
               <div>
-                <label className="text-xs font-semibold text-slate-300 block mb-1">Removal Reason</label>
+                <label className="text-xs font-semibold text-slate-300 block mb-1">{t('audit_review.modal_remove_evidence.reason_label')}</label>
                 <textarea
-                  placeholder="State why this evidence item is incorrect or a false positive..."
+                  placeholder={t('audit_review.modal_remove_evidence.reason_placeholder')}
                   value={removeEvidenceReason}
                   onChange={(e) => setRemoveEvidenceReason(e.target.value)}
                   rows={3}
@@ -1115,14 +1110,14 @@ export default function ReviewWorkspace() {
 
             <div className="flex items-center justify-end gap-2 border-t border-slate-800 pt-4">
               <button onClick={() => setModalType(null)} className="px-4 py-2 rounded-xl bg-slate-800 text-xs font-semibold text-slate-300">
-                Cancel
+                {t('common.cancel')}
               </button>
               <button
                 onClick={handleRemoveEvidenceSubmit}
                 disabled={!targetEvidenceId.trim() || !removeEvidenceReason.trim() || submitting}
                 className="px-4 py-2 rounded-xl bg-rose-600 hover:bg-rose-500 disabled:opacity-50 text-xs font-bold text-white"
               >
-                {submitting ? 'Removing...' : 'Confirm Soft Removal'}
+                {submitting ? t('audit_review.modal_remove_evidence.removing_btn') : t('audit_review.modal_remove_evidence.submit_btn')}
               </button>
             </div>
           </div>

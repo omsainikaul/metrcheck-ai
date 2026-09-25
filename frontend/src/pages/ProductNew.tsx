@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useState, useEffect, useMemo } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { 
   ArrowLeft, 
@@ -10,13 +10,16 @@ import {
   Scale, 
   Globe, 
   AlertCircle,
+  AlertTriangle,
   FileCheck
 } from 'lucide-react';
 import { api } from '../services/api';
-import { type ProductCreateInput } from '../types';
+import { type ProductCreateInput, type Product } from '../types';
+import { useLanguage } from '../context/LanguageContext';
 
 export default function ProductNew() {
   const navigate = useNavigate();
+  const { t } = useLanguage();
 
   const [formData, setFormData] = useState<ProductCreateInput>({
     product_name: '',
@@ -32,8 +35,25 @@ export default function ProductNew() {
     country_of_origin: 'India',
   });
 
+  const [existingProducts, setExistingProducts] = useState<Product[]>([]);
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
+
+  useEffect(() => {
+    let isMounted = true;
+    api.getProducts({ limit: 200, status: 'ACTIVE' }).then(res => {
+      if (isMounted && res?.products) {
+        setExistingProducts(res.products);
+      }
+    }).catch(() => {});
+    return () => { isMounted = false; };
+  }, []);
+
+  const isDuplicateGtin = useMemo(() => {
+    const norm = (formData.gtin_barcode || '').trim().toLowerCase();
+    if (!norm) return false;
+    return existingProducts.some(p => (p.gtin_barcode || '').trim().toLowerCase() === norm);
+  }, [formData.gtin_barcode, existingProducts]);
 
   const handleChange = (field: keyof ProductCreateInput, value: any) => {
     setFormData(prev => ({ ...prev, [field]: value }));
@@ -42,7 +62,7 @@ export default function ProductNew() {
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!formData.product_name.trim()) {
-      setError('Product SKU Name is required.');
+      setError(t('merchant.product_new.validation_name_required'));
       return;
     }
 
@@ -75,10 +95,10 @@ export default function ProductNew() {
           </button>
           <div>
             <h1 className="text-2xl font-bold text-slate-900 dark:text-slate-100 tracking-tight">
-              Register New Product SKU
+              {t('merchant.product_new.title')}
             </h1>
             <p className="text-xs sm:text-sm text-slate-500 dark:text-slate-400 mt-0.5">
-              Establish the master statutory declaration baseline for physical screening &amp; pre-print artwork auditing.
+              {t('merchant.product_new.subtitle')}
             </p>
           </div>
         </div>
@@ -98,14 +118,14 @@ export default function ProductNew() {
           <div className="flex items-center gap-2 pb-3 border-b border-slate-100 dark:border-slate-800">
             <Tag className="w-4 h-4 text-sky-600 dark:text-sky-400" />
             <h2 className="text-sm font-bold text-slate-900 dark:text-slate-100 uppercase tracking-wider">
-              Product Identity &amp; Classification
+              {t('merchant.product_new.sec_identity')}
             </h2>
           </div>
 
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
             <div className="sm:col-span-2">
               <label className="block text-xs font-semibold text-slate-700 dark:text-slate-300 mb-1">
-                Product SKU Name / Commercial Title <span className="text-red-500">*</span>
+                {t('merchant.product_new.field_name')} <span className="text-red-500">*</span>
               </label>
               <input
                 type="text"
@@ -119,7 +139,7 @@ export default function ProductNew() {
 
             <div>
               <label className="block text-xs font-semibold text-slate-700 dark:text-slate-300 mb-1">
-                Brand Name
+                {t('merchant.product_new.field_brand')}
               </label>
               <input
                 type="text"
@@ -132,26 +152,26 @@ export default function ProductNew() {
 
             <div>
               <label className="block text-xs font-semibold text-slate-700 dark:text-slate-300 mb-1">
-                Category
+                {t('merchant.product_new.field_category')}
               </label>
               <select
                 value={formData.category}
                 onChange={(e) => handleChange('category', e.target.value)}
                 className="w-full px-3.5 py-2.5 bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl text-sm text-slate-900 dark:text-slate-100 focus:outline-none focus:ring-2 focus:ring-sky-500 transition-all cursor-pointer"
               >
-                <option value="GENERAL">General Commodity</option>
-                <option value="FOOD_BEVERAGES">Food &amp; Beverages</option>
-                <option value="COSMETICS">Cosmetics &amp; Personal Care</option>
-                <option value="ELECTRONICS">Electronics &amp; Appliances</option>
-                <option value="PHARMACEUTICALS">Pharmaceuticals &amp; Wellness</option>
-                <option value="HOUSEHOLD">Household &amp; Cleaning</option>
-                <option value="APPAREL">Apparel &amp; Textiles</option>
+                <option value="GENERAL">{t('merchant.categories.GENERAL')}</option>
+                <option value="FOOD_BEVERAGES">{t('merchant.categories.FOOD_BEVERAGES')}</option>
+                <option value="COSMETICS">{t('merchant.categories.COSMETICS')}</option>
+                <option value="ELECTRONICS">{t('merchant.categories.ELECTRONICS')}</option>
+                <option value="PHARMACEUTICALS">{t('merchant.categories.PHARMACEUTICALS')}</option>
+                <option value="HOUSEHOLD">{t('merchant.categories.HOUSEHOLD')}</option>
+                <option value="APPAREL">{t('merchant.categories.APPAREL')}</option>
               </select>
             </div>
 
             <div>
               <label className="block text-xs font-semibold text-slate-700 dark:text-slate-300 mb-1">
-                GTIN / EAN-13 Barcode
+                {t('merchant.product_new.field_gtin')}
               </label>
               <div className="relative">
                 <Barcode className="w-4 h-4 text-slate-400 absolute left-3 top-1/2 -translate-y-1/2 pointer-events-none" />
@@ -163,11 +183,17 @@ export default function ProductNew() {
                   className="w-full pl-9 pr-3.5 py-2.5 bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl text-sm font-mono text-slate-900 dark:text-slate-100 placeholder-slate-400 focus:outline-none focus:ring-2 focus:ring-sky-500 transition-all"
                 />
               </div>
+              {isDuplicateGtin && (
+                <div className="mt-1.5 flex items-start gap-1.5 text-xs text-amber-600 dark:text-amber-400">
+                  <AlertTriangle className="w-3.5 h-3.5 mt-0.5 shrink-0" />
+                  <p>{t('sku_workflow.gtin_duplicate_warning')}</p>
+                </div>
+              )}
             </div>
 
             <div>
               <label className="block text-xs font-semibold text-slate-700 dark:text-slate-300 mb-1">
-                Country of Origin
+                {t('merchant.product_new.field_origin')}
               </label>
               <div className="relative">
                 <Globe className="w-4 h-4 text-slate-400 absolute left-3 top-1/2 -translate-y-1/2 pointer-events-none" />
@@ -188,14 +214,14 @@ export default function ProductNew() {
           <div className="flex items-center gap-2 pb-3 border-b border-slate-100 dark:border-slate-800">
             <Scale className="w-4 h-4 text-sky-600 dark:text-sky-400" />
             <h2 className="text-sm font-bold text-slate-900 dark:text-slate-100 uppercase tracking-wider">
-              Statutory Declarations &amp; Pricing (Legal Metrology Rule 6)
+              {t('merchant.product_new.sec_declarations')}
             </h2>
           </div>
 
           <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
             <div>
               <label className="block text-xs font-semibold text-slate-700 dark:text-slate-300 mb-1">
-                Declared Net Quantity
+                {t('merchant.product_new.field_net_qty')}
               </label>
               <input
                 type="text"
@@ -204,12 +230,12 @@ export default function ProductNew() {
                 onChange={(e) => handleChange('net_quantity_declared', e.target.value)}
                 className="w-full px-3.5 py-2.5 bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl text-sm text-slate-900 dark:text-slate-100 placeholder-slate-400 focus:outline-none focus:ring-2 focus:ring-sky-500 transition-all"
               />
-              <p className="text-[10px] text-slate-400 mt-1">Must use standard SI units (g, kg, ml, L)</p>
+              <p className="text-[10px] text-slate-400 mt-1">{t('merchant.product_new.hint_si_units')}</p>
             </div>
 
             <div>
               <label className="block text-xs font-semibold text-slate-700 dark:text-slate-300 mb-1">
-                Maximum Retail Price (₹ MRP)
+                {t('merchant.product_new.field_mrp')}
               </label>
               <div className="relative">
                 <span className="text-slate-400 font-bold absolute left-3 top-1/2 -translate-y-1/2 pointer-events-none text-sm">₹</span>
@@ -223,12 +249,12 @@ export default function ProductNew() {
                   className="w-full pl-8 pr-3.5 py-2.5 bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl text-sm font-mono text-slate-900 dark:text-slate-100 placeholder-slate-400 focus:outline-none focus:ring-2 focus:ring-sky-500 transition-all"
                 />
               </div>
-              <p className="text-[10px] text-slate-400 mt-1">Inclusive of all taxes</p>
+              <p className="text-[10px] text-slate-400 mt-1">{t('merchant.product_new.hint_incl_taxes')}</p>
             </div>
 
             <div>
               <label className="block text-xs font-semibold text-slate-700 dark:text-slate-300 mb-1">
-                Unit Sale Price (USP)
+                {t('merchant.product_new.field_usp')}
               </label>
               <input
                 type="text"
@@ -237,7 +263,7 @@ export default function ProductNew() {
                 onChange={(e) => handleChange('unit_sale_price_declared', e.target.value)}
                 className="w-full px-3.5 py-2.5 bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl text-sm text-slate-900 dark:text-slate-100 placeholder-slate-400 focus:outline-none focus:ring-2 focus:ring-sky-500 transition-all"
               />
-              <p className="text-[10px] text-slate-400 mt-1">Per gram/ml/piece</p>
+              <p className="text-[10px] text-slate-400 mt-1">{t('merchant.product_new.hint_per_unit')}</p>
             </div>
           </div>
         </div>
@@ -247,14 +273,14 @@ export default function ProductNew() {
           <div className="flex items-center gap-2 pb-3 border-b border-slate-100 dark:border-slate-800">
             <Building2 className="w-4 h-4 text-sky-600 dark:text-sky-400" />
             <h2 className="text-sm font-bold text-slate-900 dark:text-slate-100 uppercase tracking-wider">
-              Manufacturer &amp; Regulatory Licensure
+              {t('merchant.product_new.sec_licensure')}
             </h2>
           </div>
 
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
             <div className="sm:col-span-2">
               <label className="block text-xs font-semibold text-slate-700 dark:text-slate-300 mb-1">
-                Manufacturer / Packer Name &amp; Full Address
+                {t('merchant.product_new.field_mfg_address')}
               </label>
               <textarea
                 rows={2}
@@ -267,7 +293,7 @@ export default function ProductNew() {
 
             <div>
               <label className="block text-xs font-semibold text-slate-700 dark:text-slate-300 mb-1">
-                FSSAI License Number (if Food)
+                {t('merchant.product_new.field_fssai')}
               </label>
               <div className="relative">
                 <ShieldCheck className="w-4 h-4 text-slate-400 absolute left-3 top-1/2 -translate-y-1/2 pointer-events-none" />
@@ -284,7 +310,7 @@ export default function ProductNew() {
 
             <div>
               <label className="block text-xs font-semibold text-slate-700 dark:text-slate-300 mb-1">
-                Legal Metrology Packer Registration No.
+                {t('merchant.product_new.field_lm_license')}
               </label>
               <div className="relative">
                 <FileCheck className="w-4 h-4 text-slate-400 absolute left-3 top-1/2 -translate-y-1/2 pointer-events-none" />
@@ -307,7 +333,7 @@ export default function ProductNew() {
             onClick={() => navigate('/products')}
             className="px-5 py-2.5 text-xs font-semibold text-slate-700 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-800 rounded-xl transition-colors cursor-pointer"
           >
-            Cancel
+            {t('common.cancel') || 'Cancel'}
           </button>
           <button
             type="submit"
@@ -315,7 +341,7 @@ export default function ProductNew() {
             className="inline-flex items-center gap-2 px-6 py-2.5 bg-sky-600 hover:bg-sky-700 disabled:opacity-50 text-white rounded-xl text-xs font-bold transition-all shadow-sm hover:shadow-md cursor-pointer"
           >
             <Save className="w-4 h-4" />
-            <span>{saving ? 'Registering SKU...' : 'Save Product Record'}</span>
+            <span>{saving ? t('merchant.product_new.btn_registering') : t('merchant.product_new.btn_save')}</span>
           </button>
         </div>
       </form>

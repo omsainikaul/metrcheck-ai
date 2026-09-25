@@ -446,10 +446,10 @@ async def test_api_review_lifecycle_endpoints():
     admin_headers = make_auth_header("admin", ROLE_ADMIN)
 
     # 1. Assign review
-    assign_payload = {"assigned_officer": "officer", "comments": "Assigned for statutory inspection"}
+    assign_payload = {"assigned_officer": "audit", "comments": "Assigned for statutory inspection"}
     assign_resp = client.post(f"/api/reviews/{review['id']}/assign", json=assign_payload, headers=officer_headers)
     assert assign_resp.status_code == 200
-    assert assign_resp.json()["assigned_officer"] == "officer"
+    assert assign_resp.json()["assigned_officer"] == "audit"
 
     # 2. Add comment
     comment_payload = {"comment_type": "INSPECTION_NOTE", "text": "Initial OCR verification matches packaging front panel."}

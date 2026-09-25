@@ -169,7 +169,18 @@ export default function Sidebar({
 
   const visibleWorkspaces = WORKSPACE_NAV_CONFIG.filter(w => isWorkspaceAllowed(w.id));
 
-  const overviewLinks: NavItem[] = [
+  const isMerchant = currentWorkspace === 'MERCHANT';
+
+  const overviewLinks: NavItem[] = isMerchant ? [
+    { to: '/', icon: LayoutDashboard, label: t('navigation.dashboard') },
+    { 
+      to: '/analyze', 
+      icon: ScanSearch, 
+      label: t('navigation.statutory_compliance_inspection'),
+      highlight: true,
+      badge: 'Core'
+    }
+  ] : [
     { to: '/', icon: LayoutDashboard, label: t('navigation.dashboard') }
   ];
 
@@ -191,17 +202,32 @@ export default function Sidebar({
       label: t('navigation.manual_product_check')
     },
     { to: '/history', icon: History, label: t('navigation.my_scan_history') }
-  ] : [
+  ] : isMerchant ? [
+    { to: '/preprint', icon: Printer, label: t('navigation.pre_print_compliance') },
+    { to: '/versions', icon: GitCompare, label: t('navigation.version_comparison') },
+    { to: '/analyze-listing', icon: FileText, label: t('navigation.listing_check') },
+    { to: '/history', icon: History, label: t('navigation.screening_history') }
+  ] : currentWorkspace === 'ENFORCEMENT' ? [
+    ...(user?.role === 'ADMIN' || user?.role === 'ENFORCEMENT_OFFICER' ? [{ to: '/enforcement', icon: ShieldAlert, label: t('navigation.enforcement_cases'), badge: 'Legal' }] : []),
+    { to: '/reviews', icon: UserCheck, label: t('navigation.officer_review') },
     { 
       to: '/analyze', 
       icon: ScanSearch, 
-      label: currentWorkspace === 'MERCHANT' ? t('navigation.analyze_package') : currentWorkspace === 'AUDIT' ? t('navigation.technical_packaging_verification') : t('navigation.statutory_compliance_inspection'),
+      label: t('navigation.statutory_compliance_inspection'),
       highlight: true 
     },
-    { to: '/preprint', icon: Printer, label: t('navigation.pre_print_compliance'), badge: 'Sec 8' },
-    { to: '/versions', icon: GitCompare, label: t('navigation.version_comparison'), badge: 'Sec 9' },
-    { to: '/reviews', icon: UserCheck, label: t('navigation.officer_review'), badge: 'Sec 10' },
-    ...(user?.role === 'ADMIN' || user?.role === 'ENFORCEMENT_OFFICER' ? [{ to: '/enforcement', icon: ShieldAlert, label: t('navigation.enforcement_cases'), badge: 'Legal' }] : []),
+    { to: '/versions', icon: GitCompare, label: t('navigation.version_comparison') },
+    { to: '/analyze-listing', icon: FileText, label: t('navigation.listing_check') },
+    { to: '/history', icon: History, label: t('navigation.screening_history') }
+  ] : [
+    { to: '/reviews', icon: UserCheck, label: t('navigation.officer_review') },
+    { 
+      to: '/analyze', 
+      icon: ScanSearch, 
+      label: t('navigation.technical_packaging_verification'),
+      highlight: true 
+    },
+    { to: '/versions', icon: GitCompare, label: t('navigation.version_comparison') },
     { to: '/analyze-listing', icon: FileText, label: t('navigation.listing_check') },
     { to: '/history', icon: History, label: t('navigation.screening_history') }
   ];
@@ -229,7 +255,9 @@ export default function Sidebar({
         `flex items-center gap-3 px-3 py-2 rounded-xl transition-all group relative ${
           isActive 
             ? 'bg-indigo-600 text-white font-semibold shadow-sm shadow-indigo-950/30' 
-            : 'text-slate-300 hover:bg-slate-800/80 hover:text-white font-medium'
+            : link.highlight
+              ? 'text-slate-200 hover:bg-slate-800/90 hover:text-white font-medium bg-slate-800/30 border border-slate-700/40'
+              : 'text-slate-300 hover:bg-slate-800/80 hover:text-white font-medium'
         } ${collapsed ? 'justify-center' : ''}`
       }
     >
@@ -239,7 +267,11 @@ export default function Sidebar({
         <div className="flex items-center justify-between flex-1 min-w-0">
           <span className="text-xs truncate">{link.label}</span>
           {link.badge && (
-            <span className="text-[10px] font-bold px-1.5 py-0.5 rounded-md bg-amber-400/20 text-amber-300 border border-amber-400/30 shrink-0">
+            <span className={`text-[10px] font-bold px-1.5 py-0.5 rounded-md shrink-0 border ${
+              link.badge === 'Core'
+                ? 'bg-sky-400/20 text-sky-300 border-sky-400/30'
+                : 'bg-amber-400/20 text-amber-300 border-amber-400/30'
+            }`}>
               {link.badge}
             </span>
           )}
@@ -348,28 +380,6 @@ export default function Sidebar({
             {overviewLinks.map(renderNavLink)}
           </div>
 
-          {(currentWorkspace === 'MERCHANT' || user?.role === 'MERCHANT_PUBLIC' || user?.role === 'ADMIN') && (
-            <div className="space-y-1">
-              {!collapsed && <span className="text-[10px] font-bold text-sky-400 uppercase tracking-wider px-3 pb-1 block">Catalog &amp; Entity</span>}
-              {merchantCatalogLinks.map(renderNavLink)}
-            </div>
-          )}
-
-          <div className="space-y-1">
-            {!collapsed && <span className="text-[10px] font-bold text-slate-500 uppercase tracking-wider px-3 pb-1 block">{t('navigation.screening')}</span>}
-            {screeningLinks.map(renderNavLink)}
-          </div>
-
-          <div className="space-y-1">
-            {!collapsed && <span className="text-[10px] font-bold text-slate-500 uppercase tracking-wider px-3 pb-1 block">{isNormalUser ? (t('navigation.guidance') || 'Guidance') : t('navigation.intelligence')}</span>}
-            {intelligenceLinks.map(renderNavLink)}
-          </div>
-
-          <div className="space-y-1">
-            {!collapsed && <span className="text-[10px] font-bold text-slate-500 uppercase tracking-wider px-3 pb-1 block">{t('navigation.tools')}</span>}
-            {toolsLinks.map(renderNavLink)}
-          </div>
-
           {user?.role === 'ADMIN' && (
             <div className="space-y-1">
               {!collapsed && (
@@ -449,6 +459,28 @@ export default function Sidebar({
               </NavLink>
             </div>
           )}
+
+          {(currentWorkspace === 'MERCHANT' || user?.role === 'MERCHANT_PUBLIC' || user?.role === 'ADMIN') && (
+            <div className="space-y-1">
+              {!collapsed && <span className="text-[10px] font-bold text-sky-400 uppercase tracking-wider px-3 pb-1 block">{t('navigation.catalog_entity')}</span>}
+              {merchantCatalogLinks.map(renderNavLink)}
+            </div>
+          )}
+
+          <div className="space-y-1">
+            {!collapsed && <span className="text-[10px] font-bold text-slate-500 uppercase tracking-wider px-3 pb-1 block">{t('navigation.screening')}</span>}
+            {screeningLinks.map(renderNavLink)}
+          </div>
+
+          <div className="space-y-1">
+            {!collapsed && <span className="text-[10px] font-bold text-slate-500 uppercase tracking-wider px-3 pb-1 block">{isNormalUser ? (t('navigation.guidance') || 'Guidance') : t('navigation.intelligence')}</span>}
+            {intelligenceLinks.map(renderNavLink)}
+          </div>
+
+          <div className="space-y-1">
+            {!collapsed && <span className="text-[10px] font-bold text-slate-500 uppercase tracking-wider px-3 pb-1 block">{t('navigation.tools')}</span>}
+            {toolsLinks.map(renderNavLink)}
+          </div>
         </nav>
 
         <div className="p-3 border-t border-slate-800/90 space-y-2">

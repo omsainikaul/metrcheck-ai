@@ -37,6 +37,7 @@ from database.db import (
     get_review,
     get_review_by_analysis_id,
     get_user_by_username,
+    get_all_users,
     save_enforcement_case,
     insert_enforcement_case,
     get_enforcement_case,
@@ -154,6 +155,30 @@ async def get_enforcement_dashboard(current_user: dict = Depends(get_current_use
         organization_id=org_id,
         officer_username=current_user.get("username")
     )
+
+
+@router.get(
+    "/officers",
+    dependencies=[ENFORCEMENT_GUARD]
+)
+async def list_available_enforcement_officers(current_user: dict = Depends(get_current_user)):
+    """List registered enforcement officers available for enforcement case assignment scoped to tenant."""
+    all_users = await get_all_users()
+    user_role = current_user.get("role")
+    org_id = current_user.get("organization_id")
+    officers = [
+        {
+            "username": u["username"],
+            "full_name": u.get("full_name") or u["username"],
+            "role": u.get("role", ROLE_ENFORCEMENT),
+            "status": u.get("status", "ACTIVE")
+        }
+        for u in all_users
+        if u.get("role") in (ROLE_ADMIN, ROLE_ENFORCEMENT)
+        and u.get("status") not in ("SUSPENDED", "DISABLED")
+        and (user_role == ROLE_ADMIN or not org_id or u.get("organization_id") == org_id or not u.get("organization_id"))
+    ]
+    return {"officers": officers, "total": len(officers)}
 
 
 # ═════════════════════════════════════════════════════════════════════════════

@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import {
   ClipboardCheck,
@@ -25,6 +25,8 @@ import {
 } from 'lucide-react';
 import { api } from '../services/api';
 import Card from '../components/ui/Card';
+import { type Product } from '../types';
+import { useLanguage } from '../context/LanguageContext';
 
 type ProductType = 'FOOD' | 'NON_FOOD';
 type InputMode = 'STRUCTURED' | 'RAW_TEXT';
@@ -188,6 +190,7 @@ Contains Tree Nuts (Almonds). Processed in a facility that also handles peanuts,
 
 export default function AnalyzeListing() {
   const navigate = useNavigate();
+  const { t } = useLanguage();
   const [mode, setMode] = useState<InputMode>('STRUCTURED');
   const [formData, setFormData] = useState<StructuredFormData>(INITIAL_FORM);
   const [rawText, setRawText] = useState('');
@@ -196,6 +199,36 @@ export default function AnalyzeListing() {
   const [loadingStep, setLoadingStep] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [validationError, setValidationError] = useState<string | null>(null);
+
+  // SKU Linking state
+  const [products, setProducts] = useState<Product[]>([]);
+  const [loadingProducts, setLoadingProducts] = useState(false);
+  const [productLoadError, setProductLoadError] = useState<string | null>(null);
+  const [selectedProductId, setSelectedProductId] = useState<string>('');
+
+  useEffect(() => {
+    let isMounted = true;
+    const fetchMerchantProducts = async () => {
+      setLoadingProducts(true);
+      setProductLoadError(null);
+      try {
+        const res = await api.getProducts({ limit: 100, status: 'ACTIVE' });
+        if (isMounted) {
+          setProducts(res?.products || []);
+        }
+      } catch (err: any) {
+        if (isMounted) {
+          setProductLoadError(err?.message || 'Failed to load merchant products');
+        }
+      } finally {
+        if (isMounted) {
+          setLoadingProducts(false);
+        }
+      }
+    };
+    fetchMerchantProducts();
+    return () => { isMounted = false; };
+  }, []);
 
   // Update form field helper
   const updateField = <K extends keyof StructuredFormData>(field: K, value: StructuredFormData[K]) => {
@@ -423,7 +456,7 @@ export default function AnalyzeListing() {
     setLoadingStep('Running Legal Metrology & FSSAI rules engine…');
 
     try {
-      const result = await api.analyzeText(payloadText);
+      const result = await api.analyzeText(payloadText, selectedProductId.trim() ? selectedProductId.trim() : undefined);
       // Navigate seamlessly to existing unified Results page with full analysis payload
       navigate(`/results/${result.id}`, { state: { analysisData: result } });
     } catch (err: unknown) {
@@ -477,13 +510,13 @@ export default function AnalyzeListing() {
           </div>
           <h1 className="text-2xl sm:text-3xl font-extrabold text-slate-900 dark:text-white tracking-tight flex items-center gap-2.5">
             <ClipboardCheck className="w-7 h-7 text-indigo-600 dark:text-indigo-400" />
-            <span>Pre-Flight Packaging Check</span>
+            <span>{t('merchant.listing_check.title')}</span>
           </h1>
           <p className="text-xs sm:text-sm text-slate-600 dark:text-slate-400 mt-1 max-w-2xl">
-            Enter the declarations printed on your package to identify compliance issues before publishing or selling.
+            {t('merchant.listing_check.subtitle')}
           </p>
           <p className="text-[11px] text-slate-400 dark:text-slate-500 mt-0.5">
-            Fast declaration screening for Legal Metrology (Packaged Commodities) Rules, 2011 and FSSAI statutory standards.
+            {t('merchant.listing_check.sub_desc')}
           </p>
         </div>
 
@@ -496,7 +529,7 @@ export default function AnalyzeListing() {
             className="inline-flex items-center gap-1.5 px-3.5 py-2 rounded-xl text-xs font-semibold bg-indigo-50 dark:bg-indigo-950/60 text-indigo-700 dark:text-indigo-300 border border-indigo-200/80 dark:border-indigo-800/80 hover:bg-indigo-100 dark:hover:bg-indigo-900/60 transition-colors shadow-2xs cursor-pointer disabled:opacity-50"
           >
             <Sparkles className="w-3.5 h-3.5" />
-            <span>Load Sample Package</span>
+            <span>{t('merchant.listing_check.load_sample')}</span>
           </button>
           <button
             type="button"
@@ -505,7 +538,7 @@ export default function AnalyzeListing() {
             className="inline-flex items-center gap-1.5 px-3 py-2 rounded-xl text-xs font-medium text-slate-600 dark:text-slate-400 hover:text-slate-900 dark:hover:text-white hover:bg-slate-100 dark:hover:bg-slate-800 transition-colors cursor-pointer disabled:opacity-50"
           >
             <RotateCcw className="w-3.5 h-3.5" />
-            <span>Clear</span>
+            <span>{t('merchant.listing_check.clear')}</span>
           </button>
           <button
             type="button"
@@ -516,12 +549,12 @@ export default function AnalyzeListing() {
             {loading ? (
               <>
                 <Loader2 className="w-4 h-4 animate-spin" />
-                <span>Screening…</span>
+                <span>{t('merchant.listing_check.screening')}</span>
               </>
             ) : (
               <>
                 <Play className="w-3.5 h-3.5 fill-current" />
-                <span>Run Compliance Check</span>
+                <span>{t('merchant.listing_check.run_check')}</span>
               </>
             )}
           </button>
@@ -541,7 +574,7 @@ export default function AnalyzeListing() {
             }`}
           >
             <ClipboardCheck className="w-4 h-4" />
-            <span>Structured Entry (Recommended)</span>
+            <span>{t('merchant.listing_check.tab_structured')}</span>
           </button>
           <button
             type="button"
@@ -553,8 +586,63 @@ export default function AnalyzeListing() {
             }`}
           >
             <FileText className="w-4 h-4" />
-            <span>Paste Listing Text</span>
+            <span>{t('merchant.listing_check.tab_raw_text')}</span>
           </button>
+        </div>
+      </div>
+
+      {/* ── Link to Master SKU (Optional) ────────────────────────── */}
+      <div className="p-4 bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-2xl shadow-2xs space-y-2">
+        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+          <div>
+            <label htmlFor="master-sku-select" className="text-xs font-bold text-slate-800 dark:text-slate-200 flex items-center gap-1.5">
+              <Package className="w-4 h-4 text-indigo-600 dark:text-indigo-400" />
+              <span>{t('sku_workflow.link_to_sku')}</span>
+              <span className="text-[10px] font-normal text-slate-400">({t('analysis.slots.optional')})</span>
+            </label>
+            <p className="text-[11px] text-slate-500 dark:text-slate-400 mt-0.5">
+              Attach this declaration screening to an established master product SKU in your catalog.
+            </p>
+          </div>
+
+          <div className="flex items-center gap-2">
+            {loadingProducts ? (
+              <div className="flex items-center gap-1.5 text-xs text-slate-500 py-1.5 px-3">
+                <Loader2 className="w-3.5 h-3.5 animate-spin text-indigo-500" />
+                <span>{t('sku_workflow.loading_products')}</span>
+              </div>
+            ) : productLoadError ? (
+              <div className="text-xs text-amber-600 dark:text-amber-400 py-1 px-2">
+                {productLoadError}
+              </div>
+            ) : (
+              <select
+                id="master-sku-select"
+                value={selectedProductId}
+                onChange={(e) => setSelectedProductId(e.target.value)}
+                className="text-xs px-3 py-2 bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl text-slate-800 dark:text-slate-100 font-medium focus:ring-2 focus:ring-indigo-500/20 focus:border-indigo-500 outline-none cursor-pointer max-w-xs sm:max-w-md truncate"
+                aria-label={t('sku_workflow.link_to_sku')}
+              >
+                <option value="">{t('sku_workflow.no_linked_sku')}</option>
+                {products.map((p) => (
+                  <option key={p.id} value={p.id}>
+                    {p.product_name}{p.brand_name ? ` (${p.brand_name})` : ''}{p.gtin_barcode ? ` • GTIN: ${p.gtin_barcode}` : ''}
+                  </option>
+                ))}
+              </select>
+            )}
+            {selectedProductId && (
+              <button
+                type="button"
+                onClick={() => setSelectedProductId('')}
+                className="text-xs text-slate-400 hover:text-red-500 px-2 py-1.5 rounded-lg border border-slate-200 dark:border-slate-700 hover:bg-slate-100 dark:hover:bg-slate-800 transition-colors cursor-pointer"
+                title={t('sku_workflow.unlink')}
+                aria-label={t('sku_workflow.unlink')}
+              >
+                ✕
+              </button>
+            )}
+          </div>
         </div>
       </div>
 

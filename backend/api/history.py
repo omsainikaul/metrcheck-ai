@@ -85,6 +85,24 @@ def _user_owns_record(user: Optional[dict], owner_user_id: Optional[str]) -> boo
     return owner_user_id == username or (bool(uid) and owner_user_id == uid)
 
 
+def _get_history_image_url(a: dict) -> str:
+    """Safely extract primary image URL for an analysis record across all historical storage schemas."""
+    img_fn = a.get('image_filename') or ''
+    if not img_fn and a.get('images'):
+        try:
+            raw_imgs = json.loads(a['images']) if isinstance(a['images'], str) else a['images']
+            if raw_imgs and isinstance(raw_imgs, list) and len(raw_imgs) > 0:
+                first = raw_imgs[0]
+                if isinstance(first, dict):
+                    if first.get('image_url') and str(first['image_url']).strip():
+                        return str(first['image_url']).strip()
+                    if first.get('filename') and str(first['filename']).strip():
+                        img_fn = str(first['filename']).strip()
+        except Exception:
+            pass
+    return f"/api/images/{img_fn}" if img_fn else "/placeholder.png"
+
+
 @router.get("/history", response_model=List[HistoryItem])
 async def list_history(user: dict = Depends(get_current_user)):
     """Return list of screening analyses with tenant and IDOR protection."""
@@ -107,8 +125,7 @@ async def list_history(user: dict = Depends(get_current_user)):
         if not check_tenant_access(user, a):
             continue
 
-        img_fn = a.get('image_filename') or ''
-        image_url = f"/api/images/{img_fn}" if img_fn else "/placeholder.png"
+        image_url = _get_history_image_url(a)
         history.append(HistoryItem(
             id=a['id'],
             product_name=a['product_name'],
@@ -145,8 +162,7 @@ async def search_history(
         if not check_tenant_access(user, a):
             continue
 
-        img_fn = a.get('image_filename') or ''
-        image_url = f"/api/images/{img_fn}" if img_fn else "/placeholder.png"
+        image_url = _get_history_image_url(a)
         res.append(HistoryItem(
             id=a['id'],
             product_name=a['product_name'],
@@ -411,7 +427,7 @@ async def get_dashboard_stats(user: dict = Depends(get_current_user)):
             score=a['score'],
             status=a['status'],
             created_at=a['created_at'],
-            image_url=f"/api/images/{a['image_filename']}" if a.get('image_filename') else "/placeholder.png",
+            image_url=_get_history_image_url(a),
             owner_user_id=a.get('owner_user_id')
         ) for a in stats['recent']]
     )

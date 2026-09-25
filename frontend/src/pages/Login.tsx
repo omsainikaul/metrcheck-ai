@@ -28,7 +28,7 @@ import {
   Check
 } from 'lucide-react';
 import { useAuth } from '../context/AuthContext';
-import { useWorkspace, WORKSPACE_DEFINITIONS, getAllowedWorkspacesForRole } from '../context/WorkspaceContext';
+import { useWorkspace, WORKSPACE_DEFINITIONS, getAllowedWorkspacesForRole, getDefaultWorkspaceForRole } from '../context/WorkspaceContext';
 import { api } from '../services/api';
 import { 
   type WorkspaceType, 
@@ -264,8 +264,6 @@ export default function Login() {
     setError(null);
     setAccessDeniedUser(null);
 
-    const targetWs = activeWorkspace || 'USER';
-
     // Validation
     if (mode === 'register') {
       if (password.length < 8) {
@@ -339,6 +337,8 @@ export default function Login() {
       }
 
       const allowedWorkspaces = getAllowedWorkspacesForRole(authenticatedUser.role);
+      const defaultWs = getDefaultWorkspaceForRole(authenticatedUser.role);
+      const targetWs = activeWorkspace || defaultWs;
 
       // Verify if authenticated role is authorized for the requested target workspace
       if (allowedWorkspaces.includes(targetWs)) {

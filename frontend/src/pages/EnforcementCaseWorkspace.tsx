@@ -8,7 +8,8 @@ import {
   AlertTriangle,
   Layers,
   Lock,
-  ChevronRight
+  ChevronRight,
+  UserCheck
 } from 'lucide-react';
 import { api } from '../services/api';
 import { useAuth } from '../context/AuthContext';
@@ -27,6 +28,12 @@ export default function EnforcementCaseWorkspace() {
   const [activeTab, setActiveTab] = useState<'OVERVIEW' | 'VIOLATIONS' | 'PENALTIES' | 'NOTICES' | 'TIMELINE'>('OVERVIEW');
 
   // Action Modals
+  const [showAssignModal, setShowAssignModal] = useState<boolean>(false);
+  const [selectedEnforcementOfficer, setSelectedEnforcementOfficer] = useState<string>('');
+  const [assignComments, setAssignComments] = useState<string>('');
+  const [enforcementOfficers, setEnforcementOfficers] = useState<Array<{ username: string; full_name: string; role: string }>>([]);
+  const [assigningOfficer, setAssigningOfficer] = useState<boolean>(false);
+
   const [showPenaltyModal, setShowPenaltyModal] = useState<boolean>(false);
   const [repeatOffence, setRepeatOffence] = useState<boolean>(false);
   const [priorNotices, setPriorNotices] = useState<number>(0);
@@ -67,6 +74,33 @@ export default function EnforcementCaseWorkspace() {
   useEffect(() => {
     loadCase();
   }, [caseId]);
+
+  const openAssignModal = async () => {
+    try {
+      const res = await api.getAvailableEnforcementOfficers();
+      setEnforcementOfficers(res.officers || []);
+      setSelectedEnforcementOfficer(caseData?.assigned_officer || '');
+      setShowAssignModal(true);
+    } catch (err) {
+      console.error('Failed to load enforcement officers:', err);
+    }
+  };
+
+  const handleAssignOfficer = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!caseId || !selectedEnforcementOfficer) return;
+    setAssigningOfficer(true);
+    try {
+      await api.assignEnforcementCase(caseId, selectedEnforcementOfficer, assignComments);
+      setShowAssignModal(false);
+      setAssignComments('');
+      await loadCase();
+    } catch (err: any) {
+      alert(err.message || 'Failed to assign enforcement case.');
+    } finally {
+      setAssigningOfficer(false);
+    }
+  };
 
   const handleCalculatePenalty = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -197,6 +231,14 @@ export default function EnforcementCaseWorkspace() {
           {!isClosed && (
             <>
               <button
+                onClick={openAssignModal}
+                className="flex items-center gap-1.5 px-3 py-2 bg-indigo-600 hover:bg-indigo-500 text-white rounded-xl text-xs font-semibold shadow-sm transition-all cursor-pointer"
+              >
+                <UserCheck className="w-4 h-4" />
+                <span>{caseData.assigned_officer ? 'Reassign Officer' : 'Assign Officer'}</span>
+              </button>
+
+              <button
                 onClick={() => setShowPenaltyModal(true)}
                 className="flex items-center gap-1.5 px-3 py-2 bg-amber-600 hover:bg-amber-500 text-white rounded-xl text-xs font-semibold shadow-sm transition-all"
               >
@@ -288,11 +330,21 @@ export default function EnforcementCaseWorkspace() {
                   <span className="text-[11px] text-slate-500 block">District Jurisdiction</span>
                   <span className="text-xs font-semibold text-slate-200">{caseData.jurisdiction_district || 'Directorate HQ'}</span>
                 </div>
-                <div className="bg-slate-950/60 p-3 rounded-xl border border-slate-800">
-                  <span className="text-[11px] text-slate-500 block">Investigating Officer</span>
-                  <span className="text-xs font-semibold text-amber-400">
-                    {caseData.assigned_officer ? `@${caseData.assigned_officer}` : 'Unassigned'}
-                  </span>
+                <div className="bg-slate-950/60 p-3 rounded-xl border border-slate-800 flex items-center justify-between">
+                  <div>
+                    <span className="text-[11px] text-slate-500 block">Investigating Officer</span>
+                    <span className="text-xs font-semibold text-amber-400">
+                      {caseData.assigned_officer ? `@${caseData.assigned_officer}` : 'Unassigned'}
+                    </span>
+                  </div>
+                  {!isClosed && (
+                    <button
+                      onClick={openAssignModal}
+                      className="text-[11px] font-semibold text-indigo-400 hover:text-indigo-300 underline cursor-pointer"
+                    >
+                      {caseData.assigned_officer ? 'Change' : 'Assign'}
+                    </button>
+                  )}
                 </div>
               </div>
             </div>
@@ -793,6 +845,79 @@ export default function EnforcementCaseWorkspace() {
                   className="px-4 py-2 bg-rose-600 hover:bg-rose-500 text-white rounded-xl text-xs font-semibold"
                 >
                   {closingCase ? 'Closing...' : 'Close & Archive'}
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
+
+      {/* Modal: Assign Enforcement Officer */}
+      {showAssignModal && (
+        <div className="fixed inset-0 bg-black/80 backdrop-blur-sm z-50 flex items-center justify-center p-4">
+          <div className="bg-slate-900 border border-slate-800 rounded-2xl p-6 max-w-md w-full space-y-4 shadow-2xl">
+            <div className="flex items-center justify-between border-b border-slate-800 pb-3">
+              <h3 className="text-base font-bold text-white flex items-center gap-2">
+                <UserCheck className="w-4 h-4 text-indigo-400" />
+                <span>Assign Enforcement Case</span>
+              </h3>
+              <button
+                onClick={() => setShowAssignModal(false)}
+                className="text-slate-400 hover:text-white cursor-pointer"
+              >
+                ✕
+              </button>
+            </div>
+
+            <form onSubmit={handleAssignOfficer} className="space-y-4">
+              <div>
+                <span className="text-xs text-slate-400">Target Legal Docket</span>
+                <p className="text-sm font-bold text-white">{caseData.product_name}</p>
+                <p className="text-[10px] font-mono text-amber-400">{caseData.case_reference}</p>
+              </div>
+
+              <div className="space-y-1">
+                <label className="text-xs font-semibold text-slate-300 block">Select Enforcement Officer</label>
+                <select
+                  value={selectedEnforcementOfficer}
+                  onChange={(e) => setSelectedEnforcementOfficer(e.target.value)}
+                  className="w-full px-3 py-2 bg-slate-950 border border-slate-800 rounded-xl text-xs text-white focus:outline-none focus:border-indigo-500"
+                  required
+                >
+                  <option value="">Choose enforcement officer...</option>
+                  {enforcementOfficers.map((o) => (
+                    <option key={o.username} value={o.username}>
+                      {o.full_name || o.username} ({o.role})
+                    </option>
+                  ))}
+                </select>
+              </div>
+
+              <div className="space-y-1">
+                <label className="text-xs font-semibold text-slate-300 block">Assignment Instructions / Notes</label>
+                <textarea
+                  rows={3}
+                  value={assignComments}
+                  onChange={(e) => setAssignComments(e.target.value)}
+                  placeholder="Record formal assignment notes or instructions for the investigating officer..."
+                  className="w-full p-3 bg-slate-950 border border-slate-800 rounded-xl text-xs text-white focus:outline-none focus:border-indigo-500 resize-none"
+                />
+              </div>
+
+              <div className="flex justify-end gap-2 pt-2 border-t border-slate-800">
+                <button
+                  type="button"
+                  onClick={() => setShowAssignModal(false)}
+                  className="px-4 py-2 bg-slate-800 text-slate-300 rounded-xl text-xs font-semibold cursor-pointer"
+                >
+                  Cancel
+                </button>
+                <button
+                  type="submit"
+                  disabled={!selectedEnforcementOfficer || assigningOfficer}
+                  className="px-4 py-2 bg-indigo-600 hover:bg-indigo-500 disabled:opacity-50 text-white rounded-xl text-xs font-semibold cursor-pointer"
+                >
+                  {assigningOfficer ? 'Assigning...' : 'Confirm Assignment'}
                 </button>
               </div>
             </form>

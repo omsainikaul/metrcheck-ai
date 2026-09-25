@@ -1,4 +1,4 @@
-import { useEffect, useState, useMemo } from 'react';
+import { useEffect, useState, useMemo, useRef } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { 
   History as HistoryIcon, 
@@ -22,6 +22,106 @@ import EmptyState from '../components/ui/EmptyState';
 import LoadingSkeleton from '../components/ui/LoadingSkeleton';
 import { formatAnalysisDateTime } from '../utils/datetime';
 
+interface HistoryThumbnailProps {
+  itemId: string;
+  imageUrl?: string | null;
+  productName?: string;
+  onBlobCreated?: (url: string) => void;
+}
+
+const HistoryThumbnail: React.FC<HistoryThumbnailProps> = ({
+  itemId: _itemId,
+  imageUrl,
+  productName,
+  onBlobCreated,
+}) => {
+  const [blobSrc, setBlobSrc] = useState<string>(() => {
+    if (imageUrl && (imageUrl.startsWith('data:') || imageUrl.startsWith('blob:'))) {
+      return imageUrl;
+    }
+    return '';
+  });
+  const [loading, setLoading] = useState<boolean>(() => {
+    return Boolean(imageUrl && imageUrl !== '/placeholder.png' && !imageUrl.startsWith('data:') && !imageUrl.startsWith('blob:'));
+  });
+  const [hasError, setHasError] = useState<boolean>(false);
+
+  useEffect(() => {
+    let isCancelled = false;
+
+    if (!imageUrl || imageUrl === '/placeholder.png') {
+      setBlobSrc('');
+      setLoading(false);
+      setHasError(false);
+      return;
+    }
+
+    if (imageUrl.startsWith('data:') || imageUrl.startsWith('blob:')) {
+      setBlobSrc(imageUrl);
+      setLoading(false);
+      setHasError(false);
+      return;
+    }
+
+    setLoading(true);
+    setHasError(false);
+
+    api.fetchImageBlobUrl(imageUrl)
+      .then((resolvedUrl) => {
+        if (!isCancelled) {
+          if (resolvedUrl) {
+            if (resolvedUrl.startsWith('blob:') && onBlobCreated) {
+              onBlobCreated(resolvedUrl);
+            }
+            setBlobSrc(resolvedUrl);
+            setHasError(false);
+          } else {
+            setBlobSrc('');
+            setHasError(true);
+          }
+          setLoading(false);
+        }
+      })
+      .catch(() => {
+        if (!isCancelled) {
+          setBlobSrc('');
+          setHasError(true);
+          setLoading(false);
+        }
+      });
+
+    return () => {
+      isCancelled = true;
+    };
+  }, [imageUrl]);
+
+  const hasValidImageUrl = Boolean(imageUrl && imageUrl !== '/placeholder.png');
+
+  return (
+    <div className="w-10 h-12 bg-slate-100 dark:bg-slate-800 rounded-lg border border-slate-200 dark:border-slate-700/80 overflow-hidden flex items-center justify-center shrink-0 shadow-2xs relative">
+      {loading ? (
+        <div className="w-full h-full flex items-center justify-center bg-slate-100 dark:bg-slate-800/80">
+          <div className="w-3.5 h-3.5 border-2 border-indigo-500 border-t-transparent rounded-full animate-spin" />
+        </div>
+      ) : blobSrc && !hasError ? (
+        <img
+          src={blobSrc}
+          alt={productName || 'Product'}
+          className="w-full h-full object-contain p-0.5"
+          loading="lazy"
+          onError={() => {
+            setHasError(true);
+          }}
+        />
+      ) : hasValidImageUrl ? (
+        <ImageIcon className="w-4 h-4 text-slate-400 dark:text-slate-500" />
+      ) : (
+        <FileText className="w-4 h-4 text-indigo-500/70 dark:text-indigo-400/70" />
+      )}
+    </div>
+  );
+};
+
 export default function History() {
   const navigate = useNavigate();
   const { user } = useAuth();
@@ -43,6 +143,9 @@ export default function History() {
   const [history, setHistory] = useState<HistoryItem[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+
+  // Track created blob URLs for memory cleanup on unmount / clear
+  const createdBlobUrlsRef = useRef<Set<string>>(new Set());
 
   // Search, Filter, Sort state
   const [searchQuery, setSearchQuery] = useState('');
@@ -70,6 +173,20 @@ export default function History() {
 
   useEffect(() => {
     fetchHistory();
+  }, []);
+
+  // Clean up object URLs on unmount
+  useEffect(() => {
+    return () => {
+      createdBlobUrlsRef.current.forEach(url => {
+        try {
+          URL.revokeObjectURL(url);
+        } catch {
+          // ignore
+        }
+      });
+      createdBlobUrlsRef.current.clear();
+    };
   }, []);
 
   const exportHistoryToCSV = () => {
@@ -113,6 +230,16 @@ export default function History() {
     setDeleteError(null);
     try {
       await api.clearHistory();
+      
+      createdBlobUrlsRef.current.forEach(url => {
+        try {
+          URL.revokeObjectURL(url);
+        } catch {
+          // ignore
+        }
+      });
+      createdBlobUrlsRef.current.clear();
+
       setHistory([]);
       setShowClearModal(false);
     } catch (err: any) {
@@ -293,84 +420,71 @@ export default function History() {
             </thead>
             <tbody className="divide-y divide-slate-100 dark:divide-slate-800/60">
               {filteredAndSortedHistory.length > 0 ? (
-                filteredAndSortedHistory.map((item) => (
-                  <tr 
-                    key={item.id}
-                    className="hover:bg-slate-50 dark:hover:bg-slate-800/40 transition-colors group cursor-pointer"
-                    onClick={() => navigate(`/results/${item.id}`)}
-                  >
-                    <td className="py-2.5 px-4">
-                      <div className="flex items-center gap-3">
-                        <div className="w-10 h-12 bg-slate-100 dark:bg-slate-800 rounded-lg border border-slate-200 dark:border-slate-700/80 overflow-hidden flex items-center justify-center shrink-0 shadow-2xs">
-                          {item.image_url && item.image_url !== '/placeholder.png' ? (
-                            <img
-                              src={api.getAssetUrl(item.image_url)}
-                              alt={item.product_name || 'Product'}
-                              className="w-full h-full object-contain p-0.5"
-                              loading="lazy"
-                              onError={(e) => {
-                                const target = e.currentTarget;
-                                target.style.display = 'none';
-                                const fallback = target.parentElement?.querySelector('.img-fallback') as HTMLElement | null;
-                                if (fallback) fallback.style.display = 'flex';
-                              }}
-                            />
-                          ) : null}
-                          <div className={`img-fallback w-full h-full items-center justify-center ${item.image_url && item.image_url !== '/placeholder.png' ? 'hidden' : 'flex'}`}>
-                            {item.image_url && item.image_url !== '/placeholder.png' ? (
-                              <ImageIcon className="w-4 h-4 text-slate-400 dark:text-slate-500" />
-                            ) : (
-                              <FileText className="w-4 h-4 text-indigo-500/70 dark:text-indigo-400/70" />
-                            )}
+                filteredAndSortedHistory.map((item) => {
+                  return (
+                    <tr 
+                      key={item.id}
+                      className="hover:bg-slate-50 dark:hover:bg-slate-800/40 transition-colors group cursor-pointer"
+                      onClick={() => navigate(`/results/${item.id}`)}
+                    >
+                      <td className="py-2.5 px-4">
+                        <div className="flex items-center gap-3">
+                          <HistoryThumbnail
+                            itemId={item.id}
+                            imageUrl={item.image_url}
+                            productName={item.product_name}
+                            onBlobCreated={(url) => {
+                              createdBlobUrlsRef.current.add(url);
+                            }}
+                          />
+                          <div className="min-w-0">
+                            <div className="font-semibold text-slate-900 dark:text-slate-100 truncate max-w-[180px] sm:max-w-xs" title={item.product_name || 'Unknown Product'}>
+                              {item.product_name || 'Unknown Product'}
+                            </div>
+                            <div className="text-[10px] text-slate-400 font-mono mt-0.5">{item.id.slice(0, 8)}...</div>
                           </div>
                         </div>
-                        <div className="min-w-0">
-                          <div className="font-semibold text-slate-900 dark:text-slate-100 truncate max-w-[180px] sm:max-w-xs" title={item.product_name || 'Unknown Product'}>
-                            {item.product_name || 'Unknown Product'}
-                          </div>
-                          <div className="text-[10px] text-slate-400 font-mono mt-0.5">{item.id.slice(0, 8)}...</div>
-                        </div>
-                      </div>
-                    </td>
-                    <td className="py-2.5 px-4">
-                      <span className={`font-mono font-medium ${typeof item.score === 'number' && item.score >= 90 ? 'text-emerald-600 dark:text-emerald-400' : typeof item.score === 'number' && item.score >= 70 ? 'text-amber-600 dark:text-amber-400' : 'text-red-600 dark:text-red-400'}`}>
-                        {typeof item.score === 'number' ? item.score.toFixed(1) : item.score}
-                      </span>
-                    </td>
-                    <td className="py-2.5 px-4">
-                      <StatusBadge status={item.status} size="xs" />
-                    </td>
-                    <td className="py-2.5 px-4 text-xs text-slate-500 dark:text-slate-400 whitespace-nowrap">
-                      {formatAnalysisDateTime(item.created_at)}
-                    </td>
-                    <td className="py-2.5 px-4 text-right whitespace-nowrap">
-                      <div className="flex items-center justify-end gap-2">
-                        <button
-                          onClick={(e) => { e.stopPropagation(); navigate(`/results/${item.id}`); }}
-                          className="text-xs font-semibold text-indigo-600 dark:text-indigo-400 hover:text-indigo-700 dark:hover:text-indigo-300"
-                        >
-                          Open
-                        </button>
-                        {canDeleteItem(item) ? (
+                      </td>
+                      <td className="py-2.5 px-4">
+                        <span className={`font-mono font-medium ${typeof item.score === 'number' && item.score >= 90 ? 'text-emerald-600 dark:text-emerald-400' : typeof item.score === 'number' && item.score >= 70 ? 'text-amber-600 dark:text-amber-400' : 'text-red-600 dark:text-red-400'}`}>
+                          {typeof item.score === 'number' ? item.score.toFixed(1) : item.score}
+                        </span>
+                      </td>
+                      <td className="py-2.5 px-4">
+                        <StatusBadge status={item.status} size="xs" />
+                      </td>
+                      <td className="py-2.5 px-4 text-xs text-slate-500 dark:text-slate-400 whitespace-nowrap">
+                        {formatAnalysisDateTime(item.created_at)}
+                      </td>
+                      <td className="py-2.5 px-4 text-right whitespace-nowrap">
+                        <div className="flex items-center justify-end gap-2">
                           <button
-                            onClick={(e) => { e.stopPropagation(); setDeleteError(null); setItemToDelete(item); }}
-                            className="p-1 text-slate-400 hover:text-red-600 dark:hover:text-red-400 rounded transition-colors"
-                            title="Delete screening record"
+                            onClick={(e) => { e.stopPropagation(); navigate(`/results/${item.id}`); }}
+                            className="text-xs font-semibold text-indigo-600 dark:text-indigo-400 hover:text-indigo-700 dark:hover:text-indigo-300"
                           >
-                            <Trash2 className="w-3.5 h-3.5" />
+                            Open
                           </button>
-                        ) : isMerchant ? (
-                          <span 
-                            className="p-1 text-slate-300 dark:text-slate-600 cursor-not-allowed inline-flex items-center" 
-                            title="Deletion unavailable — ownership could not be verified."
-                          >
-                            <Lock className="w-3.5 h-3.5" />
-                          </span>
-                        ) : null}
-                      </div>
-                    </td>
-                  </tr>
-                ))
+                          {canDeleteItem(item) ? (
+                            <button
+                              onClick={(e) => { e.stopPropagation(); setDeleteError(null); setItemToDelete(item); }}
+                              className="p-1 text-slate-400 hover:text-red-600 dark:hover:text-red-400 rounded transition-colors"
+                              title="Delete screening record"
+                            >
+                              <Trash2 className="w-3.5 h-3.5" />
+                            </button>
+                          ) : isMerchant ? (
+                            <span 
+                              className="p-1 text-slate-300 dark:text-slate-600 cursor-not-allowed inline-flex items-center" 
+                              title="Deletion unavailable — ownership could not be verified."
+                            >
+                              <Lock className="w-3.5 h-3.5" />
+                            </span>
+                          ) : null}
+                        </div>
+                      </td>
+                    </tr>
+                  );
+                })
               ) : (
                 <tr>
                   <td colSpan={5} className="py-8 text-center text-slate-400 dark:text-slate-500 text-sm">

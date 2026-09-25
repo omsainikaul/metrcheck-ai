@@ -133,7 +133,7 @@ export default function Dashboard() {
             {isNormalUser 
               ? t('dashboard.consumer.subtitle')
               : isMerchant
-              ? 'Manage registered SKU master baselines, audit pre-print artwork dielines, and verify batch packaging compliance.'
+              ? t('merchant.dashboard.subtitle')
               : t('dashboard.overview_subtitle')}
           </p>
         </div>
@@ -145,7 +145,7 @@ export default function Dashboard() {
               className="inline-flex items-center gap-1.5 px-3.5 py-2 bg-sky-600 hover:bg-sky-700 text-white rounded-xl text-xs font-bold transition-all cursor-pointer shadow-sm hover:shadow-md"
             >
               <Plus className="w-4 h-4" />
-              <span>Add Product SKU</span>
+              <span>{t('merchant.dashboard.add_product_sku')}</span>
             </button>
           )}
           <button
@@ -153,7 +153,7 @@ export default function Dashboard() {
             className="inline-flex items-center gap-1.5 px-3.5 py-2 bg-indigo-600 hover:bg-indigo-700 text-white rounded-xl text-xs font-bold transition-all cursor-pointer shadow-sm hover:shadow-md"
           >
             <ScanSearch className="w-4 h-4" />
-            <span>{isNormalUser ? t('dashboard.consumer.check_product_btn') : isMerchant ? 'Scan Package Label' : t('navigation.analyze_package')}</span>
+            <span>{isNormalUser ? t('dashboard.consumer.check_product_btn') : isMerchant ? t('merchant.dashboard.scan_package_label') : t('navigation.analyze_package')}</span>
           </button>
           {isMerchant && (
             <button
@@ -161,7 +161,7 @@ export default function Dashboard() {
               className="inline-flex items-center gap-1.5 px-3.5 py-2 bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 hover:bg-slate-50 dark:hover:bg-slate-700 text-slate-700 dark:text-slate-200 rounded-xl text-xs font-semibold transition-colors cursor-pointer shadow-sm"
             >
               <Printer className="w-3.5 h-3.5 text-indigo-500" />
-              <span>Pre-Print Artworks</span>
+              <span>{t('merchant.dashboard.preprint_artworks')}</span>
             </button>
           )}
           <button
@@ -215,7 +215,7 @@ export default function Dashboard() {
             </div>
             <div>
               <p className="text-[11px] font-semibold text-slate-500 dark:text-slate-400 uppercase tracking-wider">
-                {isMerchant ? 'Active SKUs' : isNormalUser ? t('dashboard.consumer.products_checked') : t('dashboard.stats.packages_screened')}
+                {isMerchant ? t('merchant.dashboard.active_skus') : isNormalUser ? t('dashboard.consumer.products_checked') : t('dashboard.stats.packages_screened')}
               </p>
               <p className="text-xl font-bold text-slate-900 dark:text-slate-100">
                 {isMerchant ? (merchantStats?.active_products ?? merchantProducts.length) : packagesScreened}
@@ -228,7 +228,7 @@ export default function Dashboard() {
             </div>
             <div>
               <p className="text-[11px] font-semibold text-slate-500 dark:text-slate-400 uppercase tracking-wider">
-                {isMerchant ? 'Checks Screened' : isNormalUser ? t('dashboard.consumer.passed') : t('dashboard.stats.compliant_packages')}
+                {isMerchant ? t('merchant.dashboard.checks_screened') : isNormalUser ? t('dashboard.consumer.passed') : t('dashboard.stats.compliant_packages')}
               </p>
               <p className="text-xl font-bold text-slate-900 dark:text-slate-100">
                 {isMerchant ? (merchantStats?.products_checked ?? packagesScreened) : compliantPackages}
@@ -241,7 +241,7 @@ export default function Dashboard() {
             </div>
             <div>
               <p className="text-[11px] font-semibold text-slate-500 dark:text-slate-400 uppercase tracking-wider">
-                {isMerchant ? 'Attention Required' : isNormalUser ? t('dashboard.consumer.need_attention') : t('dashboard.stats.review_findings')}
+                {isMerchant ? t('merchant.dashboard.attention_required') : isNormalUser ? t('dashboard.consumer.need_attention') : t('dashboard.stats.review_findings')}
               </p>
               <p className="text-xl font-bold text-slate-900 dark:text-slate-100">
                 {isMerchant ? (merchantStats?.attention_required ?? reviewFindings) : isNormalUser ? needAttentionProducts : reviewFindings}
@@ -254,7 +254,7 @@ export default function Dashboard() {
             </div>
             <div>
               <p className="text-[11px] font-semibold text-slate-500 dark:text-slate-400 uppercase tracking-wider">
-                {isMerchant ? 'Pre-Print Artworks' : isNormalUser ? t('dashboard.consumer.failed_findings') : t('dashboard.stats.failed_findings')}
+                {isMerchant ? t('merchant.dashboard.preprint_artworks') : isNormalUser ? t('dashboard.consumer.failed_findings') : t('dashboard.stats.failed_findings')}
               </p>
               <p className="text-xl font-bold text-slate-900 dark:text-slate-100">
                 {isMerchant ? (merchantStats?.packaging_artworks ?? 0) : failedFindings}
@@ -281,14 +281,14 @@ export default function Dashboard() {
             <div className="flex items-center gap-2">
               <Boxes className="w-4 h-4 text-sky-600 dark:text-sky-400" />
               <h3 className="text-sm font-bold text-slate-900 dark:text-slate-100">
-                Managed SKU Catalog
+                {t('merchant.dashboard.managed_sku_catalog')}
               </h3>
             </div>
             <button
               onClick={() => navigate('/products')}
               className="text-xs font-semibold text-sky-600 dark:text-sky-400 hover:underline cursor-pointer"
             >
-              View Full Catalog &rarr;
+              {t('merchant.dashboard.view_full_catalog')}
             </button>
           </div>
 
@@ -302,29 +302,29 @@ export default function Dashboard() {
                 >
                   <div className="flex items-center justify-between">
                     <span className="text-[10px] font-bold px-2 py-0.5 rounded-md bg-white dark:bg-slate-700 text-slate-600 dark:text-slate-300">
-                      {p.category || 'GENERAL'}
+                      {p.category ? (t(`merchant.categories.${p.category}`) || p.category) : t('merchant.categories.GENERAL')}
                     </span>
                     <span className={`text-[10px] font-bold ${p.status === 'ACTIVE' ? 'text-emerald-600 dark:text-emerald-400' : 'text-slate-400'}`}>
-                      {p.status}
+                      {p.status === 'ACTIVE' ? t('merchant.status.active') : t('merchant.status.archived')}
                     </span>
                   </div>
                   <h4 className="text-xs font-bold text-slate-900 dark:text-slate-100 mt-2 truncate group-hover:text-sky-600 dark:group-hover:text-sky-400">
                     {p.product_name}
                   </h4>
                   <p className="text-[11px] text-slate-500 dark:text-slate-400 mt-0.5">
-                    {p.brand_name ? `${p.brand_name} • ` : ''}MRP: {p.mrp_declared ? `₹${p.mrp_declared.toFixed(2)}` : '—'}
+                    {p.brand_name ? `${p.brand_name} • ` : ''}{t('merchant.dashboard.mrp')}: {p.mrp_declared ? `₹${p.mrp_declared.toFixed(2)}` : '—'}
                   </p>
                 </div>
               ))}
             </div>
           ) : (
             <div className="text-center py-4 bg-slate-50 dark:bg-slate-800/40 rounded-xl border border-dashed border-slate-200 dark:border-slate-700">
-              <p className="text-xs text-slate-500">No products in catalog yet.</p>
+              <p className="text-xs text-slate-500">{t('merchant.dashboard.no_products_catalog')}</p>
               <button
                 onClick={() => navigate('/products/new')}
                 className="mt-2 text-xs font-bold text-sky-600 hover:underline cursor-pointer"
               >
-                + Register First SKU
+                {t('merchant.dashboard.register_first_sku')}
               </button>
             </div>
           )}

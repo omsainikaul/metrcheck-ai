@@ -8,7 +8,6 @@ aiosqlite
 pydantic
 pydantic-settings
 python-dotenv
-jinja2
 httpx
 aiofiles
 pytest

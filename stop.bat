@@ -1,7 +1,23 @@
 @echo off
+setlocal
 title MetrCheck AI - Stop Servers (National Hackathon 6.0)
-echo ============================================
-echo   MetrCheck AI - Stopping Servers...
-echo ============================================
-powershell -NoProfile -Command "(Get-NetTCPConnection -LocalPort 5173,5174,8000 -State Listen -ErrorAction SilentlyContinue).OwningProcess | Select-Object -Unique | ForEach-Object { Stop-Process -Id $_ -Force -ErrorAction SilentlyContinue }" 2>nul
-ping 127.0.0.1 -n 2 >nul
+cd /d "%~dp0"
+
+if exist "venv\Scripts\python.exe" (
+    "venv\Scripts\python.exe" "runner.py" --stop
+) else (
+    echo ============================================================
+    echo   MetrCheck AI - Stopping Application Servers...
+    echo ============================================================
+    if exist .runner.pid (
+        set /p RUNNER_PID=<.runner.pid
+        if defined RUNNER_PID (
+            taskkill /F /T /PID %RUNNER_PID% >nul 2>&1
+            echo   [OK] Terminated runner process tree.
+        )
+        del /f /q .runner.pid >nul 2>&1
+    )
+    echo   [OK] Stop completed.
+)
+
+exit /b 0

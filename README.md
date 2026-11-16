@@ -5,10 +5,9 @@
 
 [![Python](https://img.shields.io/badge/Python-3.10%2B-blue?logo=python&logoColor=white)](https://www.python.org/)
 [![FastAPI](https://img.shields.io/badge/FastAPI-0.100%2B-009688?logo=fastapi&logoColor=white)](https://fastapi.tiangolo.com/)
-[![React](https://img.shields.io/badge/React-18-blue?logo=react&logoColor=white)](https://react.dev/)
+[![React](https://img.shields.io/badge/React-19-blue?logo=react&logoColor=white)](https://react.dev/)
 [![TypeScript](https://img.shields.io/badge/TypeScript-5.0%2B-3178C6?logo=typescript&logoColor=white)](https://www.typescriptlang.org/)
-[![Tailwind CSS](https://img.shields.io/badge/Tailwind_CSS-3.4%2B-38B2AC?logo=tailwind-css&logoColor=white)](https://tailwindcss.com/)
-[![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
+[![Tailwind CSS](https://img.shields.io/badge/Tailwind_CSS-4.x-38B2AC?logo=tailwind-css&logoColor=white)](https://tailwindcss.com/)
 
 ---
 
@@ -136,7 +135,7 @@ MetrCheck AI provides dedicated, role-isolated workspaces tailored to each stake
 ## Architecture
 
 ```
-User / Client → Frontend (React 18 + Vite + TypeScript + Tailwind CSS)
+User / Client → Frontend (React 19 + Vite + TypeScript + Tailwind CSS 4)
                    ↕ REST API (JWT Auth + RBAC + Tenant Isolation)
                  Backend (FastAPI + Python 3.10+)
                    ├── OCR Engine (PaddleOCR PP-OCRv4)
@@ -147,7 +146,7 @@ User / Client → Frontend (React 18 + Vite + TypeScript + Tailwind CSS)
                    └── SQLite Relational Database (AIOSqlite)
 ```
 
-- **Frontend**: A modern, reactive single-page application built with React, Vite, TypeScript, and Tailwind CSS. Features image upload, bounding-box visualization, interactive score gauges, multi-role workspaces, and 11 UI locales.
+- **Frontend**: A modern, reactive single-page application built with React 19, Vite, TypeScript, and Tailwind CSS 4. Features image upload, bounding-box visualization, interactive SVG score gauges, multi-role workspaces, and 11 UI locales.
 - **REST API**: Asynchronous FastAPI backend providing high-throughput endpoints for image upload, synchronous/asynchronous analysis, officer reviews, enforcement cases, and administrative governance.
 - **OCR Engine**: PaddleOCR (PP-OCRv4) deep learning text detection (DBNet) & recognition (SVTR) with bounding-box coordinate tracking and angle classification.
 - **Extraction Engine**: Hybrid extraction system using rule-based regular expressions and structured pattern matching.
@@ -160,13 +159,13 @@ User / Client → Frontend (React 18 + Vite + TypeScript + Tailwind CSS)
 
 | Layer / Component | Technology | Description |
 | :--- | :--- | :--- |
-| **Frontend** | React, TypeScript, Vite, Tailwind CSS | Single-page application, responsive multi-role layout, type safety |
+| **Frontend** | React 19, TypeScript, Vite, Tailwind CSS 4 | Single-page application, responsive multi-role layout, high-performance styling, type safety |
 | **Backend** | Python 3.10+, FastAPI, Uvicorn, Pydantic | High-performance asynchronous REST API framework |
 | **OCR Engine** | PaddleOCR (`paddleocr`, `paddlepaddle`), Pillow | Deep learning text detection (DBNet), recognition (SVTR), angle classification, and coordinate mapping |
 | **Database** | SQLite, aiosqlite | Lightweight persistence for audits, reviews, enforcement dockets, and history |
 | **Security & Auth** | JWT Tokens, bcrypt, Role-Based Access Control | Strict tenant and role isolation across 5 distinct user roles |
 | **Localization** | i18next, React-i18next | 11 supported languages (English + 10 Indic languages) |
-| **Charts & Visuals** | Recharts, Lucide React | Visual compliance gauge, status distribution, and vector iconography |
+| **Charts & Visuals** | Native SVG & Tailwind Visualizations, Lucide React | Lightweight vector compliance score gauges, status distributions, progress indicators, and UI icons |
 
 ---
 
@@ -185,27 +184,64 @@ MetrCheck AI is a verified, fully functional prototype:
 ## Quick Start
 
 ### Prerequisites
-- **Python 3.10+ / 3.11**
-- **Node.js 18+**
+- **Python 3.10+ / 3.11** (Python 3.11 recommended for PaddleOCR)
+- **Node.js 18+** & **npm**
 
 ---
 
-### Backend Setup
+### Windows Automated Workflow (Recommended)
 
+MetrCheck AI includes automated root scripts for effortless local setup, verification, and execution on Windows:
+
+#### 1. Setup Dependencies (First-Time Initialization)
+Run `setup.bat` from Command Prompt or PowerShell:
+```powershell
+.\setup.bat
+```
+This script provisions the root Python virtual environment (`venv/`), installs all backend dependencies from `requirements.txt`, and installs frontend packages via `npm install`.
+
+#### 2. Launch Application
+Start both the FastAPI backend and React frontend with a single command:
+```powershell
+.\run.bat
+```
+This launches the process supervisor (`runner.py`), performs automated pre-flight checks, verifies port availability, polls health endpoints, outputs an ASCII QR code for instant mobile Wi-Fi testing, and opens the dashboard in your default browser.
+
+#### 3. Stop Application
+To gracefully terminate all running servers:
+```powershell
+.\stop.bat
+```
+*(Or press `Ctrl+C` in the running `run.bat` terminal window).*
+
+---
+
+### Manual Startup (Cross-Platform / Custom)
+
+If running on Linux, macOS, or in separate terminal sessions:
+
+#### Step 1: Backend Setup
 ```bash
-cd backend
+# From project root
 python -m venv venv
-venv\Scripts\activate
+
+# Activate virtual environment
+# Windows:
+.\venv\Scripts\activate
+# Linux/macOS:
+source venv/bin/activate
+
+# Install dependencies
 pip install -r requirements.txt
-copy ..\.env.example .env
+
+# Start FastAPI backend
+cd backend
 uvicorn main:app --reload --host 0.0.0.0 --port 8000
 ```
 
----
-
-### Frontend Setup
-
+#### Step 2: Frontend Setup
 ```bash
+# In a new terminal, from project root
 cd frontend
 npm install
 npm run dev
@@ -213,7 +249,7 @@ npm run dev
 
 ---
 
-### Access
+### Access Endpoints
 
 - **Frontend Application**: [http://localhost:5173](http://localhost:5173)
 - **Interactive Swagger API Docs**: [http://localhost:8000/docs](http://localhost:8000/docs)
@@ -258,47 +294,83 @@ To use Demo Mode:
 
 ---
 
+## Documentation
+
+Technical documentation, feature matrices, and architecture guides are organized in the [`docs/`](docs/) directory:
+
+### Architecture Diagrams & Guides
+| Document | Topic | Description |
+| :--- | :--- | :--- |
+| [**Architecture & Code Flow (PDF)**](docs/architecture/MetrCheck_AI_Complete_Architecture_and_Code_Flow.pdf) | Architecture | Complete system component dataflow, OCR pipeline, and rule evaluation architecture |
+| [**Architecture & Connectivity (PDF)**](docs/architecture/MetrCheck_AI_Complete_Architecture_and_Connectivity_Guide.pdf) | Connectivity | Service topology, network configuration, and external integration connectivity |
+| [**Complete Documentation (PDF)**](docs/architecture/MetrCheck_AI_Complete_Documentation.pdf) | Overview | Full unified prototype documentation and technical specifications |
+| [**Interactive Operational Guide (HTML)**](docs/interactive_guide.html) | User Manual | Offline-capable interactive operational user guide and demonstration manual |
+
+### Feature Matrices & Implementation Specifications
+| Document | Focus Area | Description |
+| :--- | :--- | :--- |
+| [**Section 4: Extraction Engine**](docs/SECTION_4_EXTRACTION_FEATURE_MATRIX.md) | Information Extraction | Text extraction, field pattern matching, and normalization ([Report](docs/SECTION_4_EXTRACTION_IMPLEMENTATION_REPORT.md)) |
+| [**Section 5: Evidence Locator**](docs/SECTION_5_EVIDENCE_FEATURE_MATRIX.md) | Evidence & Spatial UI | Bounding box spatial analysis, visual coordinate mapping, and evidence overlays ([Report](docs/SECTION_5_EVIDENCE_IMPLEMENTATION_REPORT.md)) |
+| [**Section 6: Compliance Rules**](docs/SECTION_6_COMPLIANCE_FEATURE_MATRIX.md) | Statutory Rules | Codified Legal Metrology (Packaged Commodities) Rules, 2011 ([Report](docs/SECTION_6_COMPLIANCE_IMPLEMENTATION_REPORT.md)) |
+| [**Section 7: Scoring & Risk**](docs/SECTION_7_SCORING_RISK_FEATURE_MATRIX.md) | Scoring Engine | Weighted scoring algorithm, risk indicators, and penalty rules ([Report](docs/SECTION_7_SCORING_RISK_IMPLEMENTATION_REPORT.md)) |
+| [**Section 8: Pre-Print Compliance**](docs/SECTION_8_PREPRINT_FEATURE_MATRIX.md) | Merchant Pre-Print | Pre-print label verification, packaging artwork inspection, and proofing ([Report](docs/SECTION_8_PREPRINT_IMPLEMENTATION_REPORT.md)) |
+| [**Section 9: Version Comparison**](docs/SECTION_9_VERSION_COMPARISON_FEATURE_MATRIX.md) | Versioning | Packaging revision diffing, change tracking, and artwork iteration timelines ([Report](docs/SECTION_9_VERSION_COMPARISON_IMPLEMENTATION_REPORT.md)) |
+| [**Section 10: Human Verification**](docs/SECTION_10_HUMAN_VERIFICATION_FEATURE_MATRIX.md) | Officer Review | Human-in-the-loop review state machine, officer overrides, and audit trails ([Report](docs/SECTION_10_HUMAN_VERIFICATION_IMPLEMENTATION_REPORT.md)) |
+| [**Section 13: External Verification**](docs/SECTION_13_EXTERNAL_VERIFICATION_AUDIT_REPORT.md) | External Integrations | FSSAI FoSCoS and GS1 GTIN verification architecture and validation rules |
+| [**Section 15: Security & Integrity**](docs/SECTION_15_SECURITY_INTEGRITY_AUDIT_REPORT.md) | Security & Auditing | Multi-tenant isolation, role-based access control (RBAC), and tamper-evident logs |
+| [**Section 16: Advanced Reporting**](docs/SECTION_16_ADVANCED_REPORTING_AUDIT_REPORT.md) | Reports & Exports | Multilingual ReportLab PDF generation across 10 Indic languages and Excel exports |
+| [**Section 17: UX & Accessibility**](docs/SECTION_17_UX_ACCESSIBILITY_AUDIT_REPORT.md) | Accessibility | Design system, responsive layout, keyboard navigation, and high-contrast UI audit |
+| [**Demo Runbook**](docs/reports/PHASE_5_SIH_DEMO_RUNBOOK.md) | Demonstration | Live evaluation runbook, demo cases, and failover workflows |
+
+---
+
 ## Project Structure
 
 ```
 Legal Metrology Compliance AI Prototype/
 ├── .env.example                     # Environment configuration template
-├── .gitignore                       # Git ignore rules for Python, Node, and temporary files
-├── README.md                        # Project documentation and setup guide
-├── DEMO_RUNBOOK.md                  # Comprehensive Hackathon demo runbook
-├── DEPLOYMENT.md                    # Production & staging deployment guide
-├── test_data/                       # Sample test packaging images for evaluations
+├── .gitignore                       # Git ignore rules (includes .agents/, .runner.pid)
+├── README.md                        # Project documentation and quickstart guide
+├── run.bat                          # Windows one-command startup launcher
+├── runner.py                        # Unified process supervisor and health check monitor
+├── setup.bat                        # Windows one-command environment & dependency setup
+├── stop.bat                         # Windows one-command graceful process shutdown
+├── tunnel.bat                       # Local tunnel helper (cloudflared/ngrok) for mobile testing
+├── allow_firewall.bat               # Windows firewall helper for ports 8000 & 5173
+├── requirements.txt                 # Pinned root Python dependencies for local virtualenv
+├── Dockerfile                       # Multi-stage production container build (FastAPI + Nginx)
+├── docker-compose.yml               # Multi-service container orchestration
+├── test_data/                       # Sample test packaging images for evaluation
 │   ├── compliant/                   # Fully compliant packaging labels
 │   ├── warning/                     # Labels with minor or formatting warnings
 │   └── violation/                   # Labels with legal violations and omissions
+├── doc_assets/                      # Diagram and screenshot assets referenced in documentation
+├── docs/                            # Modular technical specifications & audit reports
+│   ├── architecture/                # System, OCR, and compliance architecture PDFs
+│   ├── interactive_guide.html       # Offline-capable interactive operational user guide
+│   ├── reports/                     # Preserved historical audit and test execution reports
+│   └── SECTION_*_FEATURE_MATRIX.md  # Modular section feature matrices & implementation reports
 ├── backend/                         # FastAPI Python backend
-│   ├── api/                         # API route endpoints
-│   │   ├── analyze.py               # Label analysis & upload endpoint
-│   │   ├── compliance_routes.py     # Compliance rules endpoints
-│   │   ├── demo.py                  # Demo test case routes
-│   │   ├── enforcement.py           # Statutory enforcement case management
-│   │   ├── health.py                # Health & readiness checks
-│   │   ├── history.py               # Inspection audit history
-│   │   ├── review_routes.py         # Officer review & human verification
-│   │   └── report.py                # Multilingual PDF & report generation
+│   ├── api/                         # REST API route endpoints
 │   ├── compliance/                  # Rule evaluation & scoring engine
-│   ├── database/                    # SQLite database & migrations
-│   ├── ocr/                         # PaddleOCR PP-OCRv4 integration
-│   ├── services/                    # Analysis, review, enforcement & report services
+│   ├── database/                    # SQLite database schema, connections, and migrations
+│   ├── ocr/                         # PaddleOCR deep learning engine & preprocessing
+│   ├── services/                    # Analysis, review, enforcement, and PDF/Excel services
 │   ├── tests/                       # 1,040 passing pytest test suite
 │   ├── main.py                      # FastAPI application entry point
-│   └── requirements.txt             # Python backend dependencies
-└── frontend/                        # React + TypeScript + Vite frontend
+│   └── requirements.txt             # Backend Python dependency manifest
+└── frontend/                        # React 19 + TypeScript + Vite + Tailwind CSS frontend
     ├── src/
-    │   ├── components/              # Layout, workspaces, Evidence Viewer, preview
+    │   ├── components/              # Layouts, workspaces, Evidence Viewer, and score gauges
     │   ├── context/                 # Auth, Workspace, and Language (i18n) contexts
     │   ├── i18n/locales/            # 11 supported language JSON translation dictionaries
     │   ├── pages/                   # Multi-role workspace dashboards & views
-    │   ├── services/                # API client & endpoint bindings
+    │   ├── services/                # API client & backend bindings
     │   ├── types/                   # TypeScript interfaces & domain types
     │   └── App.tsx                  # Main router & role guards
     ├── package.json                 # Node dependencies and build scripts
-    └── vite.config.ts               # Vite build configuration
+    ├── vite.config.ts               # Vite build configuration
+    └── Dockerfile                   # Standalone frontend production container definition
 ```
 
 ---
@@ -325,6 +397,6 @@ Legal Metrology Compliance AI Prototype/
 
 ---
 
-## License
+## License & Intellectual Property
 
-This project is licensed under the [MIT License](LICENSE).
+No open-source license has been specified yet. All rights are reserved pending confirmation of the project's licensing and intellectual-property terms.

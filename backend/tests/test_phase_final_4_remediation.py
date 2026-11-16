@@ -21,7 +21,7 @@ from pathlib import Path
 
 # ─── Path helpers ─────────────────────────────────────────────────────────────
 
-PROJECT_ROOT = Path("d:/SIH/Legal Metrology Compliance AI Prototype")
+PROJECT_ROOT = Path(__file__).resolve().parent.parent.parent
 BACKEND_ROOT = PROJECT_ROOT / "backend"
 
 
